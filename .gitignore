@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyo
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+desktop/node_modules/
+dist/
+frontend/dist/
+.pnpm-store/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Electron build output
+desktop/out/
+desktop/release/
+release/
+
+# PyInstaller
+backend/dist/
+backend/build/
+backend/*.spec
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Knovex app data (user data, not source)
+*.db
+*.sqlite
+*.sqlite3
+knovex_data/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Desktop.ini
