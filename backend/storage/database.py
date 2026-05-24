@@ -1,12 +1,15 @@
 """
-SQLite Database Setup
+Database Initialisation
 
-Handles:
-  - Schema creation on first run (all tables via SCHEMA_SQL)
-  - WAL mode + foreign key enforcement
-  - `init_db()` called from FastAPI lifespan
-  - `get_db()` async context manager used by API routes / services
+SRP: this module has exactly one job — define the schema DDL and
+provide the init_db() startup function.
+
+All connection management has been moved to SQLiteBackend.
+Consumers that need a DB connection should use get_db() context manager
+or inject SQLiteBackend via FastAPI Depends().
 """
+
+from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
@@ -15,14 +18,15 @@ from typing import AsyncIterator
 import aiosqlite
 
 from backend.core.config import settings
+from backend.storage.sqlite_backend import SQLiteBackend
 
 logger = logging.getLogger("knovex.storage")
 
 # ---------------------------------------------------------------------------
-# Schema DDL — all tables created idempotently via IF NOT EXISTS
+# Schema DDL
 # ---------------------------------------------------------------------------
+
 SCHEMA_SQL = """
--- Knowledge bases
 CREATE TABLE IF NOT EXISTS knowledge_bases (
     id          TEXT    PRIMARY KEY,
     name        TEXT    NOT NULL,
@@ -32,7 +36,6 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     updated_at  TEXT    NOT NULL
 );
 
--- File records (one row per file inside a KB)
 CREATE TABLE IF NOT EXISTS file_records (
     id              TEXT    PRIMARY KEY,
     kb_id           TEXT    NOT NULL,
@@ -50,7 +53,6 @@ CREATE TABLE IF NOT EXISTS file_records (
     FOREIGN KEY (kb_id) REFERENCES knowledge_bases(id) ON DELETE CASCADE
 );
 
--- Chat sessions
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id          TEXT    PRIMARY KEY,
     kb_id       TEXT,
@@ -59,7 +61,6 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
     updated_at  TEXT    NOT NULL
 );
 
--- Chat messages
 CREATE TABLE IF NOT EXISTS chat_messages (
     id          TEXT    PRIMARY KEY,
     session_id  TEXT    NOT NULL,
@@ -71,7 +72,6 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
 );
 
--- Learn sessions
 CREATE TABLE IF NOT EXISTS learn_sessions (
     id              TEXT    PRIMARY KEY,
     topic           TEXT    NOT NULL,
@@ -85,7 +85,6 @@ CREATE TABLE IF NOT EXISTS learn_sessions (
     completed_at    TEXT
 );
 
--- User stats (single row — gamification state)
 CREATE TABLE IF NOT EXISTS user_stats (
     id              INTEGER PRIMARY KEY DEFAULT 1,
     xp              INTEGER NOT NULL DEFAULT 0,
@@ -95,18 +94,16 @@ CREATE TABLE IF NOT EXISTS user_stats (
     badges          TEXT    NOT NULL DEFAULT '[]'
 );
 
--- Per-session learning progress
 CREATE TABLE IF NOT EXISTS learn_progress (
-    id                      TEXT    PRIMARY KEY,
-    session_id              TEXT    NOT NULL,
-    score                   REAL    NOT NULL DEFAULT 0.0,
-    xp_earned               INTEGER NOT NULL DEFAULT 0,
-    time_taken_seconds      INTEGER NOT NULL DEFAULT 0,
-    completed_at            TEXT    NOT NULL,
+    id                  TEXT    PRIMARY KEY,
+    session_id          TEXT    NOT NULL,
+    score               REAL    NOT NULL DEFAULT 0.0,
+    xp_earned           INTEGER NOT NULL DEFAULT 0,
+    time_taken_seconds  INTEGER NOT NULL DEFAULT 0,
+    completed_at        TEXT    NOT NULL,
     FOREIGN KEY (session_id) REFERENCES learn_sessions(id) ON DELETE CASCADE
 );
 
--- Flashcard spaced repetition reviews
 CREATE TABLE IF NOT EXISTS flashcard_reviews (
     id              TEXT    PRIMARY KEY,
     session_id      TEXT    NOT NULL,
@@ -117,57 +114,75 @@ CREATE TABLE IF NOT EXISTS flashcard_reviews (
     FOREIGN KEY (session_id) REFERENCES learn_sessions(id) ON DELETE CASCADE
 );
 
--- App settings (key-value store for user preferences)
 CREATE TABLE IF NOT EXISTS app_settings (
     key         TEXT    PRIMARY KEY,
     value       TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
 
--- Seed a single user_stats row so it always exists
 INSERT OR IGNORE INTO user_stats (id, xp, level, streak, last_activity, badges)
 VALUES (1, 0, 1, 0, NULL, '[]');
 """
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Init
 # ---------------------------------------------------------------------------
 
 async def init_db() -> None:
     """
-    Create all tables and apply initial pragmas.
-    Called once from the FastAPI lifespan on startup.
+    Create all tables and apply performance pragmas.
+    Called once from FastAPI lifespan on startup.
     """
     db_path = settings.db_path
+    backend = SQLiteBackend(db_path)
+
+    # Apply WAL mode directly (not inside executescript which starts a transaction)
     async with aiosqlite.connect(db_path) as db:
-        # Enable WAL for better concurrent read performance
         await db.execute("PRAGMA journal_mode=WAL")
-        # Enforce FK constraints
-        await db.execute("PRAGMA foreign_keys=ON")
-        await db.executescript(SCHEMA_SQL)
         await db.commit()
 
-    logger.info("SQLite database initialised at %s", db_path)
+    await backend.executescript(SCHEMA_SQL)
+    logger.info("SQLite schema initialised at %s", db_path)
 
+
+# ---------------------------------------------------------------------------
+# Per-request connection factory
+# ---------------------------------------------------------------------------
 
 @asynccontextmanager
 async def get_db() -> AsyncIterator[aiosqlite.Connection]:
     """
-    Async context manager that yields an open aiosqlite connection.
+    Async context manager yielding an open aiosqlite connection.
+
+    Used by repositories and services that need direct SQL access.
+    For Sprint 2+, repositories receive a SQLiteBackend via DI instead.
 
     Usage::
 
         async with get_db() as db:
-            row = await db.execute("SELECT * FROM knowledge_bases WHERE id=?", (kb_id,))
-
-    Rows are returned as :class:`aiosqlite.Row` objects (subscriptable by
-    column name).
+            cursor = await db.execute("SELECT * FROM knowledge_bases")
     """
-    db = await aiosqlite.connect(settings.db_path)
-    db.row_factory = aiosqlite.Row
-    try:
+    async with aiosqlite.connect(settings.db_path) as db:
+        db.row_factory = aiosqlite.Row
         await db.execute("PRAGMA foreign_keys=ON")
         yield db
-    finally:
-        await db.close()
+
+
+def get_sqlite_backend() -> SQLiteBackend:
+    """
+    Dependency provider for FastAPI Depends() injection.
+
+    Route handlers and services receive a SQLiteBackend and work
+    through the IStorageBackend interface, never touching raw aiosqlite.
+
+    Usage in a router::
+
+        from fastapi import Depends
+        from backend.storage.database import get_sqlite_backend
+
+        @router.get("/kb")
+        async def list_kbs(db: SQLiteBackend = Depends(get_sqlite_backend)):
+            ...
+    """
+    return SQLiteBackend(settings.db_path)

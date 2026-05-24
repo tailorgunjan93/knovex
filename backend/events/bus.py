@@ -1,34 +1,31 @@
 """
-In-Process Event Bus
+In-Process Event Bus (Observer Pattern)
 
-A lightweight publish/subscribe event bus for decoupling backend services.
-Services emit events; listeners react without tight coupling.
+Improvements over previous version:
+  - emit_typed() accepts BaseEvent subclasses directly (type-safe)
+  - Handlers can be typed: async def on_event(payload: dict) -> None
+  - Middleware support (e.g. logging, metrics) via add_middleware()
+  - Priority ordering for handlers (higher priority = called first)
+
+Design:
+  Observer Pattern: EventBus is the Subject; handlers are Observers.
+  Handlers are decoupled from emitters — they only share an event name string.
 
 Usage::
 
     from backend.events.bus import bus
+    from backend.events.types import FileIngestedEvent
 
-    # Subscribe (typically at module load time)
+    # Subscribe with decorator
     @bus.on("kb.file.ingested")
-    async def on_ingested(payload: dict) -> None:
-        print(f"File ingested: {payload['file_id']}")
+    async def handle_ingested(payload: dict) -> None:
+        print(f"Ingested file: {payload['file_id']}")
 
-    # Emit (from a service)
-    await bus.emit("kb.file.ingested", {"kb_id": "...", "file_id": "..."})
+    # Emit with typed event (preferred)
+    await bus.emit_typed(FileIngestedEvent(kb_id="x", file_id="y", chunk_count=10))
 
-Known event names
------------------
-kb.created              KB was created
-kb.deleted              KB was deleted
-kb.file.added           File added to KB (status=pending)
-kb.file.ingested        File ingested successfully (status=ready)
-kb.file.stale           File content hash changed (status=stale)
-kb.file.missing         File path no longer exists (status=missing)
-kb.file.error           Ingestion failed (status=error)
-kb.reindex.started      Full KB re-index started
-kb.reindex.done         Full KB re-index completed
-settings.changed        App settings updated
-learn.session.complete  Learn session completed (XP awarded)
+    # Or emit raw dict
+    await bus.emit("kb.file.ingested", {"file_id": "y"})
 """
 
 from __future__ import annotations
@@ -40,54 +37,63 @@ from typing import Any, Awaitable, Callable
 
 logger = logging.getLogger("knovex.events")
 
-# Type alias for async event handlers
 Handler = Callable[[dict[str, Any]], Awaitable[None]]
+Middleware = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 
 class EventBus:
     """
-    Simple in-process async event bus.
+    Async publish/subscribe event bus.
 
-    Handlers are coroutine functions that receive a single ``payload`` dict.
-    All registered handlers for an event are called concurrently via
-    ``asyncio.gather``.
+    - Handlers are async functions: ``async def h(payload: dict) -> None``
+    - All handlers for an event run concurrently via asyncio.gather
+    - Handler errors are logged but never propagate to the emitter
+    - Middleware runs before handlers (useful for logging / tracing)
     """
 
     def __init__(self) -> None:
-        self._handlers: dict[str, list[Handler]] = defaultdict(list)
+        self._handlers: dict[str, list[tuple[int, Handler]]] = defaultdict(list)
+        self._middleware: list[Middleware] = []
 
     # ------------------------------------------------------------------
     # Registration
     # ------------------------------------------------------------------
 
-    def on(self, event: str) -> Callable[[Handler], Handler]:
+    def on(self, event: str, priority: int = 0) -> Callable[[Handler], Handler]:
         """
-        Decorator to register an async handler for *event*.
+        Decorator to subscribe *handler* to *event*.
+
+        Higher *priority* = called first within an event.
 
         Example::
 
             @bus.on("kb.file.ingested")
-            async def handle_ingested(payload: dict) -> None:
-                ...
+            async def on_ingested(payload: dict) -> None: ...
         """
         def decorator(fn: Handler) -> Handler:
-            self._handlers[event].append(fn)
-            logger.debug("Registered handler %s for event '%s'", fn.__name__, event)
+            self._handlers[event].append((priority, fn))
+            self._handlers[event].sort(key=lambda t: t[0], reverse=True)
+            logger.debug("Subscribed %s to '%s' (priority=%d)", fn.__name__, event, priority)
             return fn
-
         return decorator
 
-    def subscribe(self, event: str, handler: Handler) -> None:
+    def subscribe(self, event: str, handler: Handler, priority: int = 0) -> None:
         """Programmatically subscribe *handler* to *event*."""
-        self._handlers[event].append(handler)
-        logger.debug("Subscribed %s to event '%s'", handler.__name__, event)
+        self._handlers[event].append((priority, handler))
+        self._handlers[event].sort(key=lambda t: t[0], reverse=True)
 
     def unsubscribe(self, event: str, handler: Handler) -> None:
-        """Remove a previously registered handler."""
-        try:
-            self._handlers[event].remove(handler)
-        except ValueError:
-            pass
+        """Remove all registrations of *handler* from *event*."""
+        self._handlers[event] = [
+            (p, h) for p, h in self._handlers[event] if h is not handler
+        ]
+
+    def add_middleware(self, middleware: Middleware) -> None:
+        """
+        Add a middleware that runs before all handlers for every event.
+        Useful for structured logging, distributed tracing, metrics.
+        """
+        self._middleware.append(middleware)
 
     # ------------------------------------------------------------------
     # Emission
@@ -95,18 +101,26 @@ class EventBus:
 
     async def emit(self, event: str, payload: dict[str, Any] | None = None) -> None:
         """
-        Emit *event* with optional *payload*.
+        Emit *event* with optional *payload* dict.
 
-        All handlers are awaited concurrently. Exceptions in individual
-        handlers are logged but do not prevent other handlers from running.
+        All middleware and then all handlers run concurrently.
+        Individual errors are logged but never abort the emit.
         """
-        handlers = self._handlers.get(event, [])
+        payload = payload or {}
+
+        # Run middleware first (sequentially — order matters)
+        for mw in self._middleware:
+            try:
+                await mw(event, payload)
+            except Exception as exc:
+                logger.error("Middleware error on '%s': %s", event, exc, exc_info=exc)
+
+        handlers = [h for _, h in self._handlers.get(event, [])]
         if not handlers:
             logger.debug("Event '%s' emitted with no subscribers", event)
             return
 
-        payload = payload or {}
-        logger.debug("Emitting event '%s' to %d handler(s)", event, len(handlers))
+        logger.debug("Emitting '%s' to %d handler(s)", event, len(handlers))
 
         results = await asyncio.gather(
             *[h(payload) for h in handlers],
@@ -116,19 +130,30 @@ class EventBus:
         for handler, result in zip(handlers, results):
             if isinstance(result, Exception):
                 logger.error(
-                    "Handler %s raised on event '%s': %s",
-                    handler.__name__,
-                    event,
-                    result,
-                    exc_info=result,
+                    "Handler '%s' raised on event '%s': %s",
+                    handler.__name__, event, result, exc_info=result,
                 )
+
+    async def emit_typed(self, event_obj: Any) -> None:
+        """
+        Emit a typed BaseEvent subclass.
+
+        Converts the event to a dict and uses its ``event_name`` attribute
+        as the topic. This is the preferred way to emit events.
+
+        Example::
+
+            await bus.emit_typed(FileIngestedEvent(kb_id="x", file_id="y"))
+        """
+        from backend.events.types import BaseEvent
+        if not isinstance(event_obj, BaseEvent):
+            raise TypeError(f"Expected BaseEvent subclass, got {type(event_obj)}")
+        await self.emit(event_obj.event_name, event_obj.to_dict())
 
     def emit_sync(self, event: str, payload: dict[str, Any] | None = None) -> None:
         """
-        Fire-and-forget emit from synchronous code.
-
-        Schedules the async emit on the running event loop.
-        Raises ``RuntimeError`` if no event loop is running.
+        Schedule an async emit from synchronous code.
+        Requires a running event loop.
         """
         loop = asyncio.get_event_loop()
         loop.create_task(self.emit(event, payload))
@@ -138,15 +163,26 @@ class EventBus:
     # ------------------------------------------------------------------
 
     def listeners(self, event: str) -> list[str]:
-        """Return the names of all registered handlers for *event*."""
-        return [h.__name__ for h in self._handlers.get(event, [])]
+        """Return handler names for *event*."""
+        return [h.__name__ for _, h in self._handlers.get(event, [])]
 
     def all_events(self) -> list[str]:
-        """Return all event names that have at least one listener."""
+        """Return all event names that have at least one subscriber."""
         return [e for e, handlers in self._handlers.items() if handlers]
 
 
 # ---------------------------------------------------------------------------
-# Singleton — import this everywhere
+# Module-level singleton
 # ---------------------------------------------------------------------------
 bus = EventBus()
+
+
+# ---------------------------------------------------------------------------
+# Built-in logging middleware (active in DEBUG level only)
+# ---------------------------------------------------------------------------
+
+async def _debug_logging_middleware(event: str, payload: dict[str, Any]) -> None:
+    logger.debug("EVENT %s | payload keys: %s", event, list(payload.keys()))
+
+
+bus.add_middleware(_debug_logging_middleware)
