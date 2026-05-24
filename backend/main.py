@@ -11,7 +11,7 @@ Responsibilities:
 SRP: this file only wires the app. Business logic lives in services;
      DI wiring lives in core/dependencies.py.
 
-Version: 0.1.0
+Version: 0.3.0
 """
 
 import logging
@@ -137,6 +137,7 @@ def create_app() -> FastAPI:
     # -----------------------------------------------------------------------
     from backend.api.health import router as health_router
     from backend.api.kb import router as kb_router
+    from backend.api.reader import router as reader_router
     from backend.api.settings import router as settings_router
     from backend.api.tools import router as tools_router
 
@@ -144,6 +145,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router, prefix="/api", tags=["settings"])
     app.include_router(tools_router, prefix="/api", tags=["tools"])
     app.include_router(kb_router, prefix="/api", tags=["knowledge-base"])
+    app.include_router(reader_router, prefix="/api", tags=["reader"])
 
     # -----------------------------------------------------------------------
     # Global exception handler — always returns structured JSON

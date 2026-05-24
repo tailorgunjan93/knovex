@@ -178,12 +178,16 @@ class StubPDFAdapter(IPDFAdapter):
 
     Usage::
 
+        # Option A — constructor (preferred in tests)
+        stub = StubPDFAdapter(pages=[PageContent(1, "Hello world")])
+
+        # Option B — setter (useful when configuring after construction)
         stub = StubPDFAdapter()
         stub.set_pages([PageContent(1, "Hello world")])
     """
 
-    def __init__(self) -> None:
-        self._pages: list[PageContent] = []
+    def __init__(self, pages: list[PageContent] | None = None) -> None:
+        self._pages: list[PageContent] = pages or []
 
     def set_pages(self, pages: list[PageContent]) -> None:
         self._pages = pages
@@ -200,12 +204,16 @@ class StubParagraphAdapter(IParagraphAdapter):
 
     Usage::
 
+        # Option A — constructor (preferred in tests)
+        stub = StubParagraphAdapter(paragraphs=[ParagraphContent("Intro", "Heading 1")])
+
+        # Option B — setter
         stub = StubParagraphAdapter()
         stub.set_paragraphs([ParagraphContent("Intro", "Heading 1")])
     """
 
-    def __init__(self) -> None:
-        self._paragraphs: list[ParagraphContent] = []
+    def __init__(self, paragraphs: list[ParagraphContent] | None = None) -> None:
+        self._paragraphs: list[ParagraphContent] = paragraphs or []
 
     def set_paragraphs(self, paragraphs: list[ParagraphContent]) -> None:
         self._paragraphs = paragraphs

@@ -3,6 +3,7 @@
  *
  * Features:
  *  - Files list with status badges
+ *  - Click a ready file to open FileViewer with inline Q&A
  *  - Drag-and-drop file add (calls Electron file picker)
  *  - Reindex individual / all files
  *  - Update path for missing files
@@ -33,6 +34,7 @@ import { kbApi, type KB, type FileRecord } from '../../../api/kb.api'
 import FileRow from './FileRow'
 import ConfirmDialog from './ConfirmDialog'
 import UpdatePathDialog from './UpdatePathDialog'
+import FileViewer from '../../../components/FileViewer'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,7 @@ export default function KBDetail({ kbId, onBack }: Props) {
   const queryClient = useQueryClient()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [updatePathFileId, setUpdatePathFileId] = useState<string | null>(null)
+  const [viewingFile, setViewingFile] = useState<FileRecord | null>(null)
   const [addError, setAddError] = useState('')
   const pollIntervalRef = useRef<number | null>(null)
 
@@ -166,6 +169,19 @@ export default function KBDetail({ kbId, onBack }: Props) {
 
   const readyCount = files.filter(f => f.status === 'ready').length
   const ingestingCount = files.filter(f => f.status === 'pending' || f.status === 'ingesting').length
+
+  // Show FileViewer when a ready file is clicked
+  if (viewingFile) {
+    return (
+      <FileViewer
+        kbId={kbId}
+        fileId={viewingFile.id}
+        fileName={viewingFile.name}
+        format={viewingFile.format}
+        onClose={() => setViewingFile(null)}
+      />
+    )
+  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -305,6 +321,9 @@ export default function KBDetail({ kbId, onBack }: Props) {
                 onRemove={id => removeFileMutation.mutate(id)}
                 onReindex={id => reindexFileMutation.mutate(id)}
                 onUpdatePath={id => setUpdatePathFileId(id)}
+                onView={file.status === 'ready' || file.status === 'stale'
+                  ? () => setViewingFile(file)
+                  : undefined}
               />
             ))}
           </Paper>

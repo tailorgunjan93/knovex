@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Python backend ────────────────────────────────────────────────────────
+  backend:
+    name: Backend — lint + tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install -r backend/requirements-dev.txt
+
+      - name: Lint with ruff
+        run: |
+          ruff check backend/ tests/ --output-format=github
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v \
+            --tb=short \
+            --cov=backend \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            -p no:warnings
+        env:
+          # Prevent platformdirs from requiring actual OS dirs in CI
+          KNOVEX_DATA_DIR: /tmp/knovex-ci/data
+          KNOVEX_CONFIG_DIR: /tmp/knovex-ci/config
+          KNOVEX_LOG_DIR: /tmp/knovex-ci/logs
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage.xml
+          flags: backend
+          fail_ci_if_error: false
+
+  # ─── Frontend ──────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend — TypeScript + build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build

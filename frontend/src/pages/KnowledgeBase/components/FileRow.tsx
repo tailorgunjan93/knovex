@@ -17,6 +17,7 @@ import {
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import FolderOffIcon from '@mui/icons-material/FolderOff'
+import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import type { FileRecord } from '../../../api/kb.api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -26,6 +27,8 @@ interface Props {
   onRemove: (fileId: string) => void
   onReindex: (fileId: string) => void
   onUpdatePath: (fileId: string) => void
+  /** Called when the user clicks View — only passed for ready/stale files */
+  onView?: () => void
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -57,10 +60,11 @@ const FORMAT_LABELS: Record<string, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function FileRow({ file, onRemove, onReindex, onUpdatePath }: Props) {
+export default function FileRow({ file, onRemove, onReindex, onUpdatePath, onView }: Props) {
   const isIngesting = file.status === 'ingesting' || file.status === 'pending'
   const isMissing = file.status === 'missing'
   const isStaleOrError = file.status === 'stale' || file.status === 'error'
+  const isViewable = !!onView
 
   return (
     <Stack
@@ -74,7 +78,9 @@ export default function FileRow({ file, onRemove, onReindex, onUpdatePath }: Pro
         borderColor: 'divider',
         '&:last-child': { borderBottom: 'none' },
         '&:hover': { bgcolor: 'action.hover' },
+        cursor: isViewable ? 'pointer' : 'default',
       }}
+      onClick={isViewable ? onView : undefined}
     >
       {/* Format badge */}
       <Chip
@@ -114,7 +120,14 @@ export default function FileRow({ file, onRemove, onReindex, onUpdatePath }: Pro
       </Stack>
 
       {/* Actions */}
-      <Stack direction="row" spacing={0} flexShrink={0}>
+      <Stack direction="row" spacing={0} flexShrink={0} onClick={e => e.stopPropagation()}>
+        {isViewable && (
+          <Tooltip title="View file">
+            <IconButton size="small" onClick={onView}>
+              <OpenInFullIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         {isMissing && (
           <Tooltip title="Locate file">
             <IconButton size="small" onClick={() => onUpdatePath(file.id)}>

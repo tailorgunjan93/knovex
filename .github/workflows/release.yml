@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"    # Matches v0.1.0, v0.2.0, v1.0.0, etc.
+
+jobs:
+  # ─── Verify CI passes before releasing ────────────────────────────────────
+  verify:
+    name: Run full CI checks
+    uses: ./.github/workflows/ci.yml
+
+  # ─── Create GitHub Release ────────────────────────────────────────────────
+  release:
+    name: GitHub Release
+    needs: verify
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # Required to create releases
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Full history for changelog extraction
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract CHANGELOG section for this version
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          # Extract the block between ## [X.Y.Z] and the next ## heading
+          BODY=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
+          # Escape for GitHub multiline output
+          {
+            echo "BODY<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Knovex v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## What's new in v${{ steps.version.outputs.VERSION }}
+
+            ${{ steps.changelog.outputs.BODY }}
+
+            ---
+
+            ### Installation
+
+            See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md#getting-started) for setup instructions.
+
+            > *Secure · Fast · Reliable · Cost-Effective*
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: false

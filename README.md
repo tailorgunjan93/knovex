@@ -6,112 +6,144 @@
 
 *Secure · Fast · Reliable · Cost-Effective*
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
+[![CI](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml/badge.svg)](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 [![Powered by docnest](https://img.shields.io/badge/powered%20by-docnest--ai-purple.svg)](https://pypi.org/project/docnest-ai/)
 
-**Knovex** is a local-first, AI-powered desktop knowledge base with an interactive learning engine. Drop in your documents, ask questions, summarize, search the web, and turn complex topics into animated, gamified learning sessions — all running on your machine.
+**Knovex** is a local-first, AI-powered desktop knowledge base with an interactive learning engine.  
+Drop in your documents, ask questions, summarise, search the web, and turn complex topics into animated, gamified learning sessions — all running on your machine.
 
-Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid RAG engine with SQLite FTS5 + dense ANN + section graph retrieval.
+Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid RAG engine with SQLite FTS5 + dense ANN + section-graph retrieval.
 
 </div>
 
 ---
 
+## Implemented Sprints
+
+| Sprint | Feature | Status |
+|--------|---------|--------|
+| 1 | Foundation — FastAPI + React + Electron shell | ✅ v0.1.0 |
+| 2 | Knowledge Base + File Ingestion + Adapter layer | ✅ v0.2.0 |
+| 3 | File Reader + Inline Q&A | ✅ v0.3.0 |
+| 4 | Chat + Summariser + Web Search | 🔜 Planned |
+| 5 | Settings UI + packaging | 🔜 Planned |
+| 6 | Learn Mode | 🔜 Planned |
+
+---
+
 ## What is Knovex?
 
-Knovex is a desktop application that runs completely **offline and local** — your files never leave your machine unless you explicitly enable web search or cloud sync.
+Knovex runs completely **offline and local** — your files never leave your machine unless you explicitly enable web search or cloud sync.
 
 - **Knowledge Base** — create named KBs, add files, read them inline, ask questions
 - **Chat** — conversational QA over your KB with streaming responses and citations
-- **Summarizer** — summarize a file or an entire KB in one click
+- **Summariser** — summarise a file or an entire KB in one click
 - **Web Search** — optionally extend answers with live web results (DuckDuckGo, Serper, Brave)
 - **Learn Mode** — turn any PDF or web topic into quizzes, flashcards, mind maps, timelines and animated explainers
 - **Multi-LLM** — bring your own API key for OpenAI, Claude, Groq, Gemini, Cerebras, AWS Bedrock, or run fully offline with Ollama
-- **3 deployment modes** — Personal (own keys), Organization (admin-managed keys), Self-hosted (enterprise Docker)
+- **3 deployment modes** — Personal (own keys), Organisation (admin-managed keys), Self-hosted (enterprise Docker)
 
 ---
 
 ## Key Features
 
-### 📁 Knowledge Base + File Reader
-- Create multiple named knowledge bases
-- Add PDF, DOCX, TXT, MD, CSV, UDF files via drag-drop or file picker
-- Auto-ingestion powered by docnest (FTS5 + ANN indexing)
-- Click any file → opens inline reader with Q&A sidebar
-- File-scoped questions (ask about one file only)
-- Web search toggle alongside file reader
+### 📁 Knowledge Base + File Reader *(v0.3.0)*
+- Create multiple named knowledge bases with colours and emoji icons
+- Add PDF, DOCX, TXT, MD, CSV, UDF files via file picker or Electron drag-drop
+- Auto-ingestion powered by docnest (FTS5 + ANN indexing) — runs as a background task
+- File watcher automatically detects stale or missing tracked files
+- Click any indexed file → opens inline **FileViewer** with Q&A sidebar
+- Pagination: 40 blocks/page for text formats; 1 page/block for PDF
+- SSE streaming Q&A grounded in the file's indexed chunks
+- Supported block types: `paragraph`, `heading`, `table_row`, `code`, `page`
 
-### 💬 Chat + Summarizer
+### 💬 Chat + Summariser *(v0.4.0 — planned)*
 - Conversational QA against a selected KB
 - Streaming token-by-token responses
 - Source citations — which file and section answered your question
 - Persistent chat history per KB
-- Summarizer tab — summarize a single file or the entire KB
+- Summariser tab — summarise a single file or the entire KB
 - Optional web search integration in every chat
 
-### ✨ Learn Mode
-- Feed any PDF, web URL, or typed topic into an interactive learning session
-- **Flash quizzes** — AI-generated multiple choice / true-false / fill-in-blank with scoring
-- **Flashcard deck** — swipeable cards with spaced repetition
-- **Animated mind map** — clickable concept graph built from your content
-- **Story mode** — complex topic rewritten as a narrative with analogies
-- **Timeline** — animated chronological view for sequential topics
-- **ELI5 mode** — adjustable difficulty from Age 5 to Expert
-- **Speed Learn** — timed sessions (5 min, 10 min, 30 min)
-- **Brainstorm board** — web search + AI expand any concept visually
-- **Gamification** — XP points, streaks, difficulty levels, achievement badges
-- Web search enrichment — finds extra context for any topic
+### ✨ Learn Mode *(v0.6.0 — planned)*
+- Flash quizzes, flashcard decks, animated mind maps, story mode, timelines, ELI5, speed-learn, brainstorm
+- Gamification: XP points, streaks, difficulty levels, achievement badges
+- Web search enrichment
 
-### ⚙️ Settings
+### ⚙️ Settings *(v0.5.0 — planned)*
 - LLM: OpenAI, Anthropic (Claude), Groq, Gemini, Cerebras, AWS Bedrock, Ollama
-- Per-provider model selection and API key storage (encrypted locally)
+- Per-provider model selection and API key storage (encrypted locally with Fernet)
 - Ollama auto-detection on localhost:11434
 - Connection test before saving
 - Web search engine: DuckDuckGo (free, no key) / Serper / Brave
 - Theme: Light / Medium / Dark
 - Custom KB storage path
-- Deployment mode: Personal / Organization / Self-hosted
 
 ---
 
-## Architecture Overview
+## Architecture
 
-Knovex uses a **fully decoupled** frontend/backend architecture. The FastAPI backend is a standalone portable API — the same backend code will power the cloud version, web app, and mobile app in Phase 2.
+Knovex uses a **fully decoupled** frontend/backend architecture with SOLID compliance and the GoF adapter pattern for all third-party libraries.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  DESKTOP SHELL  (Electron)                                      │
-│  Thin wrapper — spawns backend, manages window, tray, dialogs   │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │  FRONTEND  (React 18 + MUI v6 + TypeScript)               │  │
-│  │  KB Manager · Chat · Learn Mode · Settings               │  │
-│  └───────────────────────┬───────────────────────────────────┘  │
-└──────────────────────────│──────────────────────────────────────┘
-                           │ REST + SSE  (localhost:8765)
-┌──────────────────────────▼──────────────────────────────────────┐
-│  BACKEND  (FastAPI + Python 3.11)                               │
-│                                                                 │
-│  API Routes: /kb  /chat  /search  /settings                     │
-│  Streaming:  SSE for chat tokens · WebSocket (Phase 2)          │
-│                                                                 │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────────┐ │
-│  │  KB Service  │ │  LLM Service │ │  Search Service          │ │
-│  │  docnest RAG │ │  LiteLLM     │ │  DDG / Serper / Brave    │ │
-│  └──────────────┘ └──────────────┘ └──────────────────────────┘ │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────────┐ │
-│  │  File Service│ │  Event Bus   │ │  Tool Registry           │ │
-│  │  Parse+render│ │  in-process  │ │  Agent-ready tools       │ │
-│  └──────────────┘ └──────────────┘ └──────────────────────────┘ │
-│                                                                 │
-│  Storage: SQLite embedded — zero setup, ships with app          │
-│  (PostgreSQL only on OUR cloud server, never on user machine)   │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  DESKTOP SHELL  (Electron 33)                                               │
+│  Spawns backend process, manages window lifecycle, tray, OS file dialogs    │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  FRONTEND  (React 18 + MUI v6 + TypeScript + Vite 6)               │    │
+│  │  KnowledgeBase · Chat · Learn Mode · Settings                       │    │
+│  │  TanStack Query v5 (server state) · Zustand (UI state)             │    │
+│  └───────────────────────────┬─────────────────────────────────────────┘    │
+└──────────────────────────────│──────────────────────────────────────────────┘
+                               │  REST + SSE  (localhost:8765)
+┌──────────────────────────────▼──────────────────────────────────────────────┐
+│  BACKEND  (FastAPI + Python 3.11)                                           │
+│                                                                             │
+│  API Routes                                                                 │
+│  ├── /api/kb/**           KB CRUD + file management (13 endpoints)         │
+│  ├── /api/kb/**/content   File content rendering (paginated blocks)         │
+│  ├── /api/kb/**/ask       Inline Q&A SSE stream                            │
+│  ├── /api/settings/**     LLM + search config                              │
+│  └── /api/health          Liveness + Ollama probe                          │
+│                                                                             │
+│  Services (Facades)                                                         │
+│  ├── KBService        KB CRUD + ingestion orchestration                    │
+│  ├── ReaderService    File rendering + inline Q&A                          │
+│  ├── IngestionService Strategy-pattern file parsing → chunk storage        │
+│  ├── LLMService       Unified LLM (stream / complete / test / models)      │
+│  ├── SettingsService  Encrypted settings read/write                        │
+│  └── WatcherService   Periodic stale/missing file scanner                  │
+│                                                                             │
+│  Anti-Corruption Adapters  (backend/adapters/)                             │
+│  ├── ILLMClient / LiteLLMAdapter     — wraps litellm                       │
+│  ├── IHttpClient / HttpxAdapter      — wraps httpx                         │
+│  ├── IPDFAdapter / PyMuPDFAdapter    — wraps fitz (PyMuPDF)                │
+│  └── IParagraphAdapter / PythonDocxAdapter — wraps python-docx             │
+│                                                                             │
+│  Storage                                                                    │
+│  └── SQLite (WAL mode) — kbs, files, chunks, chunks_fts (FTS5)             │
+│                                                                             │
+│  Events — in-process typed EventBus                                        │
+│  └── KBCreated · FileAdded · FileIngested · FileStale · Missing · Error   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full design details.
+### Design Patterns
+
+| Pattern | Where |
+|---------|-------|
+| Adapter (GoF) | `backend/adapters/` — anti-corruption layer for all 3rd-party libs |
+| Strategy | `IngestionService` parsers (`@register_parser` decorator) |
+| Template Method | `LLMProvider.complete()` / `stream()` delegate to `ILLMClient` |
+| Factory + Plugin | `LLMProviderFactory` + `@register_provider` self-registration |
+| Repository | `IKBRepository`, `IFileRepository` — abstract storage behind interfaces |
+| Facade | `KBService`, `LLMService`, `ReaderService` |
+| Observer | `EventBus.emit_typed()` — typed in-process events |
+| Value Object | `ProviderCredentials`, `HttpResponse`, `PageContent`, `ParagraphContent` |
 
 ---
 
@@ -123,12 +155,13 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full design details.
 | Frontend | React 18 + TypeScript | UI components |
 | UI Library | MUI v6 | Design system |
 | State | Zustand + TanStack Query v5 | UI state + server state |
-| Build | Vite 5 + pnpm | Fast dev + bundling |
-| Backend | FastAPI + Python 3.11 | REST API, streaming, async |
+| Build | Vite 6 | Fast dev + bundling |
+| Backend | FastAPI + Python 3.11 | REST API, SSE streaming, async |
 | RAG Engine | docnest-ai | Hybrid FTS5 + ANN retrieval |
-| LLM Layer | LiteLLM | Unified multi-provider LLM |
-| Database | SQLite | Local storage (Phase 1) |
+| LLM Bridge | LiteLLM (via adapter) | Unified multi-provider LLM |
+| Database | SQLite + FTS5 | Local storage, full-text search |
 | Web Search | duckduckgo-search / Serper / Brave | Live web results |
+| Encryption | cryptography (Fernet) | API key encryption at rest |
 | Packaging | PyInstaller + electron-builder | Distributable app |
 
 ---
@@ -141,38 +174,167 @@ knovex/
 ├── CHANGELOG.md
 ├── .gitignore
 │
-├── docs/
-│   ├── ARCHITECTURE.md          Full system design
-│   ├── IMPLEMENTATION_PLAN.md   Sprint-by-sprint build plan
-│   ├── FEATURES.md              Complete feature specification
-│   ├── API_SPEC.md              All API endpoints + contracts
-│   └── TECH_STACK.md            Technology decisions + rationale
+├── .github/
+│   └── workflows/
+│       ├── ci.yml          Python lint + test + frontend build (push / PR)
+│       └── release.yml     GitHub Release on v* tag push
 │
-├── backend/                     FastAPI Python — standalone API
-│   ├── api/                     Route handlers (kb, chat, search, settings)
-│   ├── core/                    Business logic (KB, LLM, search, file services)
-│   ├── tools/                   LangChain-compatible tools (agent-ready)
-│   ├── models/                  Pydantic schemas
-│   ├── storage/                 Storage abstraction (SQLite → PostgreSQL)
-│   ├── events/                  In-process event bus
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── IMPLEMENTATION_PLAN.md
+│   ├── FEATURES.md
+│   ├── API_SPEC.md
+│   └── TECH_STACK.md
+│
+├── backend/                            FastAPI Python — standalone API
+│   ├── api/
+│   │   ├── health.py                   GET /api/health
+│   │   ├── settings.py                 GET|PUT /api/settings, test-llm, models, ollama
+│   │   ├── kb.py                       13 KB + file endpoints
+│   │   ├── reader.py                   GET /content, POST /ask (SSE)
+│   │   └── tools.py                    Tool registry
+│   ├── adapters/                       Anti-corruption layer ← ALL 3rd-party here
+│   │   ├── llm_client.py               ILLMClient / LiteLLMAdapter / StubLLMClient
+│   │   ├── http_client.py              IHttpClient / HttpxAdapter / StubHttpClient
+│   │   └── document_parsers.py         IPDFAdapter, IParagraphAdapter + stubs
+│   ├── core/
+│   │   ├── domain/
+│   │   │   ├── kb.py                   KB dataclass
+│   │   │   └── file_record.py          FileRecord + FileStatus
+│   │   ├── providers/                  7 LLM providers (self-registering)
+│   │   ├── config.py                   AppConfig (pydantic-settings)
+│   │   ├── dependencies.py             FastAPI DI wiring
+│   │   ├── encryption.py               Fernet encryptor
+│   │   ├── ingestion_service.py        Strategy-based file parsing
+│   │   ├── kb_service.py               KB facade
+│   │   ├── llm_service.py              LLM facade
+│   │   ├── reader_service.py           File rendering + inline Q&A
+│   │   ├── settings_service.py         Settings r/w
+│   │   ├── settings_store.py           JSON persistence
+│   │   └── watcher_service.py          Stale/missing file scanner
+│   ├── events/
+│   │   ├── bus.py                      EventBus singleton
+│   │   └── types.py                    Typed event dataclasses
+│   ├── models/
+│   │   └── schemas.py                  All Pydantic request/response models
+│   ├── storage/
+│   │   ├── database.py                 SQLite schema + FTS5
+│   │   ├── sqlite_backend.py           Async SQLite backend
+│   │   └── repositories/
+│   │       ├── base.py                 IRepository[T] + EntityNotFoundError
+│   │       ├── kb_repository.py        IKBRepository + SQLiteKBRepository
+│   │       └── file_repository.py      IFileRepository + SQLiteFileRepository
 │   ├── requirements.txt
+│   ├── requirements-dev.txt            pytest, ruff, mypy, pytest-asyncio
 │   └── main.py
 │
-├── frontend/                    React + MUI — pure UI consumer
-│   ├── src/
-│   │   ├── pages/               KnowledgeBase, Chat, Learn, Settings
-│   │   ├── components/          Layout, Sidebar, FileReader, shared
-│   │   ├── store/               Zustand stores
-│   │   ├── api/                 API client + typed calls
-│   │   └── theme/               MUI theme (light/medium/dark)
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── index.html
+├── frontend/                           React + TypeScript — pure UI consumer
+│   └── src/
+│       ├── api/
+│       │   ├── client.ts               Axios instance
+│       │   ├── kb.api.ts               KB + file endpoints
+│       │   ├── reader.api.ts           Content + SSE ask stream
+│       │   ├── settings.api.ts
+│       │   ├── chat.api.ts
+│       │   └── search.api.ts
+│       ├── components/
+│       │   ├── Layout/                 AppShell, Sidebar
+│       │   └── FileViewer/             Block renderer + pagination
+│       └── pages/
+│           ├── KnowledgeBase/          KB list + detail + file viewer + inline Q&A
+│           ├── Chat/
+│           ├── Learn/
+│           └── Settings/
 │
-└── desktop/                     Electron — thin shell only
-    ├── main.js                  Main process (spawns backend, manages window)
-    ├── preload.js               Context bridge
-    └── package.json
+├── desktop/                            Electron — thin shell only
+│   ├── main.js
+│   ├── preload.js
+│   └── package.json
+│
+└── tests/
+    ├── __init__.py
+    ├── test_imports.py                 Import smoke tests + route registration
+    ├── test_adapters.py                Adapter unit tests (all stubs, no network)
+    └── test_reader.py                  ReaderService unit tests
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+| Tool | Version | Install |
+|------|---------|---------|
+| Python | 3.11+ | [python.org](https://python.org) |
+| Node.js | 20+ | [nodejs.org](https://nodejs.org) |
+| npm | 10+ | bundled with Node.js |
+| git | any | [git-scm.com](https://git-scm.com) |
+
+### Backend Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/tailorgunjan93/knovex.git
+cd knovex
+
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
+
+# Install dependencies
+pip install -r backend/requirements.txt
+
+# Start the backend (auto-creates DB on first run)
+uvicorn backend.main:app --host 127.0.0.1 --port 8765 --reload
+```
+
+API docs are available at **http://localhost:8765/api/docs** (Swagger UI).
+
+### Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev      # Vite dev server on http://localhost:5173
+```
+
+The Vite proxy forwards all `/api/*` requests to `localhost:8765`.
+
+### Run Tests
+
+```bash
+# Install dev dependencies
+pip install -r backend/requirements-dev.txt
+
+# Run all tests
+pytest tests/ -v
+
+# With coverage
+pytest tests/ --cov=backend --cov-report=term-missing
+```
+
+### Lint
+
+```bash
+ruff check backend/ tests/
+```
+
+---
+
+## CI/CD
+
+| Trigger | Workflow | Actions |
+|---------|----------|---------|
+| Push / PR to `main` | `ci.yml` | Python lint (ruff) + pytest + frontend TypeScript check + build |
+| Push `v*.*.*` tag | `release.yml` | Runs CI, then creates a GitHub Release with CHANGELOG excerpt |
+
+To create a new release:
+
+```bash
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 ---
@@ -180,34 +342,25 @@ knovex/
 ## Roadmap
 
 ### Phase 1 — Desktop App *(current)*
-- [x] Architecture + planning
-- [ ] Project scaffold
-- [ ] Sprint 1: Foundation (FastAPI + React + Electron shell)
-- [ ] Sprint 2: Knowledge Base + file watcher + hash detection
-- [ ] Sprint 3: File Reader (inline in KB)
-- [ ] Sprint 4: Chat + Summarizer + Web Search
-- [ ] Sprint 5: Settings + polish + packaging
-- [ ] Sprint 6: Learn Mode (interactive learning engine)
 
-### Phase 2 — Cloud + Organisation + Agentic
+- [x] Sprint 1 — Foundation (FastAPI + React + Electron shell) — `v0.1.0`
+- [x] Sprint 2 — Knowledge Base + File Ingestion + Adapter layer — `v0.2.0`
+- [x] Sprint 3 — File Reader + Inline Q&A — `v0.3.0`
+- [ ] Sprint 4 — Chat + Summariser + Web Search — `v0.4.0`
+- [ ] Sprint 5 — Settings UI + packaging — `v0.5.0`
+- [ ] Sprint 6 — Learn Mode — `v0.6.0`
+
+### Phase 2 — Cloud + Organisation + Agentic *(future)*
+
 - [ ] Knovex Cloud Portal (web admin — org key management, user management, analytics)
-- [ ] 3 deployment modes: Personal / Organization (portal) / Self-hosted (Docker)
+- [ ] 3 deployment modes: Personal / Organisation (portal) / Self-hosted (Docker)
 - [ ] LangGraph agent orchestration
 - [ ] Visual workflow builder
 - [ ] Cloud deployment (Railway / AWS) — PostgreSQL on OUR infra, not user machines
-- [ ] Web app version
-- [ ] Mobile app (React Native — same backend API)
+- [ ] Web app + mobile app (React Native — same backend API)
 - [ ] Team collaboration + shared KBs
 - [ ] Plugin / connector marketplace
 - [ ] Learn Mode: voice narration, social sharing, multiplayer sessions
-
----
-
-## Getting Started
-
-> 📋 **See [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the full build plan.**
-
-*Setup instructions will be added as each sprint is completed.*
 
 ---
 
@@ -215,12 +368,12 @@ knovex/
 
 | Document | Description |
 |----------|-------------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Full system architecture and design decisions |
-| [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Sprint plan with tasks and milestones |
-| [FEATURES.md](docs/FEATURES.md) | Complete feature specification |
-| [API_SPEC.md](docs/API_SPEC.md) | All API endpoints and data contracts |
-| [TECH_STACK.md](docs/TECH_STACK.md) | Technology choices and rationale |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
+| [CHANGELOG.md](CHANGELOG.md) | Full version history with detailed change notes |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and design decisions |
+| [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Sprint plan with tasks and milestones |
+| [docs/FEATURES.md](docs/FEATURES.md) | Complete feature specification |
+| [docs/API_SPEC.md](docs/API_SPEC.md) | All API endpoints and data contracts |
+| [docs/TECH_STACK.md](docs/TECH_STACK.md) | Technology choices and rationale |
 
 ---
 

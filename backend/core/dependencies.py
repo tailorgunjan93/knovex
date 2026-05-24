@@ -19,9 +19,12 @@ Sprint 2 additions:
   - get_kb_service()      — KBService with all dependencies wired
   - get_watcher_service() — WatcherService singleton (started in lifespan)
 
+Sprint 3 additions:
+  - get_reader_service()  — ReaderService with file rendering + inline Q&A
+
 Usage in routes::
 
-    from backend.core.dependencies import KBServiceDep
+    from backend.core.dependencies import KBServiceDep, ReaderServiceDep
 
     @router.get("/kb")
     async def list_kbs(svc: KBServiceDep) -> KBListResponse:
@@ -133,6 +136,29 @@ def get_llm_service() -> LLMService:
     return LLMService()
 
 
+def get_reader_service(
+    backend=Depends(get_sqlite_backend),
+):
+    """
+    Provide ReaderService wired with file repository, SQLite backend, and LLMService.
+
+    Not cached: ReaderService is stateless; the expensive singletons
+    (LLMService, pdf/para adapters) are cheap to construct (no I/O).
+
+    DIP: ReaderService receives IFileRepository + ILLMClient adapters,
+         not concrete implementations.
+    """
+    from backend.core.reader_service import ReaderService
+    from backend.storage.repositories.file_repository import SQLiteFileRepository
+
+    file_repo = SQLiteFileRepository(backend)
+    return ReaderService(
+        file_repo=file_repo,
+        backend=backend,
+        llm_svc=get_llm_service(),
+    )
+
+
 def get_kb_service(
     backend=Depends(get_sqlite_backend),
 ):
@@ -190,10 +216,12 @@ def get_watcher_service():
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------
 
-from backend.adapters.http_client import IHttpClient  # noqa: E402
-from backend.core.kb_service import KBService          # noqa: E402
+from backend.adapters.http_client import IHttpClient      # noqa: E402
+from backend.core.kb_service import KBService              # noqa: E402
+from backend.core.reader_service import ReaderService      # noqa: E402
 
-SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
-LLMServiceDep      = Annotated[LLMService,      Depends(get_llm_service)]
-KBServiceDep       = Annotated[KBService,        Depends(get_kb_service)]
-HttpClientDep      = Annotated[IHttpClient,      Depends(get_http_client)]
+SettingsServiceDep = Annotated[SettingsService,  Depends(get_settings_service)]
+LLMServiceDep      = Annotated[LLMService,       Depends(get_llm_service)]
+KBServiceDep       = Annotated[KBService,         Depends(get_kb_service)]
+ReaderServiceDep   = Annotated[ReaderService,     Depends(get_reader_service)]
+HttpClientDep      = Annotated[IHttpClient,       Depends(get_http_client)]
