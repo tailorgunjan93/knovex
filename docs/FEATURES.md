@@ -1,6 +1,6 @@
 # Knovex — Feature Specification
 
-*Phase 1: Desktop App*
+*Phase 1: Desktop App — 4 Modules*
 
 ---
 
@@ -32,6 +32,15 @@ The KB and File Reader are a single integrated module. Files live inside a KB, a
 | Remove file | Delete file from KB + remove from index | 1 |
 | Re-index | Rebuild KB index manually | 1 |
 | File metadata | Name, format badge, size, date added, status | 1 |
+| Content hash | SHA256 stored at ingest — detects any file change | 1 |
+| Stale detection | File watcher + hash check → marks file Stale if changed | 1 |
+| Missing detection | File watcher → marks file Missing if deleted or moved | 1 |
+| Stale badge | Visual warning on file list when content has changed | 1 |
+| Missing badge | Visual error on file list when file not found at path | 1 |
+| Re-index on stale | One-click re-ingest with updated content | 1 |
+| Locate missing file | File picker to set new path when file has moved | 1 |
+| Network path warning | Warns user if file is on a network share | 1 |
+| Version counter | Increments each time a file is re-indexed | 1 |
 
 ### File Reader (inline in KB)
 
@@ -125,6 +134,109 @@ The KB and File Reader are a single integrated module. Files live inside a KB, a
 
 ---
 
+## Module 4 — Learn Mode
+
+The interactive learning engine. Feed any PDF, web URL, or typed topic — Knovex generates animated, gamified learning content on demand.
+
+### Input Sources
+
+| Source | Description | Phase |
+|--------|-------------|-------|
+| PDF from KB | Select any ingested file as source | 1 |
+| Web URL | Scrape and learn from any webpage | 1 |
+| Topic (typed) | Type a topic → web search pulls content | 1 |
+| PDF + Web combined | Merge file content with web enrichment | 1 |
+
+### Learning Formats
+
+| Format | Description | Phase |
+|--------|-------------|-------|
+| Flash Quiz | AI-generated multiple choice / true-false / fill-in-blank | 1 |
+| Quiz scoring | Points, timer, correct/wrong feedback with explanation | 1 |
+| Flashcard Deck | Swipeable front/back cards — tap to flip | 1 |
+| Spaced repetition | Hard cards return sooner, easy ones less often | 1 |
+| Animated Mind Map | Interactive node graph — click to expand concepts | 1 |
+| Story Mode | Complex topic rewritten as narrative with analogies | 1 |
+| Timeline | Animated chronological view for sequential topics | 1 |
+| ELI5 Mode | Adjustable difficulty — Age 5 / Age 10 / High School / Expert | 1 |
+| Speed Learn | Timed session — 5 min / 10 min / 30 min structured flow | 1 |
+| Brainstorm Board | Web search + AI expand any concept as visual graph | 1 |
+| Animated Explainer | CSS/SVG/Lottie animations for concepts (no GIF files) | 1 |
+
+### Interactivity
+
+| Feature | Description | Phase |
+|---------|-------------|-------|
+| Go deeper | Click any concept → AI expands with detail | 1 |
+| Simplify | Make current explanation simpler | 1 |
+| Give example | AI generates a real-world example | 1 |
+| Web search in session | Enrich any point with live web search | 1 |
+| Add to KB | Save curated content from session to a KB | 1 |
+| Difficulty selector | Switch difficulty mid-session | 1 |
+| Session progress bar | Visual progress through the learning session | 1 |
+
+### Gamification
+
+| Feature | Description | Phase |
+|---------|-------------|-------|
+| XP points | Earned per quiz completed, session finished | 1 |
+| Daily streak | Consecutive days learning | 1 |
+| Achievement badges | Per topic mastered (Biology Master, Physics Rookie, etc.) | 1 |
+| Session score | Quiz accuracy %, time taken | 1 |
+| Difficulty levels | Beginner → Intermediate → Expert per topic | 1 |
+| Daily challenge | Featured topic with 2× XP reward | 1 |
+| Progress tracking | Topics covered, revisit suggestions | 1 |
+
+### Web Search in Learn Mode
+
+| Feature | Description | Phase |
+|---------|-------------|-------|
+| Topic enrichment | Web search adds real-world context to sessions | 1 |
+| Source links | Clickable references shown in session | 1 |
+| Brainstorm expand | Click any node on brainstorm board → web search for more | 1 |
+
+---
+
+## Module 5 — Deployment Modes
+
+Knovex supports 3 deployment modes to cover personal users, organisations, and enterprise.
+
+### Mode 1 — Personal (Phase 1)
+
+| Feature | Description | Phase |
+|---------|-------------|-------|
+| Own API keys | User enters their own LLM + search keys | 1 |
+| Local SQLite | Embedded DB — zero setup, zero config | 1 |
+| Fully offline | Works without internet (except LLM calls + web search) | 1 |
+| Encrypted key storage | Fernet encryption in local config file | 1 |
+
+### Mode 2 — Organisation (Phase 2 — Knovex Cloud Portal)
+
+| Feature | Description | Phase |
+|---------|-------------|-------|
+| Admin web portal | React web app at app.knovex.io | 2 |
+| Org API key management | Admin enters keys once — all users get them | 2 |
+| Keys never reach devices | Portal proxies LLM calls — raw keys stay server-side | 2 |
+| User invites | Email invites or bulk CSV upload | 2 |
+| Org code setup | Employee enters org code → app authenticates → works | 2 |
+| Policy management | Which LLMs allowed, models allowed, web search on/off | 2 |
+| Usage analytics | Per-user token usage, cost tracking, request counts | 2 |
+| Key rotation | Admin rotates key once → all 50 apps updated instantly | 2 |
+| Revoke access | Disable a user instantly from portal | 2 |
+| SSO | Google Workspace, Azure AD (Phase 2b) | 2 |
+
+### Mode 3 — Self-hosted Enterprise (Phase 2)
+
+| Feature | Description | Phase |
+|---------|-------------|-------|
+| Docker deployment | IT deploys Knovex backend on company server | 2 |
+| Air-gapped support | No external internet required | 2 |
+| Company server URL | Employees point app at internal URL | 2 |
+| IT-managed config | All keys and policies on company infrastructure | 2 |
+| Annual license | Enterprise pricing model | 2 |
+
+---
+
 ## App-Wide Features
 
 | Feature | Description | Phase |
@@ -171,15 +283,26 @@ The KB and File Reader are a single integrated module. Files live inside a KB, a
 
 | Feature | Module |
 |---------|--------|
+| Organisation deployment mode | Deployment |
+| Knovex Cloud Portal (admin web app) | New: Portal |
+| Self-hosted Docker deployment | Deployment |
+| LLM proxy — keys never reach client device | Backend |
+| Per-user usage analytics + cost tracking | Portal |
+| SSO — Google Workspace, Azure AD | Auth |
 | LangGraph multi-agent chat | Chat |
 | Visual workflow builder | New: Workflows |
 | Workflow triggers (file added, schedule) | Workflows |
-| Cloud sync | KB |
+| Cloud sync — local SQLite ↔ cloud | KB |
 | Shared / team KBs | KB |
 | User accounts + JWT auth | App |
 | Web app version | Frontend |
-| Mobile app (React Native) | Frontend |
+| Mobile app (React Native — same API) | Frontend |
 | Plugin / connector marketplace | New: Plugins |
 | MCP server (expose Knovex as tool) | Backend |
 | Auto-updater | Desktop |
+| Learn Mode: voice narration (TTS) | Learn |
+| Learn Mode: export session as HTML | Learn |
+| Learn Mode: social sharing | Learn |
+| Learn Mode: multiplayer quiz | Learn |
+| Learn Mode: interactive simulations | Learn |
 | Usage analytics dashboard | New: Analytics |

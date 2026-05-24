@@ -8,8 +8,8 @@
 
 | | |
 |---|---|
-| **Total Sprints** | 5 |
-| **Estimated Duration** | 10 weeks |
+| **Total Sprints** | 6 |
+| **Estimated Duration** | 14 weeks |
 | **Methodology** | Sprint-based, backend-first |
 | **Stack** | FastAPI + React + Electron |
 | **Target** | Cross-platform desktop app (.exe / .dmg / .deb) |
@@ -19,10 +19,11 @@
 | Sprint | Focus | Duration |
 |--------|-------|----------|
 | Sprint 1 | Foundation — scaffold, settings, shell | Week 1–2 |
-| Sprint 2 | Knowledge Base — CRUD, ingestion, file list | Week 3–4 |
+| Sprint 2 | Knowledge Base — CRUD, ingestion, file watcher, hash detection | Week 3–4 |
 | Sprint 3 | File Reader — render, inline Q&A | Week 5–6 |
 | Sprint 4 | Chat + Summarizer + Web Search | Week 7–8 |
-| Sprint 5 | Polish, settings UI, packaging, release | Week 9–10 |
+| Sprint 5 | Settings + polish + packaging + deployment modes | Week 9–10 |
+| Sprint 6 | Learn Mode — interactive learning engine | Week 11–14 |
 
 ---
 
@@ -53,13 +54,13 @@
 | F1.1 | React + Vite + TypeScript scaffold | `frontend/` setup with pnpm | P0 |
 | F1.2 | MUI v6 theme system | Light / Medium / Dark themes with theme switcher | P0 |
 | F1.3 | App layout | Sidebar + main content area + header | P0 |
-| F1.4 | Routing | React Router v6 — `/kb`, `/chat`, `/settings` | P0 |
+| F1.4 | Routing | React Router v6 — `/kb`, `/chat`, `/learn`, `/settings` | P0 |
 | F1.5 | Zustand store setup | `kb.store`, `chat.store`, `settings.store` | P0 |
 | F1.6 | API client | Axios-based typed client pointing to `localhost:8765` | P0 |
 | F1.7 | Settings page — LLM | Provider dropdown, model input, API key (masked), test button | P0 |
 | F1.8 | Settings page — Search | Engine select, API key input | P1 |
 | F1.9 | Settings page — Theme | Light / Medium / Dark switcher | P0 |
-| F1.10 | Sidebar navigation | Icons + labels for KB, Chat, Settings | P0 |
+| F1.10 | Sidebar navigation | Icons + labels for KB, Chat, Learn, Settings | P0 |
 | F1.11 | Error boundary | Global error display component | P1 |
 | F1.12 | Loading states | Spinner / skeleton components | P1 |
 | F1.13 | Toast notifications | Success / error / info notifications | P1 |
@@ -105,6 +106,15 @@
 | B2.10 | KBSearchTool | LangChain BaseTool wrapper around docnest HybridRetriever | P1 |
 | B2.11 | FileIngestTool | LangChain BaseTool wrapper around ingestion service | P1 |
 | B2.12 | Event emissions | `kb.created`, `kb.deleted`, `kb.file.added`, `kb.file.ingested` | P1 |
+| B2.13 | Content hash | SHA256 of file stored at ingestion time in FileRecord | P0 |
+| B2.14 | File status model | `status` field: pending / ingesting / ready / stale / missing / error | P0 |
+| B2.15 | File version counter | `version` int increments on each re-index | P1 |
+| B2.16 | File watcher service | `watchdog` monitors all indexed paths — `on_modified`, `on_deleted` | P0 |
+| B2.17 | Stale detection | Hash changed → status=stale, emit `kb.file.stale` | P0 |
+| B2.18 | Missing detection | Path gone → status=missing, emit `kb.file.missing` | P0 |
+| B2.19 | Network path warning | Detect UNC / mapped drive paths → return warning on file add | P1 |
+| B2.20 | Re-index endpoint | `POST /kb/{id}/files/{fid}/reindex` — rehash + reingest | P0 |
+| B2.21 | Update path endpoint | `PUT /kb/{id}/files/{fid}/path` — for missing file relocation | P0 |
 
 ### Frontend Tasks
 
@@ -122,6 +132,11 @@
 | F2.10 | Format badges | Color-coded badges: PDF, DOCX, TXT, MD, CSV, UDF | P1 |
 | F2.11 | KB stats bar | File count + size shown at top of KB view | P1 |
 | F2.12 | Rename KB | Inline edit KB name | P1 |
+| F2.13 | Stale badge | ⚠️ badge on file when content hash changed | P0 |
+| F2.14 | Missing badge | ❌ badge on file when path not found | P0 |
+| F2.15 | Re-index button | Appears on stale files — triggers re-ingest | P0 |
+| F2.16 | Locate file button | Appears on missing files — opens file picker for new path | P0 |
+| F2.17 | Network path warning toast | Shown when user adds a file from a network location | P1 |
 
 ### Desktop Tasks
 
@@ -450,13 +465,84 @@ electron-builder@^25
 
 ---
 
+---
+
+## Sprint 6 — Learn Mode
+
+**Goal:** Full interactive learning engine — all formats working, gamification live, web search enrichment.
+
+### Backend Tasks
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| B6.1 | Learn session model | `LearnSession` (id, topic, format, source_type, source_ref, difficulty) | P0 |
+| B6.2 | User progress model | `UserStats` (xp, level, streak), `LearnProgress` per session | P0 |
+| B6.3 | Flashcard review model | `FlashcardReview` — spaced repetition tracking | P1 |
+| B6.4 | Learn session API | `POST /learn/session` `GET /learn/session/{id}` `DELETE /learn/session/{id}` | P0 |
+| B6.5 | Quiz answer API | `POST /learn/session/{id}/answer` — validate, score, update XP | P0 |
+| B6.6 | Progress API | `GET /learn/progress` — XP, level, streak, badges, recent sessions | P0 |
+| B6.7 | Content processor | Extract + chunk content from PDF / URL / topic+web search | P0 |
+| B6.8 | Web scraper | httpx + BeautifulSoup — scrape URL, clean HTML → plain text | P0 |
+| B6.9 | Quiz generator | LLM prompt → structured JSON quiz with options + explanations | P0 |
+| B6.10 | Flashcard generator | LLM prompt → front/back card pairs from content | P0 |
+| B6.11 | Mind map generator | LLM → concept nodes + relationships JSON (React Flow format) | P0 |
+| B6.12 | Story mode generator | LLM → narrative chapters with analogies | P0 |
+| B6.13 | Timeline generator | LLM → chronological events with descriptions | P0 |
+| B6.14 | ELI5 generator | LLM → difficulty-adjusted explanation (Age5/10/HS/Expert) | P0 |
+| B6.15 | Speed learn planner | LLM → structured timed session (5/10/30 min) combining formats | P1 |
+| B6.16 | Brainstorm generator | Web search + LLM → expanded concept graph nodes | P0 |
+| B6.17 | XP engine | Award XP on session complete, quiz score, streak update | P0 |
+| B6.18 | Badge engine | Check topic mastery → award achievement badges | P1 |
+| B6.19 | Spaced repetition logic | Next review date based on ease rating | P1 |
+| B6.20 | LearnTool | LangChain BaseTool — generates session from content (agent-ready) | P1 |
+
+### Frontend Tasks
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| F6.1 | Learn Mode home | Source selector (PDF/URL/topic) + format picker grid | P0 |
+| F6.2 | Session generator UI | Loading state, format preview before starting | P0 |
+| F6.3 | Quiz component | Question + options + timer + score + explanation on answer | P0 |
+| F6.4 | Flashcard deck | Framer Motion flip animation, swipe left/right, ease rating | P0 |
+| F6.5 | Mind map viewer | React Flow interactive graph — click node to expand | P0 |
+| F6.6 | Story mode viewer | Paged narrative with next/prev, progress bar | P0 |
+| F6.7 | Timeline viewer | Animated horizontal timeline — Framer Motion | P0 |
+| F6.8 | ELI5 viewer | Styled explanation with difficulty selector | P0 |
+| F6.9 | Speed Learn flow | Multi-format timed session with countdown | P1 |
+| F6.10 | Brainstorm board | React Flow canvas — nodes expand on click via web search | P0 |
+| F6.11 | Session complete screen | Score, XP earned, badges unlocked, next suggestions | P0 |
+| F6.12 | Progress dashboard | XP bar, level, streak, recent sessions, achievements | P0 |
+| F6.13 | Daily challenge | Featured topic card on Learn home with bonus XP | P1 |
+| F6.14 | Add to KB button | Save curated content from session into a KB | P1 |
+| F6.15 | Go deeper | Click any concept → AI expands in sidebar | P1 |
+| F6.16 | Web search enrichment toggle | On/off switch on session generator | P0 |
+| F6.17 | Difficulty selector | Beginner / Intermediate / Expert on session start | P0 |
+| F6.18 | learn.store.ts | Zustand store for session state, progress, gamification | P0 |
+| F6.19 | learn.api.ts | Typed API calls for all /learn/* endpoints | P0 |
+
+### Milestone S6 — Learn Mode v1
+- [ ] All 8 formats generate correctly (quiz, flashcard, mind map, story, timeline, ELI5, speed learn, brainstorm)
+- [ ] Quiz scoring + XP award works
+- [ ] Flashcard spaced repetition tracks ease ratings
+- [ ] Mind map and brainstorm board interactive in React Flow
+- [ ] Progress dashboard shows XP, streak, badges
+- [ ] Web search enrichment works in session generator
+- [ ] "Add to KB" saves session content correctly
+
+---
+
 ## Phase 2 Outline (Post Phase 1)
 
 | Feature | Description |
 |---------|-------------|
+| **Deployment: Organisation mode** | Knovex Cloud Portal — admin manages keys, invites users, sets policies |
+| **Admin portal web app** | React app at app.knovex.io — user mgmt, key vault, analytics |
+| **LLM proxy** | Portal proxies LLM calls — keys never reach employee devices |
+| **Self-hosted Docker** | IT deploys on company server — air-gapped enterprise support |
+| **SSO** | Google Workspace, Azure AD for organisation login |
 | LangGraph agents | Multi-step reasoning agents using registered Tools |
 | Workflow builder | Visual DAG — connect triggers, agents, actions |
-| Cloud backend | Docker + Railway/AWS — same FastAPI, PostgreSQL + Redis |
+| Cloud backend | Docker + Railway/AWS — same FastAPI, PostgreSQL + Redis (OUR server) |
 | Web app | Deploy same React frontend to CDN |
 | Mobile app | React Native consuming same FastAPI API |
 | Team KBs | Shared knowledge bases, user accounts, JWT auth |
@@ -464,3 +550,7 @@ electron-builder@^25
 | Auto-updater | Electron auto-update from GitHub releases |
 | Analytics dashboard | KB usage stats, most-queried topics |
 | MCP server | Expose Knovex as an MCP-compatible tool server |
+| Learn: voice narration | TTS for story mode and ELI5 |
+| Learn: export session | Save interactive session as standalone HTML |
+| Learn: social sharing | Share session link (Phase 2 cloud) |
+| Learn: multiplayer quiz | Real-time quiz sessions with friends/team |

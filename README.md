@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 [![Powered by docnest](https://img.shields.io/badge/powered%20by-docnest--ai-purple.svg)](https://pypi.org/project/docnest-ai/)
 
-**Knovex** is a local-first, AI-powered desktop knowledge base. Drop in your documents, ask questions, summarize, and search the web — all from one app, all running on your machine.
+**Knovex** is a local-first, AI-powered desktop knowledge base with an interactive learning engine. Drop in your documents, ask questions, summarize, search the web, and turn complex topics into animated, gamified learning sessions — all running on your machine.
 
 Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid RAG engine with SQLite FTS5 + dense ANN + section graph retrieval.
 
@@ -22,13 +22,15 @@ Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid 
 
 ## What is Knovex?
 
-Knovex turns your documents into a queryable knowledge base. It is a desktop application that runs completely **offline and local** — your files never leave your machine unless you explicitly enable web search.
+Knovex is a desktop application that runs completely **offline and local** — your files never leave your machine unless you explicitly enable web search or cloud sync.
 
 - **Knowledge Base** — create named KBs, add files, read them inline, ask questions
 - **Chat** — conversational QA over your KB with streaming responses and citations
 - **Summarizer** — summarize a file or an entire KB in one click
 - **Web Search** — optionally extend answers with live web results (DuckDuckGo, Serper, Brave)
+- **Learn Mode** — turn any PDF or web topic into quizzes, flashcards, mind maps, timelines and animated explainers
 - **Multi-LLM** — bring your own API key for OpenAI, Claude, Groq, Gemini, Cerebras, AWS Bedrock, or run fully offline with Ollama
+- **3 deployment modes** — Personal (own keys), Organization (admin-managed keys), Self-hosted (enterprise Docker)
 
 ---
 
@@ -50,6 +52,19 @@ Knovex turns your documents into a queryable knowledge base. It is a desktop app
 - Summarizer tab — summarize a single file or the entire KB
 - Optional web search integration in every chat
 
+### ✨ Learn Mode
+- Feed any PDF, web URL, or typed topic into an interactive learning session
+- **Flash quizzes** — AI-generated multiple choice / true-false / fill-in-blank with scoring
+- **Flashcard deck** — swipeable cards with spaced repetition
+- **Animated mind map** — clickable concept graph built from your content
+- **Story mode** — complex topic rewritten as a narrative with analogies
+- **Timeline** — animated chronological view for sequential topics
+- **ELI5 mode** — adjustable difficulty from Age 5 to Expert
+- **Speed Learn** — timed sessions (5 min, 10 min, 30 min)
+- **Brainstorm board** — web search + AI expand any concept visually
+- **Gamification** — XP points, streaks, difficulty levels, achievement badges
+- Web search enrichment — finds extra context for any topic
+
 ### ⚙️ Settings
 - LLM: OpenAI, Anthropic (Claude), Groq, Gemini, Cerebras, AWS Bedrock, Ollama
 - Per-provider model selection and API key storage (encrypted locally)
@@ -58,6 +73,7 @@ Knovex turns your documents into a queryable knowledge base. It is a desktop app
 - Web search engine: DuckDuckGo (free, no key) / Serper / Brave
 - Theme: Light / Medium / Dark
 - Custom KB storage path
+- Deployment mode: Personal / Organization / Self-hosted
 
 ---
 
@@ -71,7 +87,7 @@ Knovex uses a **fully decoupled** frontend/backend architecture. The FastAPI bac
 │  Thin wrapper — spawns backend, manages window, tray, dialogs   │
 │  ┌───────────────────────────────────────────────────────────┐  │
 │  │  FRONTEND  (React 18 + MUI v6 + TypeScript)               │  │
-│  │  KB Manager · Chat · File Reader · Settings               │  │
+│  │  KB Manager · Chat · Learn Mode · Settings               │  │
 │  └───────────────────────┬───────────────────────────────────┘  │
 └──────────────────────────│──────────────────────────────────────┘
                            │ REST + SSE  (localhost:8765)
@@ -90,7 +106,8 @@ Knovex uses a **fully decoupled** frontend/backend architecture. The FastAPI bac
 │  │  Parse+render│ │  in-process  │ │  Agent-ready tools       │ │
 │  └──────────────┘ └──────────────┘ └──────────────────────────┘ │
 │                                                                 │
-│  Storage: SQLite  (Phase 2 → PostgreSQL + Redis)                │
+│  Storage: SQLite embedded — zero setup, ships with app          │
+│  (PostgreSQL only on OUR cloud server, never on user machine)   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -143,7 +160,7 @@ knovex/
 │
 ├── frontend/                    React + MUI — pure UI consumer
 │   ├── src/
-│   │   ├── pages/               KnowledgeBase, Chat, Settings
+│   │   ├── pages/               KnowledgeBase, Chat, Learn, Settings
 │   │   ├── components/          Layout, Sidebar, FileReader, shared
 │   │   ├── store/               Zustand stores
 │   │   ├── api/                 API client + typed calls
@@ -166,19 +183,23 @@ knovex/
 - [x] Architecture + planning
 - [ ] Project scaffold
 - [ ] Sprint 1: Foundation (FastAPI + React + Electron shell)
-- [ ] Sprint 2: Knowledge Base + File Reader
-- [ ] Sprint 3: Chat + Summarizer
-- [ ] Sprint 4: Web Search integration
+- [ ] Sprint 2: Knowledge Base + file watcher + hash detection
+- [ ] Sprint 3: File Reader (inline in KB)
+- [ ] Sprint 4: Chat + Summarizer + Web Search
 - [ ] Sprint 5: Settings + polish + packaging
+- [ ] Sprint 6: Learn Mode (interactive learning engine)
 
-### Phase 2 — Agentic + Cloud
+### Phase 2 — Cloud + Organisation + Agentic
+- [ ] Knovex Cloud Portal (web admin — org key management, user management, analytics)
+- [ ] 3 deployment modes: Personal / Organization (portal) / Self-hosted (Docker)
 - [ ] LangGraph agent orchestration
 - [ ] Visual workflow builder
-- [ ] Cloud deployment (Railway / AWS)
+- [ ] Cloud deployment (Railway / AWS) — PostgreSQL on OUR infra, not user machines
 - [ ] Web app version
 - [ ] Mobile app (React Native — same backend API)
 - [ ] Team collaboration + shared KBs
 - [ ] Plugin / connector marketplace
+- [ ] Learn Mode: voice narration, social sharing, multiplayer sessions
 
 ---
 
