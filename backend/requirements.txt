@@ -1,0 +1,46 @@
+# Knovex Backend — Python Dependencies
+# Python 3.11+
+
+# ─── Web framework ────────────────────────────────────────────────────────────
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.12    # multipart form uploads
+
+# ─── HTTP client ──────────────────────────────────────────────────────────────
+httpx>=0.27
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+aiosqlite>=0.20             # async SQLite access
+
+# ─── Configuration ────────────────────────────────────────────────────────────
+pydantic>=2.0
+pydantic-settings>=2.0
+platformdirs>=4.0           # OS-aware config/data/log paths
+
+# ─── Encryption ───────────────────────────────────────────────────────────────
+cryptography>=43.0          # Fernet symmetric encryption for API keys
+
+# ─── RAG engine ───────────────────────────────────────────────────────────────
+docnest-ai>=0.6.0           # Hybrid FTS5 + ANN + section graph retrieval
+
+# ─── LLM layer ────────────────────────────────────────────────────────────────
+litellm>=1.50               # Unified multi-provider LLM (OpenAI, Anthropic, Groq, Gemini, Bedrock, Ollama)
+
+# ─── Agent tools ──────────────────────────────────────────────────────────────
+langchain-core>=0.3         # BaseTool interface for agent-ready tools
+
+# ─── Web search ───────────────────────────────────────────────────────────────
+duckduckgo-search>=6.0      # Free web search (no API key required)
+# serper-python>=0.0.5      # Serper.dev (optional, key from settings)
+# brave-search>=0.1         # Brave Search API (optional, key from settings)
+
+# ─── File parsing (Sprint 2+) ─────────────────────────────────────────────────
+pymupdf>=1.24               # PDF parsing and text extraction (fitz)
+python-docx>=1.1            # DOCX parsing
+markdown>=3.7               # Markdown to HTML rendering
+
+# ─── File watcher (Sprint 2+) ─────────────────────────────────────────────────
+watchdog>=4.0               # Cross-platform file system event monitoring
+
+# ─── Web scraping (Sprint 6 — Learn Mode) ────────────────────────────────────
+beautifulsoup4>=4.12        # HTML parsing for URL scraping

@@ -1,0 +1,322 @@
+/**
+ * Knovex Electron Main Process
+ *
+ * Responsibilities:
+ *   1. Spawn the FastAPI backend as a child process
+ *   2. Poll GET /health until the backend is ready
+ *   3. Open the BrowserWindow (Vite dev server in dev, dist/ in prod)
+ *   4. Handle OS file dialogs (IPC handlers)
+ *   5. System tray (minimise-to-tray)
+ *   6. Clean shutdown (kill backend on quit)
+ */
+
+const {
+  app,
+  BrowserWindow,
+  Tray,
+  Menu,
+  ipcMain,
+  dialog,
+  nativeImage,
+  shell,
+} = require('electron')
+const path = require('path')
+const { spawn } = require('child_process')
+const http = require('http')
+const fs = require('fs')
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const IS_DEV = process.argv.includes('--dev') || !app.isPackaged
+const BACKEND_PORT = 8765
+const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
+const HEALTH_URL = `${BACKEND_URL}/api/health`
+const VITE_DEV_URL = 'http://localhost:5173'
+
+const WINDOW_MIN_WIDTH = 900
+const WINDOW_MIN_HEIGHT = 600
+const WINDOW_DEFAULT_WIDTH = 1280
+const WINDOW_DEFAULT_HEIGHT = 820
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+let mainWindow = null
+let tray = null
+let backendProcess = null
+let backendReady = false
+
+// ─── Backend spawn ────────────────────────────────────────────────────────────
+
+function getBackendExecutable() {
+  if (IS_DEV) {
+    // In dev mode: run via uvicorn directly
+    const venvPython = path.join(
+      path.dirname(__dirname),
+      '.venv',
+      process.platform === 'win32' ? 'Scripts\\python.exe' : 'bin/python',
+    )
+    return { executable: venvPython, args: ['-m', 'uvicorn', 'backend.main:app', '--port', String(BACKEND_PORT), '--host', '127.0.0.1'] }
+  }
+
+  // In production: run the PyInstaller-bundled binary
+  const backendBin = path.join(
+    process.resourcesPath,
+    'backend',
+    process.platform === 'win32' ? 'knovex-backend.exe' : 'knovex-backend',
+  )
+  return { executable: backendBin, args: [] }
+}
+
+function spawnBackend() {
+  const { executable, args } = getBackendExecutable()
+  const cwd = IS_DEV ? path.join(__dirname, '..') : __dirname
+
+  console.log('[backend] spawning:', executable, args.join(' '))
+
+  backendProcess = spawn(executable, args, {
+    cwd,
+    env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    stdio: IS_DEV ? 'inherit' : 'pipe',
+  })
+
+  backendProcess.on('exit', (code) => {
+    console.log('[backend] exited with code:', code)
+    backendReady = false
+  })
+
+  backendProcess.on('error', (err) => {
+    console.error('[backend] spawn error:', err.message)
+  })
+}
+
+// ─── Health polling ───────────────────────────────────────────────────────────
+
+function waitForBackend(retries = 40, interval = 500) {
+  return new Promise((resolve, reject) => {
+    let attempts = 0
+
+    const check = () => {
+      attempts++
+      const req = http.get(HEALTH_URL, (res) => {
+        if (res.statusCode === 200) {
+          backendReady = true
+          console.log('[backend] ready after', attempts, 'attempts')
+          resolve()
+        } else {
+          retry()
+        }
+      })
+      req.on('error', retry)
+      req.setTimeout(400, () => { req.destroy(); retry() })
+    }
+
+    const retry = () => {
+      if (attempts >= retries) {
+        reject(new Error(`Backend did not start after ${retries} attempts`))
+      } else {
+        setTimeout(check, interval)
+      }
+    }
+
+    check()
+  })
+}
+
+// ─── Window ───────────────────────────────────────────────────────────────────
+
+function getWindowState() {
+  // TODO: persist window bounds to electron-store in Sprint 5
+  return { width: WINDOW_DEFAULT_WIDTH, height: WINDOW_DEFAULT_HEIGHT }
+}
+
+function createMainWindow() {
+  const { width, height } = getWindowState()
+
+  mainWindow = new BrowserWindow({
+    width,
+    height,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
+    title: 'Knovex',
+    show: false,
+    backgroundColor: '#0F0D17',  // matches dark theme background
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  // Load the app
+  if (IS_DEV) {
+    mainWindow.loadURL(VITE_DEV_URL)
+    mainWindow.webContents.openDevTools()
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'))
+  }
+
+  // Show window once ready
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
+    mainWindow.focus()
+  })
+
+  // Minimise to tray on close (not quit)
+  mainWindow.on('close', (event) => {
+    if (tray && !app.isQuitting) {
+      event.preventDefault()
+      mainWindow.hide()
+    }
+  })
+
+  // Open external links in system browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
+  return mainWindow
+}
+
+// ─── System tray ─────────────────────────────────────────────────────────────
+
+function createTray() {
+  const iconPath = path.join(__dirname, 'assets', 'tray-icon.png')
+  const icon = fs.existsSync(iconPath)
+    ? nativeImage.createFromPath(iconPath)
+    : nativeImage.createEmpty()
+
+  tray = new Tray(icon)
+  tray.setToolTip('Knovex')
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open Knovex',
+      click: () => { mainWindow?.show(); mainWindow?.focus() },
+    },
+    { type: 'separator' },
+    {
+      label: 'Settings',
+      click: () => {
+        mainWindow?.show()
+        mainWindow?.focus()
+        mainWindow?.webContents.send('navigate', '/settings')
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => {
+        app.isQuitting = true
+        app.quit()
+      },
+    },
+  ])
+
+  tray.setContextMenu(contextMenu)
+  tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus() })
+}
+
+// ─── IPC handlers ─────────────────────────────────────────────────────────────
+
+function registerIpcHandlers() {
+  // Native file open dialog
+  ipcMain.handle('dialog:openFile', async (_, options = {}) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        {
+          name: 'Supported Documents',
+          extensions: ['pdf', 'docx', 'txt', 'md', 'csv', 'udf'],
+        },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      ...options,
+    })
+    return result.canceled ? [] : result.filePaths
+  })
+
+  // Native folder picker
+  ipcMain.handle('dialog:openFolder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory'],
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+
+  // Save dialog
+  ipcMain.handle('dialog:save', async (_, options = {}) => {
+    const result = await dialog.showSaveDialog(mainWindow, options)
+    return result.canceled ? null : result.filePath
+  })
+
+  // App version
+  ipcMain.handle('app:version', () => app.getVersion())
+}
+
+// ─── Drag-and-drop file forwarding ───────────────────────────────────────────
+
+function setupFileDrop() {
+  app.on('will-finish-launching', () => {
+    // macOS: open-file event
+    app.on('open-file', (event, filePath) => {
+      event.preventDefault()
+      mainWindow?.webContents.send('file-drop', [filePath])
+    })
+  })
+}
+
+// ─── App lifecycle ────────────────────────────────────────────────────────────
+
+app.on('ready', async () => {
+  console.log('[app] Knovex starting (dev:', IS_DEV, ')')
+
+  registerIpcHandlers()
+  setupFileDrop()
+
+  // Start backend
+  try {
+    spawnBackend()
+    await waitForBackend()
+  } catch (err) {
+    console.error('[app] Backend failed to start:', err.message)
+    dialog.showErrorBox(
+      'Knovex — Backend Error',
+      `The Knovex backend failed to start:\n\n${err.message}\n\nPlease try restarting the app.`,
+    )
+    app.quit()
+    return
+  }
+
+  // Create UI
+  createTray()
+  createMainWindow()
+})
+
+app.on('window-all-closed', () => {
+  // On macOS, keep app running even with no windows (standard behaviour)
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
+})
+
+app.on('activate', () => {
+  // macOS: re-create window when dock icon is clicked
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createMainWindow()
+  } else {
+    mainWindow?.show()
+  }
+})
+
+app.on('before-quit', () => {
+  app.isQuitting = true
+})
+
+app.on('quit', () => {
+  console.log('[app] Quitting — killing backend process')
+  if (backendProcess && !backendProcess.killed) {
+    backendProcess.kill()
+  }
+})
