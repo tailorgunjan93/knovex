@@ -9,13 +9,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-*Planned — Sprint 4+*
-
-### Sprint 4 — Chat + Summarizer + Web Search
-- Conversational QA over entire KB with source citations
-- Streaming chat via SSE with TanStack Query
-- Summarize a file or full KB (brief / detailed modes)
-- Web search integration (DuckDuckGo / Serper / Brave)
+*Planned — Sprint 5+*
 
 ### Sprint 5 — Settings UI + Packaging
 - Full Settings page (LLM provider, model, key, theme, storage path)
@@ -27,6 +21,101 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Quiz, flashcard, mind map, story, timeline, ELI5, speed-learn, brainstorm
 - Gamification: XP, streaks, badges
 - Web search enrichment for topics
+
+---
+
+## [0.4.0] — 2026-05-24
+
+Sprint 4 — Chat + Summarizer + Web Search
+
+### Added
+
+#### Backend — Chat
+- **`ChatSession` + `ChatMessage`** domain entities (`backend/core/domain/chat.py`)
+  - `ChatSession.rename(title)` — validates blank title, updates `updated_at`
+  - `ChatSession.touch()` — bumps `updated_at` after each assistant reply
+- **`IChatRepository`** + **`SQLiteChatRepository`** (`backend/storage/repositories/chat_repository.py`)
+  - Session CRUD: `find_by_id`, `find_all`, `find_sessions_by_kb`, `save`, `delete`
+  - Message CRUD: `find_messages`, `save_message`, `delete_message`
+  - UPSERT with `ON CONFLICT(id) DO UPDATE SET`
+  - Left-join message count in all session queries
+- **`ChatService`** (`backend/core/chat_service.py`) — Facade for all chat operations
+  - `create_session(kb_id, title)`, `get_session(id)`, `list_sessions(kb_id?)`, `rename_session`, `delete_session`
+  - `get_messages(session_id)`, `export_session(session_id)` → Markdown string
+  - `stream_message(...)` — streaming QA with full SSE protocol:
+    - Step 1: persist user message
+    - Step 2: FTS5 chunk retrieval with special-char sanitisation + sequential fallback
+    - Step 3: optional web search augmentation
+    - Step 4: emit `sources` / `web_sources` events before first token
+    - Step 5: build prompt (system + history + KB/web context + question)
+    - Step 6: stream LLM tokens, emit `token` events
+    - Step 7: persist complete assistant message, emit `done` event
+  - Constants: `_MAX_CONTEXT_CHUNKS=12`, `_MAX_CONTEXT_CHARS=8000`, `_MAX_HISTORY_MESSAGES=10`, `_MAX_WEB_RESULTS=4`
+- **Chat API** (`backend/api/chat.py`) — 8 endpoints:
+  - `POST /api/sessions` — create session
+  - `GET  /api/sessions` — list all (or filter `?kb_id=`)
+  - `GET  /api/sessions/{id}` — get single session
+  - `PATCH /api/sessions/{id}` — rename session
+  - `DELETE /api/sessions/{id}` — delete session
+  - `GET  /api/sessions/{id}/messages` — message history
+  - `POST /api/sessions/{id}/stream` — SSE streaming QA
+  - `GET  /api/sessions/{id}/export` — Markdown export
+
+#### Backend — Summarizer
+- **`SummariserService`** (`backend/core/summarizer_service.py`)
+  - `summarise_file(kb_id, file_id, length, ...)` — streams LLM summary of file chunks
+  - `summarise_kb(kb_id, length, ...)` — streams LLM summary across all KB files
+  - Length modes: `brief` (~150 words) and `detailed` (~600 words with bullets)
+  - SSE protocol identical to Chat (`token` / `done` / `error`)
+- **Summarizer API** (`backend/api/summarizer.py`):
+  - `POST /api/summarize/file` — summarise a single file
+  - `POST /api/summarize/kb` — summarise an entire KB
+
+#### Backend — Web Search
+- **`IWebSearchAdapter`** + adapters (`backend/adapters/web_search.py`)
+  - `DuckDuckGoAdapter` — free, no API key, wraps `duckduckgo-search`
+  - `SerperAdapter` — Google Search via `api.serper.dev`
+  - `BraveAdapter` — Brave Search API
+  - `StubWebSearchAdapter(results=[...])` — deterministic stub for tests
+  - `get_search_adapter(engine)` factory with DuckDuckGo fallback
+  - All third-party imports deferred (module importable without optional libs)
+- **`SearchService`** (`backend/core/search_service.py`) — Facade over adapter layer
+- **Search API** (`backend/api/search.py`) — `POST /api/search/web`
+
+#### Backend — Dependencies & Wiring
+- `get_chat_service()`, `get_summariser_service()`, `get_search_service()` added to `dependencies.py`
+- `ChatServiceDep`, `SummariserServiceDep`, `SearchServiceDep` annotated shorthands
+- Chat, summarizer, and search routers registered in `main.py`
+- Version bumped to `0.4.0` in `AppConfig`
+
+#### Frontend — Chat Page
+- **Chat page** (`frontend/src/pages/Chat/index.tsx`) — full rewrite from placeholder
+  - Left sidebar: session list (`SessionItem` with delete), "New Chat" button
+  - Right panel: header, message thread, input bar
+  - `MessageBubble` — user right-aligned, assistant left-aligned; KB citations as MUI `Chip`; web sources as `Link`
+  - Token-by-token streaming with blinking cursor (`@keyframes blink` CSS animation)
+  - Web search toggle (`ToggleButton` with `SearchIcon`)
+  - `AbortController` in `abortRef` for stop mid-stream
+  - Export to Markdown via `chatApi.exportSession()` + Blob download
+  - `EmptyChat` — 4 suggested prompts that populate input field
+  - `NoChatSelected` — empty state when no session is active
+
+#### Frontend — Summarizer API
+- **`summariserApi`** (`frontend/src/api/summarizer.api.ts`)
+  - `streamFileSummary(kbId, fileId, length, onEvent, signal)` — SSE file summary
+  - `streamKBSummary(kbId, length, onEvent, signal)` — SSE KB summary
+  - Uses `fetch()` + `ReadableStream` (POST-based SSE, not `EventSource`)
+  - `SummariseEvent` union type: `token | done | error`
+
+#### Tests
+- `tests/test_chat.py` — 30 ChatService + SearchService unit tests
+  - `InMemoryChatRepository` — pure-Python stub, no SQLite
+  - Session CRUD, rename validation, export Markdown
+  - `stream_message`: token events, done event, sources/web-sources events, persistence, LLM error handling, missing session
+  - `ChatSession` domain rules (rename / touch)
+  - `SearchService` with `StubWebSearchAdapter`
+- `tests/test_imports.py` — extended with 7 Sprint 4 smoke tests
+  - Chat domain, web-search adapter, chat repository, sprint-4 services, all new routes
 
 ---
 
@@ -192,7 +281,8 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/tailorgunjan93/knovex/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tailorgunjan93/knovex/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/tailorgunjan93/knovex/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/tailorgunjan93/knovex/releases/tag/v0.1.0

@@ -22,6 +22,11 @@ Sprint 2 additions:
 Sprint 3 additions:
   - get_reader_service()  — ReaderService with file rendering + inline Q&A
 
+Sprint 4 additions:
+  - get_search_service()     — SearchService (web search facade)
+  - get_chat_service()       — ChatService with FTS5 retrieval + SSE streaming
+  - get_summariser_service() — SummariserService for file / KB summaries
+
 Usage in routes::
 
     from backend.core.dependencies import KBServiceDep, ReaderServiceDep
@@ -193,6 +198,54 @@ def get_kb_service(
 
 
 @lru_cache(maxsize=1)
+def get_search_service():
+    """
+    Provide the SearchService singleton.
+
+    No adapter is injected — SearchService resolves the engine adapter at
+    call-time from the engine name passed by the caller (from Settings).
+    """
+    from backend.core.search_service import SearchService
+    return SearchService()
+
+
+def get_chat_service(
+    backend=Depends(get_sqlite_backend),
+):
+    """
+    Provide ChatService wired with chat repository, file repository,
+    SQLiteBackend (for FTS5 queries), LLMService, and SearchService.
+    """
+    from backend.core.chat_service import ChatService
+    from backend.storage.repositories.chat_repository import SQLiteChatRepository
+    from backend.storage.repositories.file_repository import SQLiteFileRepository
+
+    return ChatService(
+        chat_repo=SQLiteChatRepository(backend),
+        file_repo=SQLiteFileRepository(backend),
+        backend=backend,
+        llm_svc=get_llm_service(),
+        search_svc=get_search_service(),
+    )
+
+
+def get_summariser_service(
+    backend=Depends(get_sqlite_backend),
+):
+    """
+    Provide SummariserService wired with file repository + LLMService.
+    """
+    from backend.core.summarizer_service import SummariserService
+    from backend.storage.repositories.file_repository import SQLiteFileRepository
+
+    return SummariserService(
+        file_repo=SQLiteFileRepository(backend),
+        backend=backend,
+        llm_svc=get_llm_service(),
+    )
+
+
+@lru_cache(maxsize=1)
 def get_watcher_service():
     """
     Provide the WatcherService singleton.
@@ -216,12 +269,18 @@ def get_watcher_service():
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------
 
-from backend.adapters.http_client import IHttpClient      # noqa: E402
-from backend.core.kb_service import KBService              # noqa: E402
-from backend.core.reader_service import ReaderService      # noqa: E402
+from backend.adapters.http_client import IHttpClient         # noqa: E402
+from backend.core.chat_service import ChatService            # noqa: E402
+from backend.core.kb_service import KBService                # noqa: E402
+from backend.core.reader_service import ReaderService        # noqa: E402
+from backend.core.search_service import SearchService        # noqa: E402
+from backend.core.summarizer_service import SummariserService  # noqa: E402
 
-SettingsServiceDep = Annotated[SettingsService,  Depends(get_settings_service)]
-LLMServiceDep      = Annotated[LLMService,       Depends(get_llm_service)]
-KBServiceDep       = Annotated[KBService,         Depends(get_kb_service)]
-ReaderServiceDep   = Annotated[ReaderService,     Depends(get_reader_service)]
-HttpClientDep      = Annotated[IHttpClient,       Depends(get_http_client)]
+SettingsServiceDep   = Annotated[SettingsService,   Depends(get_settings_service)]
+LLMServiceDep        = Annotated[LLMService,         Depends(get_llm_service)]
+KBServiceDep         = Annotated[KBService,           Depends(get_kb_service)]
+ReaderServiceDep     = Annotated[ReaderService,       Depends(get_reader_service)]
+ChatServiceDep       = Annotated[ChatService,         Depends(get_chat_service)]
+SummariserServiceDep = Annotated[SummariserService,   Depends(get_summariser_service)]
+SearchServiceDep     = Annotated[SearchService,       Depends(get_search_service)]
+HttpClientDep        = Annotated[IHttpClient,         Depends(get_http_client)]

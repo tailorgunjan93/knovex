@@ -1,5 +1,5 @@
 """
-Import smoke tests — Sprint 1, 2, 3
+Import smoke tests — Sprint 1, 2, 3, 4
 
 Every module must import cleanly without network access, DB connections,
 or missing optional dependencies raising errors.
@@ -22,7 +22,7 @@ import pytest
 
 def test_config_imports():
     from backend.core.config import settings  # noqa: F401
-    assert settings.version == "0.3.0"
+    assert settings.version == "0.4.0"
     assert settings.backend_port == 8765
 
 
@@ -116,6 +116,55 @@ def test_watcher_service_imports():
     from backend.core.watcher_service import WatcherService  # noqa: F401
 
 
+def test_chat_service_imports():
+    from backend.core.chat_service import ChatService  # noqa: F401
+
+
+def test_summariser_service_imports():
+    from backend.core.summarizer_service import SummariserService  # noqa: F401
+
+
+def test_search_service_imports():
+    from backend.core.search_service import SearchService  # noqa: F401
+
+
+def test_chat_domain_imports():
+    from backend.core.domain.chat import ChatSession, ChatMessage  # noqa: F401
+    import uuid
+    session = ChatSession(id=str(uuid.uuid4()), title="Test")
+    assert session.title == "Test"
+    msg = ChatMessage(
+        id=str(uuid.uuid4()),
+        session_id=session.id,
+        role="user",
+        content="Hello",
+    )
+    assert msg.role == "user"
+
+
+def test_web_search_adapter_imports():
+    from backend.adapters.web_search import (  # noqa: F401
+        IWebSearchAdapter,
+        SearchResult,
+        StubWebSearchAdapter,
+        DuckDuckGoAdapter,
+        SerperAdapter,
+        BraveAdapter,
+        get_search_adapter,
+    )
+    stub = StubWebSearchAdapter()
+    assert stub is not None
+    ddg = get_search_adapter("duckduckgo")
+    assert ddg is not None
+
+
+def test_chat_repository_imports():
+    from backend.storage.repositories.chat_repository import (  # noqa: F401
+        IChatRepository,
+        SQLiteChatRepository,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Providers (no network calls)
 # ---------------------------------------------------------------------------
@@ -152,3 +201,29 @@ def test_reader_route_registered():
     paths = [r.path for r in app.routes]  # type: ignore[attr-defined]
     assert "/api/kb/{kb_id}/files/{file_id}/content" in paths
     assert "/api/kb/{kb_id}/files/{file_id}/ask" in paths
+
+
+def test_chat_routes_registered():
+    """Verify the chat router exposes session + stream endpoints."""
+    from backend.main import create_app
+    app = create_app()
+    paths = [r.path for r in app.routes]  # type: ignore[attr-defined]
+    assert any("/sessions" in p for p in paths), "chat sessions route missing"
+    assert any("/stream" in p for p in paths), "chat stream route missing"
+    assert any("/export" in p for p in paths), "chat export route missing"
+
+
+def test_summarizer_routes_registered():
+    """Verify the summarizer router is wired up."""
+    from backend.main import create_app
+    app = create_app()
+    paths = [r.path for r in app.routes]  # type: ignore[attr-defined]
+    assert any("/summarize" in p for p in paths), "summarize route missing"
+
+
+def test_search_routes_registered():
+    """Verify the search router is wired up."""
+    from backend.main import create_app
+    app = create_app()
+    paths = [r.path for r in app.routes]  # type: ignore[attr-defined]
+    assert any("/search" in p for p in paths), "search route missing"

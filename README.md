@@ -6,7 +6,7 @@
 
 *Secure · Fast · Reliable · Cost-Effective*
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](CHANGELOG.md)
 [![CI](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml/badge.svg)](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](#)
@@ -29,7 +29,7 @@ Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid 
 | 1 | Foundation — FastAPI + React + Electron shell | ✅ v0.1.0 |
 | 2 | Knowledge Base + File Ingestion + Adapter layer | ✅ v0.2.0 |
 | 3 | File Reader + Inline Q&A | ✅ v0.3.0 |
-| 4 | Chat + Summariser + Web Search | 🔜 Planned |
+| 4 | Chat + Summariser + Web Search | ✅ v0.4.0 |
 | 5 | Settings UI + packaging | 🔜 Planned |
 | 6 | Learn Mode | 🔜 Planned |
 
@@ -61,13 +61,14 @@ Knovex runs completely **offline and local** — your files never leave your mac
 - SSE streaming Q&A grounded in the file's indexed chunks
 - Supported block types: `paragraph`, `heading`, `table_row`, `code`, `page`
 
-### 💬 Chat + Summariser *(v0.4.0 — planned)*
-- Conversational QA against a selected KB
-- Streaming token-by-token responses
+### 💬 Chat + Summariser *(v0.4.0)*
+- Conversational QA against a selected KB with streaming token-by-token responses
 - Source citations — which file and section answered your question
-- Persistent chat history per KB
-- Summariser tab — summarise a single file or the entire KB
-- Optional web search integration in every chat
+- Persistent chat sessions with full message history
+- Session sidebar with create, rename, delete, and export to Markdown
+- Web search toggle per message (DuckDuckGo free / Serper / Brave)
+- Summariser: brief (~150 words) or detailed (~600 words) of a file or entire KB
+- Blinking cursor animation, AbortController stop mid-stream
 
 ### ✨ Learn Mode *(v0.6.0 — planned)*
 - Flash quizzes, flashcard decks, animated mind maps, story mode, timelines, ELI5, speed-learn, brainstorm
@@ -107,12 +108,18 @@ Knovex uses a **fully decoupled** frontend/backend architecture with SOLID compl
 │  ├── /api/kb/**           KB CRUD + file management (13 endpoints)         │
 │  ├── /api/kb/**/content   File content rendering (paginated blocks)         │
 │  ├── /api/kb/**/ask       Inline Q&A SSE stream                            │
+│  ├── /api/sessions/**     Chat session CRUD + SSE stream + export          │
+│  ├── /api/summarize/**    File / KB summariser SSE stream                  │
+│  ├── /api/search/web      Web search endpoint                              │
 │  ├── /api/settings/**     LLM + search config                              │
 │  └── /api/health          Liveness + Ollama probe                          │
 │                                                                             │
 │  Services (Facades)                                                         │
 │  ├── KBService        KB CRUD + ingestion orchestration                    │
 │  ├── ReaderService    File rendering + inline Q&A                          │
+│  ├── ChatService      Session CRUD + FTS5 retrieval + SSE streaming        │
+│  ├── SummariserService File / KB summariser (brief / detailed)             │
+│  ├── SearchService    Web search facade (DDG / Serper / Brave)             │
 │  ├── IngestionService Strategy-pattern file parsing → chunk storage        │
 │  ├── LLMService       Unified LLM (stream / complete / test / models)      │
 │  ├── SettingsService  Encrypted settings read/write                        │
@@ -122,7 +129,8 @@ Knovex uses a **fully decoupled** frontend/backend architecture with SOLID compl
 │  ├── ILLMClient / LiteLLMAdapter     — wraps litellm                       │
 │  ├── IHttpClient / HttpxAdapter      — wraps httpx                         │
 │  ├── IPDFAdapter / PyMuPDFAdapter    — wraps fitz (PyMuPDF)                │
-│  └── IParagraphAdapter / PythonDocxAdapter — wraps python-docx             │
+│  ├── IParagraphAdapter / PythonDocxAdapter — wraps python-docx             │
+│  └── IWebSearchAdapter / DDG/Serper/BraveAdapter — wraps search libs       │
 │                                                                             │
 │  Storage                                                                    │
 │  └── SQLite (WAL mode) — kbs, files, chunks, chunks_fts (FTS5)             │
@@ -140,8 +148,8 @@ Knovex uses a **fully decoupled** frontend/backend architecture with SOLID compl
 | Strategy | `IngestionService` parsers (`@register_parser` decorator) |
 | Template Method | `LLMProvider.complete()` / `stream()` delegate to `ILLMClient` |
 | Factory + Plugin | `LLMProviderFactory` + `@register_provider` self-registration |
-| Repository | `IKBRepository`, `IFileRepository` — abstract storage behind interfaces |
-| Facade | `KBService`, `LLMService`, `ReaderService` |
+| Repository | `IKBRepository`, `IFileRepository`, `IChatRepository` — abstract storage |
+| Facade | `KBService`, `LLMService`, `ReaderService`, `ChatService`, `SummariserService`, `SearchService` |
 | Observer | `EventBus.emit_typed()` — typed in-process events |
 | Value Object | `ProviderCredentials`, `HttpResponse`, `PageContent`, `ParagraphContent` |
 
@@ -192,25 +200,33 @@ knovex/
 │   │   ├── settings.py                 GET|PUT /api/settings, test-llm, models, ollama
 │   │   ├── kb.py                       13 KB + file endpoints
 │   │   ├── reader.py                   GET /content, POST /ask (SSE)
+│   │   ├── chat.py                     8 chat endpoints (sessions + stream + export)
+│   │   ├── summarizer.py               POST /summarize/file, /summarize/kb
+│   │   ├── search.py                   POST /search/web
 │   │   └── tools.py                    Tool registry
 │   ├── adapters/                       Anti-corruption layer ← ALL 3rd-party here
 │   │   ├── llm_client.py               ILLMClient / LiteLLMAdapter / StubLLMClient
 │   │   ├── http_client.py              IHttpClient / HttpxAdapter / StubHttpClient
-│   │   └── document_parsers.py         IPDFAdapter, IParagraphAdapter + stubs
+│   │   ├── document_parsers.py         IPDFAdapter, IParagraphAdapter + stubs
+│   │   └── web_search.py               IWebSearchAdapter / DDG / Serper / Brave / Stub
 │   ├── core/
 │   │   ├── domain/
 │   │   │   ├── kb.py                   KB dataclass
-│   │   │   └── file_record.py          FileRecord + FileStatus
+│   │   │   ├── file_record.py          FileRecord + FileStatus
+│   │   │   └── chat.py                 ChatSession + ChatMessage
 │   │   ├── providers/                  7 LLM providers (self-registering)
 │   │   ├── config.py                   AppConfig (pydantic-settings)
 │   │   ├── dependencies.py             FastAPI DI wiring
 │   │   ├── encryption.py               Fernet encryptor
+│   │   ├── chat_service.py             Chat facade (session CRUD + streaming QA)
 │   │   ├── ingestion_service.py        Strategy-based file parsing
 │   │   ├── kb_service.py               KB facade
 │   │   ├── llm_service.py              LLM facade
 │   │   ├── reader_service.py           File rendering + inline Q&A
+│   │   ├── search_service.py           Web search facade
 │   │   ├── settings_service.py         Settings r/w
 │   │   ├── settings_store.py           JSON persistence
+│   │   ├── summarizer_service.py       File + KB summariser
 │   │   └── watcher_service.py          Stale/missing file scanner
 │   ├── events/
 │   │   ├── bus.py                      EventBus singleton
@@ -222,6 +238,7 @@ knovex/
 │   │   ├── sqlite_backend.py           Async SQLite backend
 │   │   └── repositories/
 │   │       ├── base.py                 IRepository[T] + EntityNotFoundError
+│   │       ├── chat_repository.py      IChatRepository + SQLiteChatRepository
 │   │       ├── kb_repository.py        IKBRepository + SQLiteKBRepository
 │   │       └── file_repository.py      IFileRepository + SQLiteFileRepository
 │   ├── requirements.txt
@@ -234,9 +251,10 @@ knovex/
 │       │   ├── client.ts               Axios instance
 │       │   ├── kb.api.ts               KB + file endpoints
 │       │   ├── reader.api.ts           Content + SSE ask stream
-│       │   ├── settings.api.ts
-│       │   ├── chat.api.ts
-│       │   └── search.api.ts
+│       │   ├── settings.api.ts         Settings + LLM config
+│       │   ├── chat.api.ts             Chat sessions + SSE stream + export
+│       │   ├── summarizer.api.ts       SSE file / KB summarise
+│       │   └── search.api.ts           Web search
 │       ├── components/
 │       │   ├── Layout/                 AppShell, Sidebar
 │       │   └── FileViewer/             Block renderer + pagination
@@ -253,9 +271,10 @@ knovex/
 │
 └── tests/
     ├── __init__.py
-    ├── test_imports.py                 Import smoke tests + route registration
+    ├── test_imports.py                 Import smoke tests + route registration (all sprints)
     ├── test_adapters.py                Adapter unit tests (all stubs, no network)
-    └── test_reader.py                  ReaderService unit tests
+    ├── test_reader.py                  ReaderService unit tests
+    └── test_chat.py                    ChatService + SearchService unit tests
 ```
 
 ---
@@ -346,7 +365,7 @@ git push origin v0.4.0
 - [x] Sprint 1 — Foundation (FastAPI + React + Electron shell) — `v0.1.0`
 - [x] Sprint 2 — Knowledge Base + File Ingestion + Adapter layer — `v0.2.0`
 - [x] Sprint 3 — File Reader + Inline Q&A — `v0.3.0`
-- [ ] Sprint 4 — Chat + Summariser + Web Search — `v0.4.0`
+- [x] Sprint 4 — Chat + Summariser + Web Search — `v0.4.0`
 - [ ] Sprint 5 — Settings UI + packaging — `v0.5.0`
 - [ ] Sprint 6 — Learn Mode — `v0.6.0`
 
