@@ -30,6 +30,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from backend.adapters.document_parsers import (
+    IPDFAdapter,
+    IParagraphAdapter,
+    PageContent,
+    ParagraphContent,
+    PyMuPDFAdapter,
+    PythonDocxAdapter,
+)
 from backend.events.bus import EventBus
 from backend.events.types import FileErrorEvent, FileIngestedEvent
 from backend.storage.repositories.file_repository import IFileRepository
@@ -178,76 +186,65 @@ class CSVParser(IFileParser):
 
 @register_parser
 class PDFParser(IFileParser):
-    """Handles .pdf files using PyMuPDF (fitz)."""
+    """
+    Handles .pdf files.
+
+    DIP: depends on IPDFAdapter (abstraction), not fitz directly.
+    The adapter (PyMuPDFAdapter by default) is injected at construction so
+    tests can pass a StubPDFAdapter without needing pymupdf installed.
+    """
+
+    def __init__(self, pdf_adapter: IPDFAdapter | None = None) -> None:
+        self._adapter = pdf_adapter or PyMuPDFAdapter()
 
     @property
     def supported_formats(self) -> frozenset[str]:
         return frozenset({"pdf"})
 
     def parse(self, file_path: Path) -> list[Chunk]:
-        try:
-            import fitz  # type: ignore[import]
-        except ImportError:
-            raise ImportError(
-                "pymupdf is required for PDF parsing. "
-                "Install with: pip install pymupdf"
-            )
-
+        pages = self._adapter.extract_pages(file_path)
         chunks: list[Chunk] = []
-        doc = fitz.open(str(file_path))
-        try:
-            chunk_idx = 0
-            for page_num, page in enumerate(doc, start=1):
-                text = page.get_text("text")  # type: ignore[attr-defined]
-                if not text.strip():
-                    continue
-                # Split each page's text into sub-chunks
-                page_chunks = PlainTextParser._split_into_chunks(text, max_chars=1200)
-                for c in page_chunks:
-                    if c.content:
-                        chunks.append(Chunk(
-                            content=c.content,
-                            chunk_index=chunk_idx,
-                            page=page_num,
-                        ))
-                        chunk_idx += 1
-        finally:
-            doc.close()
-
+        chunk_idx = 0
+        for page in pages:
+            sub_chunks = PlainTextParser._split_into_chunks(page.text, max_chars=1200)
+            for c in sub_chunks:
+                if c.content:
+                    chunks.append(Chunk(
+                        content=c.content,
+                        chunk_index=chunk_idx,
+                        page=page.page_num,
+                    ))
+                    chunk_idx += 1
         return chunks
 
 
 @register_parser
 class DOCXParser(IFileParser):
-    """Handles .docx files using python-docx."""
+    """
+    Handles .docx files.
+
+    DIP: depends on IParagraphAdapter (abstraction), not python-docx directly.
+    The adapter (PythonDocxAdapter by default) is injected at construction so
+    tests can pass a StubParagraphAdapter without python-docx installed.
+    """
+
+    def __init__(self, paragraph_adapter: IParagraphAdapter | None = None) -> None:
+        self._adapter = paragraph_adapter or PythonDocxAdapter()
 
     @property
     def supported_formats(self) -> frozenset[str]:
         return frozenset({"docx"})
 
     def parse(self, file_path: Path) -> list[Chunk]:
-        try:
-            from docx import Document  # type: ignore[import]
-        except ImportError:
-            raise ImportError(
-                "python-docx is required for DOCX parsing. "
-                "Install with: pip install python-docx"
-            )
-
-        doc = Document(str(file_path))
+        paragraphs = self._adapter.extract_paragraphs(file_path)
         chunks: list[Chunk] = []
         buffer = ""
         section_heading = ""
         chunk_idx = 0
 
-        for para in doc.paragraphs:
-            style = para.style.name if para.style else ""
-            text = para.text.strip()
-            if not text:
-                continue
-
-            if style.startswith("Heading"):
-                # Flush current buffer as a chunk
+        for para in paragraphs:
+            if para.style.startswith("Heading"):
+                # Flush buffer before starting a new section
                 if buffer:
                     chunks.append(Chunk(
                         content=buffer,
@@ -256,18 +253,18 @@ class DOCXParser(IFileParser):
                     ))
                     chunk_idx += 1
                     buffer = ""
-                section_heading = text
+                section_heading = para.text
             else:
-                if len(buffer) + len(text) > 1400 and buffer:
+                if len(buffer) + len(para.text) > 1400 and buffer:
                     chunks.append(Chunk(
                         content=buffer,
                         chunk_index=chunk_idx,
                         section=section_heading,
                     ))
                     chunk_idx += 1
-                    buffer = text
+                    buffer = para.text
                 else:
-                    buffer = (buffer + " " + text).strip() if buffer else text
+                    buffer = (buffer + " " + para.text).strip() if buffer else para.text
 
         if buffer:
             chunks.append(Chunk(

@@ -84,6 +84,21 @@ def get_sqlite_backend():
     return SQLiteBackend(app_config.db_path)
 
 
+@lru_cache(maxsize=1)
+def get_http_client():
+    """
+    Provide the HttpxAdapter singleton.
+
+    Cached: the adapter itself is stateless; it creates a fresh httpx client
+    per request. Caching avoids re-importing httpx on every call.
+
+    DIP: callers receive IHttpClient (abstraction); swap to StubHttpClient
+    in tests via app.dependency_overrides[get_http_client] = lambda: stub.
+    """
+    from backend.adapters.http_client import HttpxAdapter
+    return HttpxAdapter()
+
+
 # ---------------------------------------------------------------------------
 # Service providers
 # ---------------------------------------------------------------------------
@@ -175,8 +190,10 @@ def get_watcher_service():
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------
 
-from backend.core.kb_service import KBService  # noqa: E402 — after providers defined
+from backend.adapters.http_client import IHttpClient  # noqa: E402
+from backend.core.kb_service import KBService          # noqa: E402
 
 SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
-LLMServiceDep = Annotated[LLMService, Depends(get_llm_service)]
-KBServiceDep = Annotated[KBService, Depends(get_kb_service)]
+LLMServiceDep      = Annotated[LLMService,      Depends(get_llm_service)]
+KBServiceDep       = Annotated[KBService,        Depends(get_kb_service)]
+HttpClientDep      = Annotated[IHttpClient,      Depends(get_http_client)]

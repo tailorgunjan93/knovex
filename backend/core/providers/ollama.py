@@ -1,7 +1,12 @@
 """Ollama Local LLM Provider."""
-from typing import Any
-import httpx
+
+from __future__ import annotations
+
 import logging
+from typing import Any
+
+from backend.adapters.http_client import IHttpClient
+from backend.adapters.llm_client import ILLMClient
 from backend.core.providers.base import LLMProvider, ProviderCredentials
 from backend.core.providers.factory import register_provider
 from backend.models.schemas import LLMModelInfo
@@ -13,6 +18,24 @@ _DEFAULT_BASE_URL = "http://localhost:11434"
 
 @register_provider("ollama")
 class OllamaProvider(LLMProvider):
+    """
+    Ollama local LLM provider.
+
+    DIP: httpx is never imported here — all HTTP calls go through IHttpClient
+         (defaults to HttpxAdapter; inject StubHttpClient in tests).
+    """
+
+    def __init__(
+        self,
+        llm_client: ILLMClient | None = None,
+        http_client: IHttpClient | None = None,
+    ) -> None:
+        super().__init__(llm_client)
+        if http_client is None:
+            from backend.adapters.http_client import HttpxAdapter
+            http_client = HttpxAdapter()
+        self._http_client = http_client
+
     @property
     def provider_name(self) -> str:
         return "ollama"
@@ -25,7 +48,11 @@ class OllamaProvider(LLMProvider):
         Ollama instance via get_installed_models().
         """
         return [
-            LLMModelInfo(id="ollama/llama3.2:latest", name="Llama 3.2 (Ollama)", context_window=128_000),
+            LLMModelInfo(
+                id="ollama/llama3.2:latest",
+                name="Llama 3.2 (Ollama)",
+                context_window=128_000,
+            ),
         ]
 
     def _build_completion_kwargs(
@@ -41,24 +68,28 @@ class OllamaProvider(LLMProvider):
         self, base_url: str = _DEFAULT_BASE_URL
     ) -> list[LLMModelInfo]:
         """
-        Probe the running Ollama instance and return its installed models
-        as LLMModelInfo objects.
+        Probe the running Ollama instance and return its installed models.
 
-        Returns an empty list if Ollama is unreachable.
+        Uses IHttpClient (never imports httpx directly).
+        Returns an empty list if Ollama is unreachable or returns no models.
         """
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get(f"{base_url}/api/tags")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return [
-                        LLMModelInfo(
-                            id=f"ollama/{m['name']}",
-                            name=m["name"],
-                            context_window=0,
-                        )
-                        for m in data.get("models", [])
-                    ]
-        except Exception as exc:
+            response = await self._http_client.get(
+                f"{base_url}/api/tags",
+                timeout=3.0,
+            )
+            if response.ok:
+                data = response.json()
+                return [
+                    LLMModelInfo(
+                        id=f"ollama/{m['name']}",
+                        name=m["name"],
+                        context_window=0,
+                    )
+                    for m in data.get("models", [])
+                ]
+        except (TimeoutError, ConnectionError) as exc:
             logger.debug("Ollama model fetch failed: %s", exc)
+        except Exception as exc:
+            logger.debug("Ollama model fetch unexpected error: %s", exc)
         return []

@@ -8,7 +8,10 @@ Design:
     differs per provider (credential format, model string prefix, etc.).
   - complete(), stream(), and test_connection() are Template Methods defined
     once here, reused by all providers.
+  - All LLM calls are delegated to an ILLMClient (Adapter) so that the
+    litellm import is entirely confined to adapters/llm_client.py.
 
+DIP: providers depend on ILLMClient (abstraction), not litellm directly.
 OCP: adding a new provider = new file, zero changes to existing code.
 SRP: each provider file knows only its own credential format.
 LSP: all providers are interchangeable — callers never care which one is live.
@@ -19,19 +22,13 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
-import litellm
-from litellm import acompletion
-
+from backend.adapters.llm_client import ILLMClient
 from backend.models.schemas import LLMModelInfo, TestLLMResponse
 
 logger = logging.getLogger("knovex.providers")
-
-# Suppress LiteLLM verbose output at module level
-litellm.suppress_debug_info = True
-litellm.set_verbose = False
 
 
 # ---------------------------------------------------------------------------
@@ -67,9 +64,24 @@ class LLMProvider(ABC):
     Abstract LLM provider.
 
     Each concrete subclass implements only _build_completion_kwargs()
-    to translate a ProviderCredentials into a LiteLLM kwargs dict.
+    to translate a ProviderCredentials into a kwargs dict that the
+    ILLMClient (currently LiteLLM) understands.
+
     All LLM mechanics (calling, streaming, error handling) live here.
+    litellm is never imported in this file or in any provider file.
     """
+
+    def __init__(self, llm_client: ILLMClient | None = None) -> None:
+        """
+        Args:
+            llm_client: Optional ILLMClient to use for all completions.
+                        Defaults to LiteLLMAdapter (production default).
+                        Pass a StubLLMClient in tests for offline / fast tests.
+        """
+        if llm_client is None:
+            from backend.adapters.llm_client import LiteLLMAdapter
+            llm_client = LiteLLMAdapter()
+        self._llm_client = llm_client
 
     # ------------------------------------------------------------------
     # Abstract interface (Strategy variation points)
@@ -97,10 +109,11 @@ class LLMProvider(ABC):
         credentials: ProviderCredentials,
     ) -> dict[str, Any]:
         """
-        Build LiteLLM kwargs from provider-specific credentials.
+        Build the kwargs dict for ILLMClient.complete() / ILLMClient.stream().
 
-        Returns a dict that is passed directly to litellm.acompletion().
         Must include at minimum: {"model": model}.
+        Include credentials (api_key, api_base, …) as required by the provider.
+        The returned dict is forwarded verbatim as **provider_kwargs to the adapter.
         """
         ...
 
@@ -117,17 +130,18 @@ class LLMProvider(ABC):
         temperature: float = 0.7,
     ) -> str:
         """
-        Non-streaming completion. Returns the full response string.
+        Non-streaming completion.
+
+        Builds provider-specific kwargs, then delegates to ILLMClient.
+        Returns the full response text.
         """
         kwargs = self._build_completion_kwargs(model, credentials)
-        kwargs.update(
+        return await self._llm_client.complete(
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            stream=False,
+            **kwargs,
         )
-        response = await acompletion(**kwargs)
-        return response.choices[0].message.content or ""
 
     async def stream(
         self,
@@ -146,17 +160,13 @@ class LLMProvider(ABC):
                 print(token, end="", flush=True)
         """
         kwargs = self._build_completion_kwargs(model, credentials)
-        kwargs.update(
+        async for token in self._llm_client.stream(
             messages=messages,
             max_tokens=max_tokens,
             temperature=temperature,
-            stream=True,
-        )
-        response = await acompletion(**kwargs)
-        async for chunk in response:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                yield delta
+            **kwargs,
+        ):
+            yield token
 
     async def test_connection(
         self,

@@ -23,6 +23,7 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from backend.adapters.llm_client import ILLMClient
     from backend.core.providers.base import LLMProvider
 
 logger = logging.getLogger("knovex.providers.factory")
@@ -46,9 +47,19 @@ class LLMProviderFactory:
         logger.debug("Registered LLM provider: %s → %s", name, provider_class.__name__)
 
     @classmethod
-    def create(cls, provider_name: str) -> "LLMProvider":
+    def create(
+        cls,
+        provider_name: str,
+        llm_client: "ILLMClient | None" = None,
+    ) -> "LLMProvider":
         """
         Instantiate and return the provider for *provider_name*.
+
+        Args:
+            provider_name: Provider identifier (e.g. "openai", "ollama").
+            llm_client:    Optional ILLMClient to inject (defaults to
+                           LiteLLMAdapter inside LLMProvider.__init__).
+                           Pass a StubLLMClient in tests for offline runs.
 
         Raises ValueError for unknown providers so the caller gets a
         clear, actionable error message.
@@ -61,7 +72,7 @@ class LLMProviderFactory:
                 f"Unknown LLM provider '{provider_name}'. "
                 f"Available: {available or '(none registered yet)'}"
             )
-        return provider_class()
+        return provider_class(llm_client=llm_client)
 
     @classmethod
     def registered_providers(cls) -> list[str]:

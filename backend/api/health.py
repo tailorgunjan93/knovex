@@ -1,9 +1,11 @@
 """
 Health API Router
 
-DIP: uses Depends(get_settings_service) — not the singleton directly.
+DIP: uses IHttpClient via Depends() for the fallback Ollama probe — never
+     imports httpx directly.
 SRP: only responsible for assembling the health response.
-     Ollama probe is delegated to the Ollama provider.
+     Ollama probe is delegated to the Ollama provider (primary path) or
+     IHttpClient (fallback when providers aren't registered yet).
 """
 
 from __future__ import annotations
@@ -11,11 +13,12 @@ from __future__ import annotations
 import importlib.metadata
 import logging
 
-import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from backend.adapters.http_client import IHttpClient
 from backend.core.config import settings
+from backend.core.dependencies import get_http_client
 
 logger = logging.getLogger("knovex.api.health")
 
@@ -31,12 +34,14 @@ class HealthResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse, summary="Health check")
-async def health() -> HealthResponse:
+async def health(
+    http_client: IHttpClient = Depends(get_http_client),
+) -> HealthResponse:
     """
     Return backend health status.
 
     Called by the Electron main process after spawning the backend to know
-    when the API is ready to accept requests.  Also used as a liveness probe.
+    when the API is ready to accept requests. Also used as a liveness probe.
     """
     # Resolve docnest version
     try:
@@ -44,9 +49,10 @@ async def health() -> HealthResponse:
     except importlib.metadata.PackageNotFoundError:
         docnest_version = "not installed"
 
-    # Probe Ollama via the registered provider (avoids duplicating probe logic)
+    # Probe Ollama — primary path via registered provider
     ollama_detected = False
     ollama_url: str | None = None
+
     try:
         from backend.core.providers.factory import LLMProviderFactory
         from backend.core.providers.ollama import OllamaProvider
@@ -57,15 +63,18 @@ async def health() -> HealthResponse:
                 ollama_detected = True
                 ollama_url = "http://localhost:11434"
     except Exception:
-        # If providers haven't been registered yet (e.g. cold import), fall back
+        # Fallback: probe directly via IHttpClient
+        # (providers may not be registered yet on a cold start)
         try:
-            async with httpx.AsyncClient(timeout=1.5) as client:
-                resp = await client.get("http://localhost:11434/api/tags")
-                if resp.status_code == 200:
-                    ollama_detected = True
-                    ollama_url = "http://localhost:11434"
-        except Exception:
-            pass
+            resp = await http_client.get(
+                "http://localhost:11434/api/tags",
+                timeout=1.5,
+            )
+            if resp.ok:
+                ollama_detected = True
+                ollama_url = "http://localhost:11434"
+        except (TimeoutError, ConnectionError):
+            pass  # Ollama simply isn't running
 
     return HealthResponse(
         status="ok",

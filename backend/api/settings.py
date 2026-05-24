@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 
-import httpx
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.core.dependencies import LLMServiceDep, SettingsServiceDep
