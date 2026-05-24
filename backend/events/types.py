@@ -61,7 +61,7 @@ class BaseEvent:
 class KBCreatedEvent(BaseEvent):
     event_name: str = field(init=False, default="kb.created", repr=False)
     kb_id: str = ""
-    name: str = ""
+    kb_name: str = ""        # human-readable name for logging
 
 
 @dataclass
@@ -80,7 +80,7 @@ class FileAddedEvent(BaseEvent):
     kb_id: str = ""
     file_id: str = ""
     file_path: str = ""
-    name: str = ""
+    file_name: str = ""      # basename for display
 
 
 @dataclass
@@ -88,6 +88,7 @@ class FileIngestedEvent(BaseEvent):
     event_name: str = field(init=False, default="kb.file.ingested", repr=False)
     kb_id: str = ""
     file_id: str = ""
+    file_name: str = ""      # basename for display
     chunk_count: int = 0
 
 
@@ -96,6 +97,7 @@ class FileStaleEvent(BaseEvent):
     event_name: str = field(init=False, default="kb.file.stale", repr=False)
     kb_id: str = ""
     file_id: str = ""
+    file_name: str = ""
     file_path: str = ""
 
 
@@ -104,7 +106,8 @@ class FileMissingEvent(BaseEvent):
     event_name: str = field(init=False, default="kb.file.missing", repr=False)
     kb_id: str = ""
     file_id: str = ""
-    file_path: str = ""
+    file_name: str = ""
+    last_known_path: str = ""
 
 
 @dataclass

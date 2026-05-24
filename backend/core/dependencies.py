@@ -4,9 +4,8 @@ FastAPI Dependency Injection Wiring
 All service instances are constructed here and injected into route
 handlers via FastAPI's Depends() mechanism.
 
-DIP compliance: API route handlers depend on SettingsService /
-LLMService (abstractions), never on FernetEncryptor / LiteLLM /
-SQLite directly.
+DIP compliance: API route handlers depend on service abstractions, never
+on FernetEncryptor / LiteLLM / SQLite directly.
 
 Benefits:
   - Testing: replace any Depends() with a mock via app.dependency_overrides
@@ -14,16 +13,19 @@ Benefits:
   - Lifetime control: lru_cache gives per-process singletons for services
     that are stateless or manage their own connection pool
 
+Sprint 2 additions:
+  - get_event_bus()       — singleton EventBus
+  - get_sqlite_backend()  — per-request SQLiteBackend (not cached: cheap)
+  - get_kb_service()      — KBService with all dependencies wired
+  - get_watcher_service() — WatcherService singleton (started in lifespan)
+
 Usage in routes::
 
-    from fastapi import Depends
-    from backend.core.dependencies import get_settings_service, get_llm_service
+    from backend.core.dependencies import KBServiceDep
 
-    @router.get("/settings")
-    async def get_settings(
-        svc: SettingsService = Depends(get_settings_service),
-    ) -> AppSettingsResponse:
-        return await svc.get_masked()
+    @router.get("/kb")
+    async def list_kbs(svc: KBServiceDep) -> KBListResponse:
+        return await svc.list_kbs()
 """
 
 from __future__ import annotations
@@ -57,6 +59,29 @@ def get_encryptor() -> IEncryptor:
 def get_settings_store() -> ISettingsStore:
     """Provide the JSON settings store backed by the app's config file."""
     return JsonSettingsStore(app_config.config_file)
+
+
+@lru_cache(maxsize=1)
+def get_event_bus():
+    """
+    Provide the singleton EventBus.
+
+    The module-level ``bus`` singleton from events/bus.py is returned so
+    all emitters and subscribers share the same instance.
+    """
+    from backend.events.bus import bus
+    return bus
+
+
+def get_sqlite_backend():
+    """
+    Provide a SQLiteBackend for the current request.
+
+    Not cached (not lru_cache): SQLiteBackend is stateless (per-method
+    connections) so creating a new instance per request is free.
+    """
+    from backend.storage.sqlite_backend import SQLiteBackend
+    return SQLiteBackend(app_config.db_path)
 
 
 # ---------------------------------------------------------------------------
@@ -93,9 +118,65 @@ def get_llm_service() -> LLMService:
     return LLMService()
 
 
+def get_kb_service(
+    backend=Depends(get_sqlite_backend),
+):
+    """
+    Provide KBService wired with SQLite repositories + IngestionService + EventBus.
+
+    Not cached: KBService itself is stateless; the heavy singletons
+    (event bus, backend) are cached/shared.
+
+    DIP: KBService receives IKBRepository + IFileRepository (interfaces),
+         not the concrete SQLite classes.
+    """
+    from backend.core.ingestion_service import IngestionService
+    from backend.core.kb_service import KBService
+    from backend.storage.repositories.file_repository import SQLiteFileRepository
+    from backend.storage.repositories.kb_repository import SQLiteKBRepository
+
+    event_bus = get_event_bus()
+    kb_repo = SQLiteKBRepository(backend)
+    file_repo = SQLiteFileRepository(backend)
+    ingestion_svc = IngestionService(
+        file_repo=file_repo,
+        backend=backend,
+        event_bus=event_bus,
+    )
+    return KBService(
+        kb_repo=kb_repo,
+        file_repo=file_repo,
+        ingestion_svc=ingestion_svc,
+        event_bus=event_bus,
+    )
+
+
+@lru_cache(maxsize=1)
+def get_watcher_service():
+    """
+    Provide the WatcherService singleton.
+
+    Started and stopped by the FastAPI lifespan context in main.py.
+    Uses a fresh SQLiteBackend + the shared EventBus.
+    """
+    from backend.core.watcher_service import WatcherService
+    from backend.storage.repositories.file_repository import SQLiteFileRepository
+    from backend.storage.sqlite_backend import SQLiteBackend
+
+    backend = SQLiteBackend(app_config.db_path)
+    file_repo = SQLiteFileRepository(backend)
+    return WatcherService(
+        file_repo=file_repo,
+        event_bus=get_event_bus(),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------
 
+from backend.core.kb_service import KBService  # noqa: E402 — after providers defined
+
 SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
 LLMServiceDep = Annotated[LLMService, Depends(get_llm_service)]
+KBServiceDep = Annotated[KBService, Depends(get_kb_service)]

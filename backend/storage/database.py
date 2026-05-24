@@ -120,6 +120,48 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at  TEXT    NOT NULL
 );
 
+-- -----------------------------------------------------------------------
+-- Sprint 2: Ingestion chunks + FTS5 full-text search
+-- -----------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS chunks (
+    id          TEXT    PRIMARY KEY,
+    file_id     TEXT    NOT NULL,
+    kb_id       TEXT    NOT NULL,
+    content     TEXT    NOT NULL,
+    chunk_index INTEGER NOT NULL DEFAULT 0,
+    section     TEXT    NOT NULL DEFAULT '',
+    page        INTEGER,
+    metadata    TEXT    NOT NULL DEFAULT '{}',
+    FOREIGN KEY (file_id) REFERENCES file_records(id) ON DELETE CASCADE,
+    FOREIGN KEY (kb_id)   REFERENCES knowledge_bases(id) ON DELETE CASCADE
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+    content,
+    section,
+    content='chunks',
+    content_rowid='rowid'
+);
+
+-- Auto-sync FTS index with chunks table
+CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+    INSERT INTO chunks_fts(rowid, content, section)
+    VALUES (new.rowid, new.content, new.section);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, content, section)
+    VALUES ('delete', old.rowid, old.content, old.section);
+END;
+
+CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
+    INSERT INTO chunks_fts(chunks_fts, rowid, content, section)
+    VALUES ('delete', old.rowid, old.content, old.section);
+    INSERT INTO chunks_fts(rowid, content, section)
+    VALUES (new.rowid, new.content, new.section);
+END;
+
 INSERT OR IGNORE INTO user_stats (id, xp, level, streak, last_activity, badges)
 VALUES (1, 0, 1, 0, NULL, '[]');
 """

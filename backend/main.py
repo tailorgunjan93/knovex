@@ -79,7 +79,24 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.info("Ollama probe skipped")
 
+    # 4. Start file watcher service (detects stale / missing tracked files)
+    try:
+        from backend.core.dependencies import get_watcher_service
+        watcher = get_watcher_service()
+        await watcher.start()
+        logger.info("File watcher started")
+    except Exception as exc:
+        logger.error("File watcher failed to start: %s", exc)
+
     yield  # Application runs here
+
+    # Shutdown: stop watcher
+    try:
+        from backend.core.dependencies import get_watcher_service
+        watcher = get_watcher_service()
+        await watcher.stop()
+    except Exception:
+        pass
 
     logger.info("Knovex backend shutting down")
 
@@ -119,12 +136,14 @@ def create_app() -> FastAPI:
     # Routers — import here to avoid circular imports at module level
     # -----------------------------------------------------------------------
     from backend.api.health import router as health_router
+    from backend.api.kb import router as kb_router
     from backend.api.settings import router as settings_router
     from backend.api.tools import router as tools_router
 
     app.include_router(health_router, prefix="/api", tags=["health"])
     app.include_router(settings_router, prefix="/api", tags=["settings"])
     app.include_router(tools_router, prefix="/api", tags=["tools"])
+    app.include_router(kb_router, prefix="/api", tags=["knowledge-base"])
 
     # -----------------------------------------------------------------------
     # Global exception handler — always returns structured JSON
