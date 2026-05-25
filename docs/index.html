@@ -371,6 +371,34 @@
     border:1px solid var(--line-2); padding:1px 6px; border-radius:4px;
     font-size:11px; color:var(--fg-2); background:color-mix(in oklab, var(--bg) 50%, transparent);
   }
+  .smartscreen-box{
+    margin-top:10px; border-radius:9px;
+    border:1px solid rgba(200,146,74,.25);
+    background:rgba(200,146,74,.07);
+    padding:10px 12px;
+  }
+  .smartscreen-box summary{
+    cursor:pointer; font-size:12px; font-weight:600;
+    color:var(--accent); list-style:none; display:flex; align-items:center; gap:6px;
+  }
+  .smartscreen-box summary::before{ content:"⚠"; font-size:13px }
+  .smartscreen-box summary::-webkit-details-marker{ display:none }
+  .smartscreen-steps{
+    margin:8px 0 0; padding:0; list-style:none;
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .smartscreen-steps li{
+    font-size:11.5px; color:var(--fg-3); padding-left:18px; position:relative; line-height:1.5;
+  }
+  .smartscreen-steps li::before{
+    content:attr(data-n);
+    position:absolute; left:0; font-weight:700; color:var(--accent);
+    font-family:"Geist Mono", monospace;
+  }
+  .smartscreen-steps kbd{
+    border:1px solid var(--line-2); padding:1px 5px; border-radius:4px;
+    font-size:10.5px; color:var(--fg-2); background:color-mix(in oklab,var(--bg) 50%,transparent);
+  }
   .plat-snippet{
     background:#08080A; color:#E8E2D6;
     border:1px solid var(--line); border-radius:8px;
@@ -732,8 +760,16 @@
             <p class="plat-note">
               Run the installer → <kbd>Next</kbd> → <kbd>Next</kbd> → <kbd>Install</kbd> → <kbd>Finish</kbd>.
               Knovex appears in your Start Menu and Desktop.
-              SmartScreen on first run? Click <kbd>More info</kbd> → <kbd>Run anyway</kbd>.
             </p>
+            <details class="smartscreen-box">
+              <summary>Windows says "Don't run" or "Unrecognised app"?</summary>
+              <p style="font-size:11.5px;color:var(--fg-3);margin:6px 0 4px">Knovex is open-source and unsigned. Windows SmartScreen flags all new unsigned apps. Two quick steps to proceed:</p>
+              <ol class="smartscreen-steps">
+                <li data-n="1"><strong style="color:var(--fg-2)">Browser download bar</strong> — Chrome / Edge may show a warning. Click the <kbd>⋯</kbd> or <kbd>^</kbd> next to the file → <kbd>Keep</kbd> → <kbd>Keep anyway</kbd>.</li>
+                <li data-n="2"><strong style="color:var(--fg-2)">SmartScreen popup</strong> — "Windows protected your PC" appears. Click <kbd>More info</kbd> (small link, bottom-left) → then the blue <kbd>Run anyway</kbd> button.</li>
+                <li data-n="3">The installer opens normally. Knovex is installed to your user folder — no admin password required.</li>
+              </ol>
+            </details>
           </article>
 
           <!-- macOS -->

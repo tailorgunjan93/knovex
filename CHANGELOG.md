@@ -11,6 +11,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.6.8] — 2026-05-25
+
+### Fixed
+
+- **Windows SmartScreen "Don't run" / "Unrecognised app" popup** — changed NSIS installer
+  from machine-wide (`allowElevation: true`) to per-user install (`perMachine: false`,
+  `allowElevation: false`). Requesting admin elevation is the main trigger for SmartScreen
+  on unsigned executables; per-user installs are treated with less suspicion.
+- **Download page** — added a collapsible `<details>` callout "Windows says Don't run?"
+  directly below the Windows download button with step-by-step instructions:
+  (1) browser download bar → Keep → Keep anyway,
+  (2) SmartScreen popup → More info → Run anyway.
+
+---
+
 ## [0.6.7] — 2026-05-25
 
 ### Fixed
@@ -524,7 +539,8 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.6.7...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/tailorgunjan93/knovex/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/tailorgunjan93/knovex/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/tailorgunjan93/knovex/compare/v0.6.0...v0.6.6
 [0.6.0]: https://github.com/tailorgunjan93/knovex/compare/v0.5.0...v0.6.0
