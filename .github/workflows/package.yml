@@ -1,13 +1,19 @@
 name: Package
 
-# Triggered when a release tag is pushed (e.g. v0.5.0).
+# Triggered when a release tag is pushed (e.g. v0.6.0).
 # Builds distributable installers for Windows, macOS, and Linux
 # and uploads them as release assets.
 #
 # Required GitHub secrets:
-#   (none required for unsigned builds)
+#   (none for unsigned builds)
 #   APPLE_ID, APPLE_ID_PASSWORD, APPLE_TEAM_ID  — macOS notarisation (optional)
 #   WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD            — Windows code signing (optional)
+#
+# Produced artifacts (stable download URLs via /releases/latest/download/):
+#   Knovex-Setup-<version>.exe          Windows NSIS installer
+#   Knovex-<version>.dmg                macOS DMG
+#   Knovex-<version>.AppImage           Linux AppImage (portable)
+#   knovex_<version>_amd64.deb          Linux Debian package
 
 on:
   push:
@@ -36,6 +42,11 @@ jobs:
             artifact_glob: "desktop/release/*.AppImage"
             artifact_name: knovex-linux-appimage
 
+          - os: ubuntu-latest
+            platform: linux-deb
+            artifact_glob: "desktop/release/*.deb"
+            artifact_name: knovex-linux-deb
+
     runs-on: ${{ matrix.os }}
     name: Package — ${{ matrix.platform }}
 
@@ -51,12 +62,10 @@ jobs:
           cache: pip
 
       - name: Install Python dependencies + PyInstaller
-        run: |
-          pip install --upgrade pip
-          pip install -r backend/requirements.txt
-          pip install pyinstaller
+        run: pip install --upgrade pip && pip install -r backend/requirements.txt pyinstaller
 
       - name: Build backend binary (PyInstaller)
+        shell: bash
         run: |
           python -m PyInstaller backend/knovex-backend.spec \
             --distpath backend/dist \
@@ -75,13 +84,11 @@ jobs:
 
       - name: Build frontend (Vite)
         working-directory: frontend
-        run: |
-          npm ci
-          npm run build
+        run: npm ci && npm run build
 
-      # ── Linux system dependencies (AppImage) ─────────────────────────────
+      # ── Linux system dependencies ─────────────────────────────────────────
       - name: Install Linux build deps
-        if: matrix.platform == 'linux'
+        if: startsWith(matrix.platform, 'linux')
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends \
@@ -93,11 +100,27 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Package with electron-builder
+      - name: Package with electron-builder (AppImage)
+        if: matrix.platform == 'linux'
+        working-directory: desktop
+        run: npx electron-builder --linux AppImage
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package with electron-builder (deb)
+        if: matrix.platform == 'linux-deb'
+        working-directory: desktop
+        run: npx electron-builder --linux deb
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package with electron-builder (win/mac)
+        if: "!startsWith(matrix.platform, 'linux')"
         working-directory: desktop
         run: npm run build:${{ matrix.platform }}
         env:
-          # Disable code signing unless certs are provided
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -138,4 +161,6 @@ jobs:
             dist/**/*.exe
             dist/**/*.dmg
             dist/**/*.AppImage
+            dist/**/*.deb
           fail_on_unmatched_files: false
+          generate_release_notes: true

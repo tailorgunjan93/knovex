@@ -23,34 +23,135 @@
     "appId": "io.knovex.app",
     "productName": "Knovex",
     "copyright": "Copyright © 2026 Gunjan Tailor",
+
     "directories": {
       "buildResources": "assets",
       "output": "release"
     },
+
     "files": [
       "main.js",
       "preload.js",
       "assets/**/*",
       "../frontend/dist/**/*"
     ],
+
     "extraResources": [
       {
         "from": "../backend/dist/knovex-backend",
-        "to": "backend"
+        "to": "backend",
+        "filter": ["**/*"]
       }
     ],
+
+    "publish": {
+      "provider": "github",
+      "owner": "tailorgunjan93",
+      "repo": "knovex",
+      "releaseType": "release"
+    },
+
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "artifactName": "Knovex-Setup-${version}.exe",
+      "publisherName": "Gunjan Tailor",
+      "verifyUpdateCodeSignature": false
     },
+
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "assets/icon.png",
+      "uninstallerIcon": "assets/icon.png",
+      "installerHeaderIcon": "assets/icon.png",
+      "shortcutName": "Knovex",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "menuCategory": "Knovex",
+      "license": null,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "displayLanguageSelector": false
+    },
+
     "mac": {
-      "target": "dmg",
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.productivity"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "artifactName": "Knovex-${version}.dmg",
+      "category": "public.app-category.productivity",
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlementsInherit": null
     },
+
+    "dmg": {
+      "title": "Knovex ${version}",
+      "background": null,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 150,
+          "y": 185,
+          "type": "file"
+        },
+        {
+          "x": 390,
+          "y": 185,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "iconSize": 100,
+      "iconTextSize": 12
+    },
+
     "linux": {
-      "target": "AppImage",
-      "icon": "assets/icon.png"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Utility",
+      "description": "Your AI-powered knowledge assistant",
+      "desktop": {
+        "Name": "Knovex",
+        "Comment": "AI-powered knowledge assistant",
+        "Categories": "Office;Utility;"
+      }
+    },
+
+    "appImage": {
+      "artifactName": "Knovex-${version}.AppImage"
+    },
+
+    "deb": {
+      "artifactName": "knovex_${version}_amd64.deb",
+      "packageCategory": "utils",
+      "priority": "optional",
+      "maintainer": "Gunjan Tailor <tailorgunjan89@gmail.com>",
+      "depends": ["libnotify4", "libxtst6", "libnss3"]
     }
   }
 }

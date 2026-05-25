@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Knovex — Download</title>
+  <meta name="description" content="Knovex — Your AI-powered knowledge assistant. One-click installer for Windows, macOS, and Linux." />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple:      #7C3AED;
+      --purple-dark: #5B21B6;
+      --purple-soft: #EDE9FE;
+      --bg:          #0F0D17;
+      --bg-card:     #1A1625;
+      --text:        #E2E8F0;
+      --text-muted:  #94A3B8;
+      --border:      #2D2B3D;
+      --green:       #10B981;
+      --win:         #0078D4;
+      --mac:         #555;
+      --lnx:         #E55C00;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Nav ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .logo-badge {
+      width: 32px; height: 32px;
+      background: var(--purple);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 1rem; color: #fff;
+    }
+    .nav-links { display: flex; gap: 1.5rem; }
+    .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.9rem; }
+    .nav-links a:hover { color: var(--text); }
+
+    /* ── Hero ── */
+    .hero {
+      text-align: center;
+      padding: 5rem 2rem 3rem;
+    }
+    .version-chip {
+      display: inline-block;
+      background: var(--purple-dark);
+      color: #C4B5FD;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+    }
+    h1 span { color: var(--purple); }
+    .hero-sub {
+      color: var(--text-muted);
+      font-size: 1.15rem;
+      max-width: 520px;
+      margin: 0 auto 2.5rem;
+      line-height: 1.6;
+    }
+
+    /* ── Auto-detected download button ── */
+    #primary-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: var(--purple);
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 700;
+      padding: 0.9rem 2rem;
+      border-radius: 10px;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s;
+      margin-bottom: 0.6rem;
+    }
+    #primary-download:hover { background: var(--purple-dark); transform: translateY(-2px); }
+    #primary-note { color: var(--text-muted); font-size: 0.82rem; }
+
+    /* ── Platform cards ── */
+    .platforms {
+      display: flex;
+      gap: 1.25rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 3rem 2rem;
+      max-width: 1000px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.75rem 1.5rem;
+      flex: 1;
+      min-width: 260px;
+      max-width: 300px;
+    }
+    .card-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+    .card h2 { font-size: 1.15rem; margin-bottom: 0.35rem; }
+    .card .os-note { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem; }
+
+    .dl-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+    .dl-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .dl-btn.win  { background: var(--win); color: #fff; }
+    .dl-btn.mac  { background: #333; color: #fff; border: 1px solid #555; }
+    .dl-btn.appimg { background: #1A1A2E; color: #FF6B35; border: 1px solid #FF6B35; }
+    .dl-btn.deb  { background: #1A1A2E; color: #E55C00; border: 1px solid #E55C00; }
+
+    .dl-note { font-size: 0.76rem; color: var(--text-muted); line-height: 1.45; margin-top: 0.75rem; }
+
+    /* ── Steps ── */
+    .steps-section {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 1rem 2rem 4rem;
+      width: 100%;
+    }
+    .steps-section h2 {
+      text-align: center;
+      font-size: 1.6rem;
+      margin-bottom: 2rem;
+      color: var(--text);
+    }
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+    }
+    .step {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      position: relative;
+    }
+    .step-num {
+      width: 32px; height: 32px;
+      background: var(--purple);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.9rem;
+      margin-bottom: 0.75rem;
+    }
+    .step h3 { font-size: 1rem; margin-bottom: 0.35rem; }
+    .step p  { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+
+    /* ── Features strip ── */
+    .features {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 1rem 2.5rem;
+      padding: 1.5rem 2rem 3rem;
+      max-width: 780px;
+      margin: 0 auto;
+    }
+    .feat {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+    .feat .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: auto;
+      text-align: center;
+      padding: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--purple); text-decoration: none; }
+
+    @media (max-width: 600px) {
+      .card { min-width: 100%; max-width: 100%; }
+      .platforms { padding: 2rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="#">
+    <div class="logo-badge">K</div>
+    Knovex
+  </a>
+  <div class="nav-links">
+    <a href="https://github.com/tailorgunjan93/knovex" target="_blank">GitHub</a>
+    <a href="https://github.com/tailorgunjan93/knovex/releases" target="_blank">Releases</a>
+    <a href="https://github.com/tailorgunjan93/knovex/issues" target="_blank">Issues</a>
+  </div>
+</nav>
+
+<main>
+  <!-- Hero -->
+  <section class="hero">
+    <div class="version-chip" id="version-chip">v0.6.0</div>
+    <h1>Your <span>AI knowledge</span><br>assistant — desktop.</h1>
+    <p class="hero-sub">
+      Chat with your documents, build a knowledge base, and learn anything
+      with 8 AI-powered formats. Runs entirely on your machine.
+    </p>
+
+    <a id="primary-download" href="#platforms">
+      <span id="dl-icon">↓</span>
+      <span id="dl-label">Download for your OS</span>
+    </a>
+    <br />
+    <span id="primary-note">Detecting your operating system…</span>
+  </section>
+
+  <!-- Feature pills -->
+  <div class="features">
+    <div class="feat"><div class="dot"></div>Offline — no cloud required</div>
+    <div class="feat"><div class="dot"></div>RAG over your documents</div>
+    <div class="feat"><div class="dot"></div>8 learn formats + quiz &amp; flashcards</div>
+    <div class="feat"><div class="dot"></div>API keys encrypted at rest</div>
+    <div class="feat"><div class="dot"></div>OpenAI · Anthropic · Ollama · Bedrock</div>
+    <div class="feat"><div class="dot"></div>Auto-update built-in</div>
+  </div>
+
+  <!-- Platform cards -->
+  <section class="platforms" id="platforms">
+
+    <!-- Windows -->
+    <div class="card">
+      <div class="card-icon">🪟</div>
+      <h2>Windows</h2>
+      <p class="os-note">Windows 10 / 11 — 64-bit</p>
+
+      <a class="dl-btn win"
+         href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-Setup-0.6.0.exe"
+         id="win-link">
+        ⬇ Knovex-Setup.exe
+      </a>
+
+      <p class="dl-note">
+        Run the installer → click <strong>Next → Next → Install → Finish</strong>.
+        Knovex will appear in your Start Menu and on your Desktop.
+        <br><br>
+        <em>Windows Defender may show a SmartScreen prompt on first run —
+        click "More info → Run anyway".</em>
+      </p>
+    </div>
+
+    <!-- macOS -->
+    <div class="card">
+      <div class="card-icon">🍎</div>
+      <h2>macOS</h2>
+      <p class="os-note">macOS 12+ (Intel &amp; Apple Silicon)</p>
+
+      <a class="dl-btn mac"
+         href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.0.dmg"
+         id="mac-link">
+        ⬇ Knovex.dmg
+      </a>
+
+      <p class="dl-note">
+        Open the <strong>.dmg</strong>, drag <strong>Knovex</strong> to
+        <strong>Applications</strong>, then double-click to launch.
+        <br><br>
+        <em>On first open macOS may say the app is from an unidentified developer —
+        right-click → Open to bypass.</em>
+      </p>
+    </div>
+
+    <!-- Linux -->
+    <div class="card">
+      <div class="card-icon">🐧</div>
+      <h2>Linux</h2>
+      <p class="os-note">Ubuntu 20.04+ / Debian / any x64 distro</p>
+
+      <a class="dl-btn appimg"
+         href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.0.AppImage"
+         id="appimg-link">
+        ⬇ Knovex.AppImage
+      </a>
+
+      <a class="dl-btn deb"
+         href="https://github.com/tailorgunjan93/knovex/releases/latest/download/knovex_0.6.0_amd64.deb"
+         id="deb-link">
+        ⬇ knovex_amd64.deb
+      </a>
+
+      <p class="dl-note">
+        <strong>AppImage</strong> — works on any distro. Make executable and run:<br>
+        <code>chmod +x Knovex-*.AppImage && ./Knovex-*.AppImage</code>
+        <br><br>
+        <strong>.deb</strong> — Ubuntu/Debian:<br>
+        <code>sudo dpkg -i knovex_*_amd64.deb</code>
+      </p>
+    </div>
+
+  </section>
+
+  <!-- Install steps -->
+  <section class="steps-section">
+    <h2>Up and running in 3 steps</h2>
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Download &amp; Install</h3>
+        <p>Run the installer for your OS. Knovex installs in seconds — no Python or Node.js required.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Add your API key</h3>
+        <p>Open Settings → LLM. Paste your OpenAI, Anthropic, or any compatible API key. Keys are encrypted at rest.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Upload &amp; Chat</h3>
+        <p>Drag and drop your PDFs, DOCX, or TXT files into a Knowledge Base, then start asking questions.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h3>Learn anything</h3>
+        <p>Use Learn Mode to turn any topic into a quiz, flashcards, story, mind map, or timeline.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Knovex © 2026 Gunjan Tailor &nbsp;·&nbsp;
+  <a href="https://github.com/tailorgunjan93/knovex" target="_blank">View on GitHub</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/tailorgunjan93/knovex/releases" target="_blank">All releases</a>
+</footer>
+
+<script>
+  // ── Auto-detect OS and highlight the right download button ──────────────────
+  const VERSION = "0.6.0";
+  const BASE    = "https://github.com/tailorgunjan93/knovex/releases/latest/download/";
+
+  const assets = {
+    win:    { label: "Download for Windows (.exe)", icon: "🪟", href: BASE + "Knovex-Setup-" + VERSION + ".exe" },
+    mac:    { label: "Download for macOS (.dmg)",   icon: "🍎", href: BASE + "Knovex-" + VERSION + ".dmg"       },
+    linux:  { label: "Download for Linux (.AppImage)", icon: "🐧", href: BASE + "Knovex-" + VERSION + ".AppImage" },
+  };
+
+  function detectOS() {
+    const ua = navigator.userAgent || "";
+    if (/Win/i.test(ua))  return "win";
+    if (/Mac/i.test(ua))  return "mac";
+    return "linux";
+  }
+
+  (function init() {
+    const os   = detectOS();
+    const info = assets[os];
+
+    // Update version chip to latest
+    const chip = document.getElementById("version-chip");
+    if (chip) chip.textContent = "v" + VERSION;
+
+    // Update primary button
+    const btn  = document.getElementById("primary-download");
+    const icon = document.getElementById("dl-icon");
+    const lbl  = document.getElementById("dl-label");
+    const note = document.getElementById("primary-note");
+
+    if (btn && info) {
+      btn.href = info.href;
+      icon.textContent = info.icon;
+      lbl.textContent  = info.label;
+      note.textContent = "v" + VERSION + " — free & open source";
+    }
+
+    // Highlight the matching card with a purple border
+    const cardMap = { win: "win-link", mac: "mac-link", linux: "appimg-link" };
+    const el = document.getElementById(cardMap[os]);
+    if (el) {
+      el.closest(".card").style.border = "1.5px solid #7C3AED";
+      el.closest(".card").style.boxShadow = "0 0 0 4px rgba(124,58,237,0.15)";
+    }
+  })();
+</script>
+
+</body>
+</html>
