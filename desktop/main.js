@@ -24,6 +24,7 @@ const path = require('path')
 const { spawn } = require('child_process')
 const http = require('http')
 const fs = require('fs')
+const { autoUpdater } = require('electron-updater')
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -172,7 +173,7 @@ function createMainWindow() {
     minHeight: WINDOW_MIN_HEIGHT,
     title: 'Knovex',
     show: false,
-    backgroundColor: '#0F0D17',  // matches dark theme background
+    backgroundColor: '#0B0B0C',  // matches dark theme background (warm near-black)
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -256,6 +257,55 @@ function createTray() {
   tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus() })
 }
 
+// ─── Auto-updater ─────────────────────────────────────────────────────────────
+
+function setupAutoUpdater() {
+  // Only run in packaged app — no-op in dev to avoid GitHub API calls
+  if (IS_DEV) return
+
+  autoUpdater.autoDownload    = true   // download silently in background
+  autoUpdater.autoInstallOnAppQuit = false  // we prompt the user ourselves
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[updater] checking for update…')
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[updater] update available:', info.version)
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    console.log('[updater] already up to date')
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    const pct = Math.round(progress.percent)
+    console.log(`[updater] downloading… ${pct}%`)
+    // Forward to renderer so it can show a subtle progress indicator
+    mainWindow?.webContents.send('app:update-progress', { pct })
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[updater] update downloaded:', info.version)
+    // Notify the renderer — it will show a "Restart to update" banner
+    mainWindow?.webContents.send('app:update-downloaded', {
+      version:      info.version,
+      releaseNotes: info.releaseNotes ?? null,
+    })
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('[updater] error:', err.message)
+  })
+
+  // Check on startup (after a short delay so the app finishes loading first)
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('[updater] checkForUpdates failed:', err.message)
+    })
+  }, 8_000)
+}
+
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
@@ -291,6 +341,12 @@ function registerIpcHandlers() {
 
   // App version
   ipcMain.handle('app:version', () => app.getVersion())
+
+  // Auto-update: quit and install the downloaded update
+  ipcMain.on('app:install-update', () => {
+    app.isQuitting = true
+    autoUpdater.quitAndInstall(false, true)
+  })
 }
 
 // ─── Drag-and-drop file forwarding ───────────────────────────────────────────
@@ -312,6 +368,7 @@ app.on('ready', async () => {
 
   registerIpcHandlers()
   setupFileDrop()
+  setupAutoUpdater()
 
   // Start backend
   try {

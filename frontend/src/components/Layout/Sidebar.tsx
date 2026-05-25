@@ -41,10 +41,12 @@ export default function Sidebar() {
   const isActive = (path: string) => location.pathname.startsWith(path)
 
   const activeColor = theme.palette.primary.main
-  const activeBg =
+  // Use MUI action.selected token — automatically matches the active theme accent
+  const activeBg = theme.palette.action.selected ?? (
     theme.palette.mode === 'dark'
-      ? 'rgba(124,58,237,0.15)'
-      : 'rgba(124,58,237,0.08)'
+      ? 'rgba(200,146,74,0.15)'
+      : 'rgba(200,146,74,0.10)'
+  )
 
   return (
     <Box

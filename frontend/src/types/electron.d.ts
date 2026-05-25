@@ -43,6 +43,24 @@ interface KnovexAPI {
    * The main process calls ipcMain → renderer 'navigate' with a route path.
    */
   onNavigate: (callback: (route: string) => void) => () => void
+
+  /**
+   * Fired once a new app version has been silently downloaded.
+   * Call installUpdate() to apply it.
+   */
+  onUpdateDownloaded: (
+    callback: (info: { version: string; releaseNotes: string | null }) => void
+  ) => () => void
+
+  /**
+   * Fired periodically while the update is downloading (0–100 %).
+   */
+  onUpdateProgress: (callback: (info: { pct: number }) => void) => () => void
+
+  /**
+   * Quit the app and install the already-downloaded update.
+   */
+  installUpdate: () => void
 }
 
 declare global {

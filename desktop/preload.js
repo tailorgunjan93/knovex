@@ -64,4 +64,33 @@ contextBridge.exposeInMainWorld('knovex', {
     ipcRenderer.on('navigate', handler)
     return () => ipcRenderer.removeListener('navigate', handler)
   },
+
+  /**
+   * Subscribe to auto-update download-complete events.
+   * Fired once the new installer has been silently downloaded.
+   * @param {function} callback - Called with { version: string, releaseNotes: string | null }
+   * @returns {function} Cleanup function.
+   */
+  onUpdateDownloaded: (callback) => {
+    const handler = (_, info) => callback(info)
+    ipcRenderer.on('app:update-downloaded', handler)
+    return () => ipcRenderer.removeListener('app:update-downloaded', handler)
+  },
+
+  /**
+   * Subscribe to update download-progress events.
+   * @param {function} callback - Called with { pct: number } (0-100)
+   * @returns {function} Cleanup function.
+   */
+  onUpdateProgress: (callback) => {
+    const handler = (_, info) => callback(info)
+    ipcRenderer.on('app:update-progress', handler)
+    return () => ipcRenderer.removeListener('app:update-progress', handler)
+  },
+
+  /**
+   * Quit the app and install the downloaded update immediately.
+   * Only call this after onUpdateDownloaded has fired.
+   */
+  installUpdate: () => ipcRenderer.send('app:install-update'),
 })
