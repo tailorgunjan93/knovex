@@ -1,0 +1,141 @@
+name: Package
+
+# Triggered when a release tag is pushed (e.g. v0.5.0).
+# Builds distributable installers for Windows, macOS, and Linux
+# and uploads them as release assets.
+#
+# Required GitHub secrets:
+#   (none required for unsigned builds)
+#   APPLE_ID, APPLE_ID_PASSWORD, APPLE_TEAM_ID  — macOS notarisation (optional)
+#   WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD            — Windows code signing (optional)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  # ─── Build on each target platform ──────────────────────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            artifact_glob: "desktop/release/*.exe"
+            artifact_name: knovex-windows-installer
+
+          - os: macos-latest
+            platform: mac
+            artifact_glob: "desktop/release/*.dmg"
+            artifact_name: knovex-macos-dmg
+
+          - os: ubuntu-latest
+            platform: linux
+            artifact_glob: "desktop/release/*.AppImage"
+            artifact_name: knovex-linux-appimage
+
+    runs-on: ${{ matrix.os }}
+    name: Package — ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python backend binary ──────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies + PyInstaller
+        run: |
+          pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pyinstaller
+
+      - name: Build backend binary (PyInstaller)
+        run: |
+          python -m PyInstaller backend/knovex-backend.spec \
+            --distpath backend/dist \
+            --workpath backend/build \
+            --noconfirm
+        env:
+          PYTHONUNBUFFERED: "1"
+
+      # ── Frontend build ────────────────────────────────────────────────────
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend (Vite)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # ── Linux system dependencies (AppImage) ─────────────────────────────
+      - name: Install Linux build deps
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libnotify-dev libgconf-2-4 libnss3 \
+            libxss1 libasound2 libxtst6 libx11-xcb1 libxcb-dri3-0
+
+      # ── Electron packaging ────────────────────────────────────────────────
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Package with electron-builder
+        working-directory: desktop
+        run: npm run build:${{ matrix.platform }}
+        env:
+          # Disable code signing unless certs are provided
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Upload installer as artifact ──────────────────────────────────────
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ─── Attach artifacts to GitHub Release ─────────────────────────────────────
+  release:
+    name: Attach to GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: List downloaded files
+        run: find dist/ -type f | sort
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*.exe
+            dist/**/*.dmg
+            dist/**/*.AppImage
+          fail_on_unmatched_files: false

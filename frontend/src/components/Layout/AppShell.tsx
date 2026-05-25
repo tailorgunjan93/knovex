@@ -8,7 +8,7 @@
  */
 
 import { useMemo, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { Box, ThemeProvider, CssBaseline } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import Sidebar from './Sidebar'
@@ -19,6 +19,7 @@ import { settingsApi } from '@/api/settings.api'
 export default function AppShell() {
   const { setSettings } = useSettingsStore()
   const themeMode = useThemeMode()
+  const navigate = useNavigate()
 
   // Load settings on mount
   const { data } = useQuery({
@@ -30,6 +31,13 @@ export default function AppShell() {
   useEffect(() => {
     if (data) setSettings(data)
   }, [data, setSettings])
+
+  // Wire up tray-initiated navigation from Electron main process
+  useEffect(() => {
+    if (!window.knovex?.onNavigate) return
+    const cleanup = window.knovex.onNavigate((route) => navigate(route))
+    return cleanup
+  }, [navigate])
 
   const theme = useMemo(() => getTheme(themeMode), [themeMode])
 

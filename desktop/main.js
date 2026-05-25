@@ -124,17 +124,50 @@ function waitForBackend(retries = 40, interval = 500) {
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
+// ─── Window state persistence (JSON file in userData) ────────────────────────
+
+function getWindowStatePath() {
+  return path.join(app.getPath('userData'), 'window-state.json')
+}
+
+function loadWindowState() {
+  try {
+    const raw = fs.readFileSync(getWindowStatePath(), 'utf8')
+    const state = JSON.parse(raw)
+    // Validate: must have numeric width/height above minimums
+    if (
+      typeof state.width === 'number' && state.width >= WINDOW_MIN_WIDTH &&
+      typeof state.height === 'number' && state.height >= WINDOW_MIN_HEIGHT
+    ) {
+      return state
+    }
+  } catch {
+    // File absent or malformed — use defaults
+  }
+  return { width: WINDOW_DEFAULT_WIDTH, height: WINDOW_DEFAULT_HEIGHT, x: undefined, y: undefined }
+}
+
+function saveWindowState(win) {
+  try {
+    const bounds = win.getBounds()
+    fs.writeFileSync(getWindowStatePath(), JSON.stringify(bounds), 'utf8')
+  } catch (err) {
+    console.warn('[app] Failed to save window state:', err.message)
+  }
+}
+
 function getWindowState() {
-  // TODO: persist window bounds to electron-store in Sprint 5
-  return { width: WINDOW_DEFAULT_WIDTH, height: WINDOW_DEFAULT_HEIGHT }
+  return loadWindowState()
 }
 
 function createMainWindow() {
-  const { width, height } = getWindowState()
+  const { width, height, x, y } = getWindowState()
 
   mainWindow = new BrowserWindow({
     width,
     height,
+    ...(x !== undefined && { x }),
+    ...(y !== undefined && { y }),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
     title: 'Knovex',
@@ -162,8 +195,13 @@ function createMainWindow() {
     mainWindow.focus()
   })
 
+  // Persist window state on move/resize
+  mainWindow.on('resize', () => saveWindowState(mainWindow))
+  mainWindow.on('move',   () => saveWindowState(mainWindow))
+
   // Minimise to tray on close (not quit)
   mainWindow.on('close', (event) => {
+    saveWindowState(mainWindow)   // always save before hiding/quitting
     if (tray && !app.isQuitting) {
       event.preventDefault()
       mainWindow.hide()

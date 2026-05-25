@@ -38,7 +38,10 @@ release/
 # PyInstaller
 backend/dist/
 backend/build/
-backend/*.spec
+# Note: knovex-backend.spec is version-controlled (it's part of the build system)
+# Only exclude auto-generated runtime specs
+backend/warn-*.txt
+backend/*.toc
 
 # Environment
 .env

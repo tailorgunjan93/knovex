@@ -37,6 +37,12 @@ interface KnovexAPI {
 
   /** Subscribe to file-drop events from the main process */
   onFileDrop: (callback: (paths: string[]) => void) => () => void
+
+  /**
+   * Subscribe to tray-initiated navigation events.
+   * The main process calls ipcMain → renderer 'navigate' with a route path.
+   */
+  onNavigate: (callback: (route: string) => void) => () => void
 }
 
 declare global {

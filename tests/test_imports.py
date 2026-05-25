@@ -22,7 +22,7 @@ import pytest
 
 def test_config_imports():
     from backend.core.config import settings  # noqa: F401
-    assert settings.version == "0.4.0"
+    assert settings.version == "0.5.0"
     assert settings.backend_port == 8765
 
 

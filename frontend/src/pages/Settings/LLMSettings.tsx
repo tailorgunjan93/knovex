@@ -28,6 +28,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import WifiTetheringIcon from '@mui/icons-material/WifiTethering'
+import RadarIcon from '@mui/icons-material/Radar'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, type AppSettings } from '@/api/settings.api'
 
@@ -60,6 +61,20 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null)
 
   const providerInfo = PROVIDERS.find((p) => p.id === provider)
+
+  // Ollama auto-detect
+  const detectMutation = useMutation({
+    mutationFn: settingsApi.detectOllama,
+    onSuccess: (result) => {
+      if (result.detected) {
+        setBaseUrl(result.url)
+        // Auto-select first detected model if model field is blank
+        if (!model && result.models.length > 0) {
+          setModel(result.models[0])
+        }
+      }
+    },
+  })
 
   // Model catalogue for selected provider
   const { data: modelsData } = useQuery({
@@ -180,16 +195,58 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
         />
       )}
 
-      {/* Base URL (Ollama) */}
+      {/* Base URL (Ollama) + auto-detect button */}
       {providerInfo?.hasBaseUrl && (
-        <TextField
-          label="Ollama Base URL"
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="http://localhost:11434"
-          fullWidth
-          helperText="Default: http://localhost:11434"
-        />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <TextField
+            label="Ollama Base URL"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="http://localhost:11434"
+            fullWidth
+            helperText="Default: http://localhost:11434"
+          />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={
+                detectMutation.isPending
+                  ? <CircularProgress size={14} />
+                  : <RadarIcon fontSize="small" />
+              }
+              disabled={detectMutation.isPending}
+              onClick={() => detectMutation.mutate()}
+            >
+              Auto-Detect Ollama
+            </Button>
+            {detectMutation.isSuccess && (
+              <Typography variant="caption" color={
+                detectMutation.data?.detected ? 'success.main' : 'warning.main'
+              }>
+                {detectMutation.data?.detected
+                  ? `✓ Found ${detectMutation.data.models.length} model(s) at ${detectMutation.data.url}`
+                  : '✗ Ollama not found on localhost:11434'
+                }
+              </Typography>
+            )}
+          </Box>
+          {detectMutation.isSuccess && detectMutation.data?.detected && detectMutation.data.models.length > 0 && (
+            <FormControl fullWidth size="small">
+              <InputLabel>Detected Models</InputLabel>
+              <Select
+                label="Detected Models"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+              >
+                {detectMutation.data.models.map((m) => (
+                  <MenuItem key={m} value={m}>{m}</MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>Select a model from your Ollama installation</FormHelperText>
+            </FormControl>
+          )}
+        </Box>
       )}
 
       {/* AWS Bedrock credentials */}

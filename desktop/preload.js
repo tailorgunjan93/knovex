@@ -52,4 +52,16 @@ contextBridge.exposeInMainWorld('knovex', {
     // Return a cleanup function
     return () => ipcRenderer.removeAllListeners('file-drop')
   },
+
+  /**
+   * Listen for navigate events sent from the tray menu.
+   * The main process sends navigate('/settings') when the tray item is clicked.
+   * @param {function} callback - Called with the target route path string.
+   * @returns {function} Cleanup function to remove the listener.
+   */
+  onNavigate: (callback) => {
+    const handler = (_, route) => callback(route)
+    ipcRenderer.on('navigate', handler)
+    return () => ipcRenderer.removeListener('navigate', handler)
+  },
 })

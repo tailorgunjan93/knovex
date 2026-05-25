@@ -9,9 +9,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-*Planned — Sprint 5+*
+*Planned — Sprint 6+*
 
-### Sprint 5 — Settings UI + Packaging
+### Sprint 6 — Learn Mode
 - Full Settings page (LLM provider, model, key, theme, storage path)
 - Ollama auto-detect + connection test
 - PyInstaller backend bundling
@@ -21,6 +21,89 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Quiz, flashcard, mind map, story, timeline, ELI5, speed-learn, brainstorm
 - Gamification: XP, streaks, badges
 - Web search enrichment for topics
+
+---
+
+## [0.5.0] — 2026-05-25
+
+Sprint 5 — Settings UI + Desktop Packaging
+
+### Added
+
+#### Frontend — Settings UI (complete)
+- **LLM Settings tab** (`frontend/src/pages/Settings/LLMSettings.tsx`)
+  - Provider dropdown: OpenAI, Anthropic, Groq, Gemini, Cerebras, AWS Bedrock, Ollama
+  - Dynamic model selector — fetches live model catalogue per provider via `GET /api/settings/llm/models`
+  - Masked API key field with show/hide toggle; leave blank to keep existing key
+  - AWS Bedrock fields: region, access key ID, secret access key
+  - Ollama base URL field + **Auto-Detect Ollama** button (`RadarIcon`)
+    - Probes `localhost:11434`, displays found model count + URL
+    - Populates detected-models dropdown and auto-fills base URL on success
+  - "Test Connection" button — saves settings first, then calls `POST /api/settings/test-llm`
+  - Connection result shown as success/error Alert with latency (ms)
+- **Search Settings tab** (`frontend/src/pages/Settings/SearchSettings.tsx`)
+  - Engine selector: DuckDuckGo (free), Serper (Google), Brave
+  - Conditional API key field (shown only when engine requires a key)
+  - Leave blank to keep existing key
+- **App Settings tab** (`frontend/src/pages/Settings/AppSettings.tsx`)
+  - Theme toggle: Light / Medium / Dark (auto-saves on click, propagates via Zustand)
+  - KB Storage Path field with native OS **folder picker** button (uses `window.knovex.openFolderPicker()`)
+  - Save path mutation with success/error Alert
+  - About section: real app version from `window.knovex.appVersion()` (Electron IPC), Changelog link
+- **Settings page shell** (`frontend/src/pages/Settings/index.tsx`)
+  - Vertical tab layout (LLM / Search / App) with icons
+  - Full-page loading skeleton + error state if backend is down
+
+#### Frontend — Electron IPC wiring
+- **AppShell** (`frontend/src/components/Layout/AppShell.tsx`)
+  - Wires `window.knovex.onNavigate(route)` so tray "Settings" click navigates React Router
+- **`electron.d.ts`** — added `onNavigate: (callback) => () => void` type declaration
+
+#### Desktop — Electron improvements (`desktop/main.js`)
+- **Window state persistence** — bounds (width, height, x, y) saved to `userData/window-state.json`
+  - Loaded on startup; validated against minimum dimensions before use
+  - Saved on every `resize` / `move` event and on `close`
+  - Pure JSON (no electron-store dependency — works in packaged build without ESM issues)
+- **Preload** — `onNavigate` IPC handler exposed via contextBridge
+- **desktop/package.json** — version bumped to 0.5.0
+
+#### Packaging
+
+##### PyInstaller (`backend/knovex-backend.spec`)
+- Builds a self-contained `knovex-backend/` folder (`COLLECT` mode, not one-file)
+- Entry point: `backend/backend_entry.py`
+  - Calls `multiprocessing.freeze_support()` first (required on Windows)
+  - Patches `sys.path` for `sys._MEIPASS` when frozen
+  - Starts uvicorn on `localhost:8765`
+- All 7 LLM providers listed as `hiddenimports` (dynamic registration via decorators)
+- All API routers listed explicitly
+- Large dev/ML packages excluded (pytest, ruff, pandas, PIL, tkinter, …)
+- UPX compression enabled (~35% size reduction)
+
+##### electron-builder (`desktop/package.json`)
+- `appId: io.knovex.app`, `productName: Knovex`
+- Windows: NSIS installer (`.exe`)
+- macOS: DMG disk image (`.dmg`)
+- Linux: AppImage (`.AppImage`)
+- `extraResources`: copies `backend/dist/knovex-backend/` into `resources/backend/`
+- `files`: bundles `main.js`, `preload.js`, `../frontend/dist/**`
+
+##### Build scripts
+- **`scripts/build.ps1`** (Windows PowerShell) — 6-step pipeline:
+  1. Verify venv; 2. Lint (ruff); 3. Tests (pytest); 4. Frontend (Vite);
+  5. Backend binary (PyInstaller); 6. Installer (electron-builder)
+  - Flags: `-SkipTests`, `-SkipFrontend`, `-SkipPackaging`
+- **`scripts/build.sh`** (macOS / Linux bash) — same 6 steps
+  - Flags: `--skip-tests`, `--skip-frontend`, `--skip-packaging`
+
+#### CI/CD
+- **`.github/workflows/package.yml`** — new "Package" workflow
+  - Triggers on `v*.*.*` tag push
+  - Matrix strategy: `windows-latest`, `macos-latest`, `ubuntu-latest`
+  - Each runner: PyInstaller → Vite build → electron-builder
+  - Uploads `.exe` / `.dmg` / `.AppImage` as workflow artifacts
+  - Final job downloads all artifacts and attaches them to the GitHub Release
+  - Code-signing secrets optional (unsigned builds work without them)
 
 ---
 
@@ -281,7 +364,8 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/tailorgunjan93/knovex/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tailorgunjan93/knovex/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tailorgunjan93/knovex/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/tailorgunjan93/knovex/compare/v0.1.0...v0.2.0

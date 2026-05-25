@@ -6,7 +6,7 @@
 
 *Secure · Fast · Reliable · Cost-Effective*
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](CHANGELOG.md)
 [![CI](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml/badge.svg)](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](#)
@@ -30,7 +30,7 @@ Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid 
 | 2 | Knowledge Base + File Ingestion + Adapter layer | ✅ v0.2.0 |
 | 3 | File Reader + Inline Q&A | ✅ v0.3.0 |
 | 4 | Chat + Summariser + Web Search | ✅ v0.4.0 |
-| 5 | Settings UI + packaging | 🔜 Planned |
+| 5 | Settings UI + Desktop Packaging | ✅ v0.5.0 |
 | 6 | Learn Mode | 🔜 Planned |
 
 ---
@@ -75,14 +75,20 @@ Knovex runs completely **offline and local** — your files never leave your mac
 - Gamification: XP points, streaks, difficulty levels, achievement badges
 - Web search enrichment
 
-### ⚙️ Settings *(v0.5.0 — planned)*
+### ⚙️ Settings + Packaging *(v0.5.0)*
 - LLM: OpenAI, Anthropic (Claude), Groq, Gemini, Cerebras, AWS Bedrock, Ollama
-- Per-provider model selection and API key storage (encrypted locally with Fernet)
-- Ollama auto-detection on localhost:11434
-- Connection test before saving
-- Web search engine: DuckDuckGo (free, no key) / Serper / Brave
-- Theme: Light / Medium / Dark
-- Custom KB storage path
+- Per-provider model selection from live catalogue; API key encrypted at rest with Fernet
+- Ollama auto-detect button — probes localhost:11434, lists installed models
+- Test Connection button with round-trip latency display
+- Web search engine: DuckDuckGo (free) / Serper / Brave + conditional API key field
+- Theme: Light / Medium / Dark (auto-applies without restart)
+- KB storage path picker via native OS folder dialog
+- **Desktop packaging**: PyInstaller backend binary + electron-builder installers
+  - Windows `.exe` (NSIS), macOS `.dmg`, Linux `.AppImage`
+  - Window state persistence (position + size saved across sessions)
+  - Tray → Settings navigates React Router via IPC
+- Build scripts: `scripts/build.ps1` (Windows) and `scripts/build.sh` (macOS/Linux)
+- Package CI/CD workflow: builds all 3 platforms on tag push, attaches assets to GitHub Release
 
 ---
 
@@ -185,7 +191,12 @@ knovex/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml          Python lint + test + frontend build (push / PR)
-│       └── release.yml     GitHub Release on v* tag push
+│       ├── release.yml     GitHub Release on v* tag push
+│       └── package.yml     Builds Win/macOS/Linux installers + attaches to release
+│
+├── scripts/
+│   ├── build.ps1           Windows full build pipeline (lint → test → PyInstaller → NSIS)
+│   └── build.sh            macOS / Linux build pipeline
 │
 ├── docs/
 │   ├── ARCHITECTURE.md
@@ -204,6 +215,8 @@ knovex/
 │   │   ├── summarizer.py               POST /summarize/file, /summarize/kb
 │   │   ├── search.py                   POST /search/web
 │   │   └── tools.py                    Tool registry
+│   ├── backend_entry.py                PyInstaller entry point (uvicorn bootstrap)
+│   ├── knovex-backend.spec             PyInstaller build spec
 │   ├── adapters/                       Anti-corruption layer ← ALL 3rd-party here
 │   │   ├── llm_client.py               ILLMClient / LiteLLMAdapter / StubLLMClient
 │   │   ├── http_client.py              IHttpClient / HttpxAdapter / StubHttpClient
@@ -260,9 +273,9 @@ knovex/
 │       │   └── FileViewer/             Block renderer + pagination
 │       └── pages/
 │           ├── KnowledgeBase/          KB list + detail + file viewer + inline Q&A
-│           ├── Chat/
-│           ├── Learn/
-│           └── Settings/
+│           ├── Chat/                   Session sidebar + streaming message thread
+│           ├── Learn/                  (Sprint 6)
+│           └── Settings/              LLM + Search + App tabs (full UI)
 │
 ├── desktop/                            Electron — thin shell only
 │   ├── main.js
@@ -340,6 +353,22 @@ pytest tests/ --cov=backend --cov-report=term-missing
 ruff check backend/ tests/
 ```
 
+### Build Desktop App
+
+**Windows** (PowerShell):
+```powershell
+.\scripts\build.ps1               # full pipeline → desktop/release/*.exe
+.\scripts\build.ps1 -SkipTests   # faster (skip pytest)
+```
+
+**macOS / Linux** (bash):
+```bash
+./scripts/build.sh                # full pipeline → desktop/release/*.dmg / .AppImage
+./scripts/build.sh --skip-tests  # faster
+```
+
+The script runs: lint → tests → Vite frontend build → PyInstaller backend binary → electron-builder installer.
+
 ---
 
 ## CI/CD
@@ -348,6 +377,7 @@ ruff check backend/ tests/
 |---------|----------|---------|
 | Push / PR to `main` | `ci.yml` | Python lint (ruff) + pytest + frontend TypeScript check + build |
 | Push `v*.*.*` tag | `release.yml` | Runs CI, then creates a GitHub Release with CHANGELOG excerpt |
+| Push `v*.*.*` tag | `package.yml` | Builds Win/macOS/Linux installers + attaches to GitHub Release |
 
 To create a new release:
 
@@ -366,7 +396,7 @@ git push origin v0.4.0
 - [x] Sprint 2 — Knowledge Base + File Ingestion + Adapter layer — `v0.2.0`
 - [x] Sprint 3 — File Reader + Inline Q&A — `v0.3.0`
 - [x] Sprint 4 — Chat + Summariser + Web Search — `v0.4.0`
-- [ ] Sprint 5 — Settings UI + packaging — `v0.5.0`
+- [x] Sprint 5 — Settings UI + Desktop Packaging — `v0.5.0`
 - [ ] Sprint 6 — Learn Mode — `v0.6.0`
 
 ### Phase 2 — Cloud + Organisation + Agentic *(future)*
