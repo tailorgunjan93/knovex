@@ -11,6 +11,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.7.0] — 2026-05-25
+
+### Changed
+
+- **App icon redesign** — replaced the plain purple square with a new copper-gradient K icon
+  that matches the download page brand aesthetic: warm near-black rounded-square background
+  (`#0C0B0E`) with a copper gradient letterform (top `#E4AE58` to bottom `#986428`).
+  Applies to both the installer / dock icon (512x512) and the system tray icon (32x32).
+- **Icon generation script** (`scripts/gen_icon.py`) — pure Python stdlib generator
+  (no Pillow required) using raw PNG chunk encoding and distance-to-segment math for
+  anti-aliased K letterform rendering.
+
+---
+
 ## [0.6.9] — 2026-05-25
 
 ### Fixed
@@ -557,7 +571,8 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.6.9...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/tailorgunjan93/knovex/compare/v0.6.9...v0.7.0
 [0.6.9]: https://github.com/tailorgunjan93/knovex/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/tailorgunjan93/knovex/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/tailorgunjan93/knovex/compare/v0.6.6...v0.6.7
