@@ -37,7 +37,12 @@ from typing import Any
 
 from backend.core.encryption import IEncryptor
 from backend.core.settings_store import ISettingsStore
-from backend.models.schemas import AppSettingsResponse, EmbeddingSettings, LLMSettings, SearchSettings
+from backend.models.schemas import (
+    AppSettingsResponse,
+    EmbeddingSettings,
+    LLMSettings,
+    SearchSettings,
+)
 
 logger = logging.getLogger("knovex.settings")
 

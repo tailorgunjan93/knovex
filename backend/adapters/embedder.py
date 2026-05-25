@@ -29,12 +29,10 @@ OCP: add a new provider by subclassing IEmbedder and updating build_embedder.
 from __future__ import annotations
 
 import logging
-import os
-import struct
 import urllib.request
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 logger = logging.getLogger("knovex.embedder")
 

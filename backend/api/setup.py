@@ -16,13 +16,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from backend.adapters.embedder import download_model, model_files_ready, _model_dir
+from backend.adapters.embedder import _model_dir, download_model, model_files_ready
 
 logger = logging.getLogger("knovex.api.setup")
 
