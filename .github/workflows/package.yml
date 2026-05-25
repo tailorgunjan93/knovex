@@ -145,16 +145,16 @@ jobs:
       - name: Verify installer artifact exists
         shell: bash
         run: |
-          shopt -s globstar nullglob
-          files=( ${{ matrix.artifact_glob }} )
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "ERROR: No installer found matching ${{ matrix.artifact_glob }}"
+          # Use find — portable across bash 3.2 (macOS), bash 5, and Windows Git Bash
+          count=$(find desktop/release/ -maxdepth 1 -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" 2>/dev/null | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "ERROR: No installer found in desktop/release/"
             echo "desktop/release/ contents:"
             ls -la desktop/release/ 2>/dev/null || echo "(release/ does not exist)"
             exit 1
           fi
-          echo "Installer artifact OK: ${files[0]}"
-          ls -lh "${files[@]}"
+          echo "Installer artifact OK ($count file(s) found):"
+          find desktop/release/ -maxdepth 1 \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) -exec ls -lh {} \;
 
       # ── Upload installer as artifact ──────────────────────────────────────
       - name: Upload installer artifact
