@@ -7,33 +7,37 @@
   <meta name="description" content="Your AI-powered knowledge assistant. Chat with documents, build a knowledge base, and learn anything. One-click installer for Windows, macOS, and Linux." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
 
     :root {
-      --bg:          #080B14;
-      --bg-2:        #0D1120;
-      --bg-card:     rgba(255,255,255,0.025);
-      --bg-card-h:   rgba(255,255,255,0.045);
-      --border:      rgba(255,255,255,0.07);
-      --border-h:    rgba(255,255,255,0.14);
+      --bg:          #060912;
+      --bg-2:        #0C1021;
+      --bg-3:        #111827;
+      --bg-card:     rgba(255,255,255,0.028);
+      --bg-card-h:   rgba(255,255,255,0.05);
+      --border:      rgba(255,255,255,0.065);
+      --border-h:    rgba(255,255,255,0.13);
       --indigo:      #6366F1;
       --violet:      #8B5CF6;
-      --grad:        linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A78BFA 100%);
-      --grad-text:   linear-gradient(135deg, #A5B4FC 0%, #C4B5FD 50%, #F0ABFC 100%);
+      --fuchsia:     #D946EF;
+      --grad:        linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #9333EA 100%);
+      --grad-text:   linear-gradient(135deg, #818CF8 0%, #A78BFA 50%, #C084FC 100%);
+      --grad-soft:   linear-gradient(135deg, rgba(79,70,229,0.15) 0%, rgba(147,51,234,0.15) 100%);
       --text:        #F1F5F9;
       --text-2:      #94A3B8;
       --text-3:      #475569;
-      --green:       #22C55E;
+      --green:       #10B981;
       --win:         #38BDF8;
       --mac:         #E2E8F0;
       --linux:       #FB923C;
-      --radius:      14px;
-      --radius-sm:   8px;
-      --glow:        0 0 40px rgba(99,102,241,0.15);
+      --radius:      16px;
+      --radius-sm:   10px;
+      --glow:        0 0 48px rgba(99,102,241,0.18);
+      --glow-sm:     0 0 24px rgba(99,102,241,0.12);
     }
 
     body {
@@ -42,242 +46,501 @@
       color: var(--text);
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
 
+    /* ── Background grid ───────────────────────────────────────────────── */
     body::before {
       content: "";
       position: fixed; inset: 0;
       background-image:
-        linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
-      background-size: 48px 48px;
+        linear-gradient(rgba(99,102,241,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,0.025) 1px, transparent 1px);
+      background-size: 56px 56px;
       pointer-events: none;
       z-index: 0;
     }
 
-    .hero-glow {
-      position: absolute; top: -160px; left: 50%; transform: translateX(-50%);
-      width: 800px; height: 600px;
-      background: radial-gradient(ellipse, rgba(99,102,241,0.18) 0%, rgba(139,92,246,0.08) 40%, transparent 70%);
-      pointer-events: none; z-index: 0;
-    }
-
     .z1 { position: relative; z-index: 1; }
+
     .grad-text {
       background: var(--grad-text);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
-    /* NAV */
+    /* ── Nav ────────────────────────────────────────────────────────────── */
     nav {
       position: sticky; top: 0; z-index: 100;
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 2rem; height: 60px;
-      background: rgba(8,11,20,0.85);
-      backdrop-filter: blur(12px);
+      padding: 0 2.5rem; height: 62px;
+      background: rgba(6,9,18,0.80);
+      backdrop-filter: blur(20px) saturate(1.8);
+      -webkit-backdrop-filter: blur(20px) saturate(1.8);
       border-bottom: 1px solid var(--border);
     }
     .logo {
       display: flex; align-items: center; gap: 10px;
       text-decoration: none; color: var(--text);
-      font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em;
+      font-weight: 750; font-size: 1.05rem; letter-spacing: -0.015em;
     }
     .logo-mark {
-      width: 30px; height: 30px; background: var(--grad); border-radius: 8px;
+      width: 32px; height: 32px; background: var(--grad);
+      border-radius: 9px;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 900; font-size: 0.85rem; color: #fff;
-      box-shadow: 0 0 12px rgba(99,102,241,0.45);
+      font-weight: 900; font-size: 0.88rem; color: #fff;
+      box-shadow: 0 0 16px rgba(99,102,241,0.50), 0 2px 8px rgba(0,0,0,0.4);
     }
-    .nav-right { display: flex; align-items: center; gap: 0.25rem; }
+    .nav-right { display: flex; align-items: center; gap: 0.15rem; }
     .nav-link {
-      color: var(--text-2); text-decoration: none; font-size: 0.85rem; font-weight: 500;
-      padding: 0.4rem 0.75rem; border-radius: 6px;
+      color: var(--text-2); text-decoration: none;
+      font-size: 0.84rem; font-weight: 500;
+      padding: 0.4rem 0.8rem; border-radius: 7px;
       transition: color 0.15s, background 0.15s;
     }
-    .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.055); }
     .nav-btn {
-      margin-left: 0.5rem; padding: 0.4rem 1rem;
+      margin-left: 0.6rem; padding: 0.42rem 1.05rem;
       background: var(--grad); color: #fff;
-      font-size: 0.85rem; font-weight: 600; border-radius: 6px;
-      text-decoration: none; transition: opacity 0.15s;
+      font-size: 0.84rem; font-weight: 650; border-radius: 8px;
+      text-decoration: none; transition: opacity 0.15s, transform 0.15s;
+      box-shadow: 0 2px 12px rgba(99,102,241,0.30);
     }
-    .nav-btn:hover { opacity: 0.85; }
+    .nav-btn:hover { opacity: 0.88; transform: translateY(-1px); }
 
-    /* HERO */
-    .hero { position: relative; text-align: center; padding: 7rem 1.5rem 5rem; overflow: hidden; }
+    /* ── Hero ───────────────────────────────────────────────────────────── */
+    .hero {
+      position: relative;
+      padding: 5.5rem 2.5rem 4.5rem;
+      max-width: 1120px; margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      gap: 4rem;
+      overflow: hidden;
+    }
+    .hero-orb-1 {
+      position: absolute; top: -120px; left: -100px;
+      width: 600px; height: 600px;
+      background: radial-gradient(ellipse, rgba(79,70,229,0.22) 0%, transparent 65%);
+      pointer-events: none; z-index: 0;
+    }
+    .hero-orb-2 {
+      position: absolute; bottom: -80px; right: -80px;
+      width: 500px; height: 500px;
+      background: radial-gradient(ellipse, rgba(147,51,234,0.14) 0%, transparent 65%);
+      pointer-events: none; z-index: 0;
+    }
+    .hero-left { position: relative; z-index: 1; }
     .badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25);
-      color: #A5B4FC; font-size: 0.75rem; font-weight: 600;
-      padding: 0.3rem 0.8rem; border-radius: 999px; margin-bottom: 2rem;
-      letter-spacing: 0.04em; text-transform: uppercase;
+      display: inline-flex; align-items: center; gap: 7px;
+      background: rgba(99,102,241,0.11); border: 1px solid rgba(99,102,241,0.22);
+      color: #A5B4FC; font-size: 0.72rem; font-weight: 650;
+      padding: 0.28rem 0.85rem; border-radius: 999px; margin-bottom: 1.8rem;
+      letter-spacing: 0.05em; text-transform: uppercase;
     }
     .badge-dot {
       width: 6px; height: 6px; background: var(--green); border-radius: 50%;
-      animation: pulse 2s ease-in-out infinite;
+      box-shadow: 0 0 6px rgba(16,185,129,0.7);
+      animation: pulse 2.2s ease-in-out infinite;
     }
     @keyframes pulse {
-      0%,100% { opacity:1; transform:scale(1); }
-      50%      { opacity:0.5; transform:scale(0.8); }
+      0%,100% { opacity:1; transform:scale(1); box-shadow: 0 0 6px rgba(16,185,129,0.7); }
+      50%      { opacity:0.6; transform:scale(0.75); box-shadow: 0 0 3px rgba(16,185,129,0.4); }
     }
     h1 {
-      font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 900;
-      line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 1.25rem;
+      font-size: clamp(2.2rem, 4.5vw, 3.25rem);
+      font-weight: 900; line-height: 1.08;
+      letter-spacing: -0.035em; margin-bottom: 1.2rem;
     }
     .hero-sub {
-      color: var(--text-2); font-size: clamp(1rem,2.5vw,1.15rem);
-      max-width: 500px; margin: 0 auto 2.5rem; line-height: 1.7; font-weight: 400;
+      color: var(--text-2); font-size: 1rem;
+      max-width: 440px; line-height: 1.72; font-weight: 400;
+      margin-bottom: 2.25rem;
     }
     .cta-group {
-      display: flex; align-items: center; justify-content: center;
-      flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;
+      display: flex; align-items: center;
+      flex-wrap: wrap; gap: 0.65rem; margin-bottom: 1rem;
     }
     #primary-download {
-      display: inline-flex; align-items: center; gap: 8px;
+      display: inline-flex; align-items: center; gap: 9px;
       background: var(--grad); color: #fff;
-      font-size: 0.95rem; font-weight: 700;
-      padding: 0.75rem 1.75rem; border-radius: 10px;
+      font-size: 0.93rem; font-weight: 700;
+      padding: 0.72rem 1.6rem; border-radius: 11px;
       text-decoration: none;
-      box-shadow: 0 0 24px rgba(99,102,241,0.35);
+      box-shadow: 0 4px 24px rgba(99,102,241,0.4), 0 1px 4px rgba(0,0,0,0.3);
       transition: box-shadow 0.2s, transform 0.15s;
     }
-    #primary-download:hover { box-shadow: 0 0 36px rgba(99,102,241,0.55); transform: translateY(-2px); }
-    .cta-alt {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: var(--bg-card); border: 1px solid var(--border);
-      color: var(--text-2); font-size: 0.9rem; font-weight: 600;
-      padding: 0.75rem 1.25rem; border-radius: 10px;
-      text-decoration: none; transition: border-color 0.15s, color 0.15s, background 0.15s;
+    #primary-download:hover {
+      box-shadow: 0 6px 36px rgba(99,102,241,0.58), 0 2px 8px rgba(0,0,0,0.4);
+      transform: translateY(-2px);
     }
-    .cta-alt:hover { border-color: var(--border-h); color: var(--text); background: var(--bg-card-h); }
-    #primary-note { color: var(--text-3); font-size: 0.78rem; margin-top: 0.25rem; }
+    .cta-alt {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      color: var(--text-2); font-size: 0.88rem; font-weight: 600;
+      padding: 0.72rem 1.2rem; border-radius: 11px;
+      text-decoration: none;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .cta-alt:hover { border-color: var(--border-h); color: var(--text); background: rgba(255,255,255,0.07); }
+    .hero-meta {
+      display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
+      font-size: 0.76rem; color: var(--text-3);
+    }
+    .hero-meta-item { display: flex; align-items: center; gap: 5px; }
+    .hero-meta-dot { width: 4px; height: 4px; background: var(--text-3); border-radius: 50%; }
 
-    /* STATS */
-    .stats {
-      display: flex; justify-content: center; flex-wrap: wrap; gap: 0 3rem;
-      padding: 2.5rem 2rem 3rem; border-bottom: 1px solid var(--border);
-      max-width: 720px; margin: 0 auto;
+    /* ── App preview mockup ─────────────────────────────────────────────── */
+    .hero-right { position: relative; z-index: 1; }
+    .app-frame {
+      background: var(--bg-2);
+      border: 1px solid var(--border-h);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04), var(--glow);
+      transform: perspective(1200px) rotateY(-4deg) rotateX(2deg);
+      transition: transform 0.4s ease;
+    }
+    .app-frame:hover {
+      transform: perspective(1200px) rotateY(-1deg) rotateX(0.5deg);
+    }
+    .titlebar {
+      background: var(--bg-3); height: 38px;
+      display: flex; align-items: center; padding: 0 14px; gap: 7px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tb-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .tb-dot.r { background: #FF5F56; }
+    .tb-dot.y { background: #FFBD2E; }
+    .tb-dot.g { background: #27C93F; }
+    .tb-title {
+      margin-left: auto; margin-right: auto;
+      font-size: 0.72rem; color: var(--text-3); font-weight: 500;
+    }
+    .app-body { display: flex; height: 340px; }
+    .sidebar {
+      width: 200px; background: rgba(0,0,0,0.25);
+      border-right: 1px solid var(--border);
+      padding: 12px 10px;
+      flex-shrink: 0;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .sb-section { font-size: 0.62rem; color: var(--text-3); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 8px 4px; }
+    .sb-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: 6px;
+      font-size: 0.72rem; font-weight: 500; color: var(--text-2);
+      cursor: default;
+    }
+    .sb-item.active { background: rgba(99,102,241,0.15); color: #A5B4FC; }
+    .sb-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .main-area { flex: 1; display: flex; flex-direction: column; }
+    .chat-area { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+    .msg { display: flex; gap: 8px; }
+    .msg-avatar {
+      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.55rem; font-weight: 800; margin-top: 2px;
+    }
+    .msg.user .msg-avatar { background: rgba(99,102,241,0.3); color: #A5B4FC; }
+    .msg.assistant .msg-avatar { background: var(--grad); color: #fff; }
+    .msg-content { flex: 1; }
+    .msg-bubble {
+      font-size: 0.68rem; line-height: 1.5; color: var(--text-2);
+      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius: 8px; padding: 7px 10px;
+      max-width: 280px;
+    }
+    .msg.user .msg-bubble { background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.2); color: var(--text); margin-left: auto; }
+    .msg-source {
+      font-size: 0.58rem; color: var(--text-3); margin-top: 3px;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .msg-source-tag {
+      background: rgba(99,102,241,0.1); color: #A5B4FC;
+      border-radius: 4px; padding: 1px 5px; font-size: 0.57rem;
+    }
+    .chat-input {
+      height: 40px; background: rgba(0,0,0,0.2); border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px; padding: 0 12px;
+    }
+    .input-mock {
+      flex: 1; height: 22px; background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); border-radius: 5px;
+    }
+    .send-btn {
+      width: 22px; height: 22px; background: var(--grad);
+      border-radius: 5px; flex-shrink: 0;
+    }
+
+    /* ── Stats strip ────────────────────────────────────────────────────── */
+    .stats-strip {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.015);
+      padding: 2rem 2.5rem;
+    }
+    .stats-inner {
+      max-width: 900px; margin: 0 auto;
+      display: flex; justify-content: space-around; flex-wrap: wrap; gap: 1.5rem;
     }
     .stat { text-align: center; }
     .stat-val {
-      display: block; font-size: 1.6rem; font-weight: 800;
+      display: block; font-size: 1.7rem; font-weight: 850;
       background: var(--grad-text);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.03em; line-height: 1;
     }
-    .stat-lbl { font-size: 0.78rem; color: var(--text-3); font-weight: 500; margin-top: 2px; }
+    .stat-lbl { font-size: 0.76rem; color: var(--text-3); font-weight: 500; margin-top: 5px; }
 
-    /* SECTIONS */
-    .section { max-width: 980px; margin: 0 auto; padding: 4rem 1.5rem; }
+    /* ── Trust bar ──────────────────────────────────────────────────────── */
+    .trust-bar {
+      display: flex; justify-content: center; flex-wrap: wrap; gap: 1rem 2.5rem;
+      padding: 1.5rem 2rem;
+    }
+    .trust-item {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.78rem; color: var(--text-3); font-weight: 500;
+    }
+    .trust-icon { font-size: 0.9rem; }
+
+    /* ── Sections ───────────────────────────────────────────────────────── */
+    .section { max-width: 1060px; margin: 0 auto; padding: 4.5rem 2.5rem; }
     .section-label {
-      text-align: center; font-size: 0.72rem; font-weight: 700;
-      letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); margin-bottom: 0.6rem;
+      text-align: center; font-size: 0.7rem; font-weight: 750;
+      letter-spacing: 0.12em; text-transform: uppercase; color: #818CF8; margin-bottom: 0.5rem;
     }
     .section-title {
-      text-align: center; font-size: clamp(1.5rem,3vw,2rem);
-      font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.6rem;
+      text-align: center;
+      font-size: clamp(1.55rem, 3.5vw, 2.2rem);
+      font-weight: 850; letter-spacing: -0.025em; margin-bottom: 0.65rem;
     }
-    .section-sub { text-align: center; color: var(--text-2); font-size: 0.95rem; margin-bottom: 3rem; }
+    .section-sub {
+      text-align: center; color: var(--text-2);
+      font-size: 0.95rem; max-width: 500px; margin: 0 auto 3rem; line-height: 1.7;
+    }
 
-    /* PLATFORM CARDS */
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px,1fr)); gap: 1rem; }
+    /* ── Platform cards ─────────────────────────────────────────────────── */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px,1fr)); gap: 1.25rem; }
     .card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 1.75rem 1.5rem;
-      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 2rem 1.75rem;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.25s;
       position: relative; overflow: hidden;
     }
     .card::before {
       content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
     }
-    .card:hover { border-color: var(--border-h); background: var(--bg-card-h); box-shadow: var(--glow); }
+    .card:hover {
+      border-color: var(--border-h);
+      background: var(--bg-card-h);
+      box-shadow: var(--glow-sm);
+      transform: translateY(-2px);
+    }
+    .card { transition: border-color 0.2s, background 0.2s, box-shadow 0.25s, transform 0.2s; }
     .card.highlighted {
-      border-color: rgba(99,102,241,0.4);
-      box-shadow: 0 0 0 1px rgba(99,102,241,0.2), var(--glow);
+      border-color: rgba(99,102,241,0.38);
+      box-shadow: 0 0 0 1px rgba(99,102,241,0.15), var(--glow);
     }
-    .card-os-icon { font-size: 1.75rem; margin-bottom: 1rem; display: block; }
-    .card-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.2rem; }
-    .card-subtitle { font-size: 0.8rem; color: var(--text-3); margin-bottom: 1.25rem; }
+    .card.highlighted::after {
+      content: "Recommended";
+      position: absolute; top: 14px; right: 14px;
+      background: rgba(99,102,241,0.15); color: #A5B4FC;
+      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(99,102,241,0.2);
+    }
+    .card-os-icon { font-size: 2rem; margin-bottom: 0.9rem; display: block; }
+    .card-title { font-size: 1.05rem; font-weight: 750; margin-bottom: 0.2rem; }
+    .card-subtitle { font-size: 0.78rem; color: var(--text-3); margin-bottom: 1.4rem; }
 
     .dl-btn {
       display: flex; align-items: center; justify-content: space-between;
-      width: 100%; padding: 0.6rem 0.9rem; border-radius: var(--radius-sm);
-      text-decoration: none; font-weight: 600; font-size: 0.85rem;
-      margin-bottom: 0.5rem; border: 1px solid transparent;
+      width: 100%; padding: 0.65rem 1rem; border-radius: 9px;
+      text-decoration: none; font-weight: 650; font-size: 0.83rem;
+      margin-bottom: 0.55rem; border: 1px solid transparent;
       transition: opacity 0.15s, transform 0.15s;
     }
-    .dl-btn:hover { opacity: 0.88; transform: translateY(-1px); }
-    .dl-btn-label { display: flex; align-items: center; gap: 6px; }
-    .dl-btn-meta  { font-size: 0.72rem; opacity: 0.65; font-weight: 500; }
+    .dl-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .dl-btn-label { display: flex; align-items: center; gap: 7px; }
+    .dl-btn-meta  { font-size: 0.7rem; opacity: 0.65; font-weight: 500; }
 
-    .dl-btn.win { background:rgba(56,189,248,0.12); color:var(--win);  border-color:rgba(56,189,248,0.18); }
-    .dl-btn.mac { background:rgba(226,232,240,0.06);color:var(--mac); border-color:rgba(226,232,240,0.1); }
-    .dl-btn.app { background:rgba(251,146,60,0.1);  color:var(--linux);border-color:rgba(251,146,60,0.18); }
-    .dl-btn.deb { background:rgba(251,146,60,0.06); color:#FDBA74;    border-color:rgba(251,146,60,0.12); }
+    .dl-btn.win { background:rgba(56,189,248,0.1);  color:var(--win);  border-color:rgba(56,189,248,0.2);  }
+    .dl-btn.mac { background:rgba(226,232,240,0.05); color:var(--mac);  border-color:rgba(226,232,240,0.1); }
+    .dl-btn.app { background:rgba(251,146,60,0.09);  color:var(--linux);border-color:rgba(251,146,60,0.2);  }
+    .dl-btn.deb { background:rgba(251,146,60,0.05);  color:#FDBA74;    border-color:rgba(251,146,60,0.12); }
 
     .dl-note {
-      margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);
-      font-size: 0.76rem; color: var(--text-3); line-height: 1.6;
+      margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid var(--border);
+      font-size: 0.75rem; color: var(--text-3); line-height: 1.65;
     }
     .dl-note code {
-      font-family: "SF Mono","Fira Code",monospace;
-      background: rgba(255,255,255,0.05); padding: 0.15em 0.4em;
-      border-radius: 4px; font-size: 0.72rem; color: var(--text-2);
+      font-family: "SF Mono","Fira Code","Cascadia Code",monospace;
+      background: rgba(255,255,255,0.06); padding: 0.15em 0.45em;
+      border-radius: 4px; font-size: 0.7rem; color: var(--text-2);
     }
-    .dl-note strong { color: var(--text-2); font-weight: 600; }
+    .dl-note strong { color: var(--text-2); font-weight: 650; }
 
-    /* FEATURES */
+    /* ── Feature grid ───────────────────────────────────────────────────── */
     .features-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr));
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 1px; background: var(--border);
       border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
     }
-    .feat-cell { background: var(--bg); padding: 1.5rem; transition: background 0.2s; }
-    .feat-cell:hover { background: var(--bg-card-h); }
-    .feat-icon { font-size: 1.3rem; margin-bottom: 0.6rem; display: block; }
-    .feat-name { font-size: 0.88rem; font-weight: 700; margin-bottom: 0.25rem; }
-    .feat-desc { font-size: 0.78rem; color: var(--text-3); line-height: 1.5; }
+    @media (max-width: 720px) { .features-grid { grid-template-columns: repeat(2,1fr); } }
+    @media (max-width: 480px) { .features-grid { grid-template-columns: 1fr; } }
+    .feat-cell {
+      background: var(--bg); padding: 1.75rem 1.5rem;
+      transition: background 0.2s;
+    }
+    .feat-cell:hover { background: rgba(99,102,241,0.04); }
+    .feat-icon {
+      font-size: 1.5rem; margin-bottom: 0.7rem; display: block;
+    }
+    .feat-name { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .feat-desc { font-size: 0.78rem; color: var(--text-3); line-height: 1.6; }
+    .feat-new {
+      display: inline-block; font-size: 0.58rem; font-weight: 750;
+      background: rgba(16,185,129,0.12); color: #34D399; letter-spacing: 0.06em;
+      text-transform: uppercase; padding: 1px 6px; border-radius: 4px;
+      margin-left: 6px; vertical-align: middle;
+      border: 1px solid rgba(16,185,129,0.2);
+    }
 
-    /* STEPS */
-    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 1.5rem; }
+    /* ── Why private section ────────────────────────────────────────────── */
+    .privacy-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 3rem;
+      align-items: center;
+    }
+    @media (max-width: 720px) { .privacy-grid { grid-template-columns: 1fr; } }
+    .privacy-left {}
+    .privacy-title {
+      font-size: clamp(1.4rem,3vw,2rem); font-weight: 850;
+      letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 1rem;
+    }
+    .privacy-desc { color: var(--text-2); font-size: 0.92rem; line-height: 1.75; margin-bottom: 1.5rem; }
+    .privacy-points { display: flex; flex-direction: column; gap: 0.85rem; }
+    .privacy-point { display: flex; align-items: flex-start; gap: 10px; }
+    .pp-check {
+      width: 20px; height: 20px; background: rgba(16,185,129,0.12); color: #10B981;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 0.68rem; font-weight: 800; flex-shrink: 0; margin-top: 1px;
+    }
+    .pp-text { font-size: 0.82rem; color: var(--text-2); line-height: 1.55; }
+    .pp-text strong { color: var(--text); font-weight: 650; }
+
+    .compare-card {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .compare-row {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      border-bottom: 1px solid var(--border);
+    }
+    .compare-row:last-child { border-bottom: none; }
+    .compare-cell {
+      padding: 0.85rem 1rem; font-size: 0.78rem;
+      display: flex; align-items: center;
+    }
+    .compare-cell:not(:first-child) { border-left: 1px solid var(--border); justify-content: center; }
+    .compare-cell.header {
+      font-size: 0.7rem; font-weight: 750; color: var(--text-3);
+      letter-spacing: 0.06em; text-transform: uppercase;
+      background: rgba(0,0,0,0.2); padding: 0.65rem 1rem;
+    }
+    .compare-cell.knovex { color: #A5B4FC; font-weight: 600; }
+    .compare-cell.cloud  { color: var(--text-3); }
+    .check   { color: #10B981; font-size: 0.9rem; }
+    .cross   { color: #F87171; font-size: 0.9rem; }
+    .partial { color: #FBBF24; font-size: 0.9rem; }
+
+    /* ── Steps ──────────────────────────────────────────────────────────── */
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 1.5rem; }
     .step {
       background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 1.5rem;
+      border-radius: var(--radius); padding: 1.75rem 1.5rem;
+      transition: border-color 0.2s, background 0.2s, transform 0.2s;
     }
+    .step:hover { border-color: var(--border-h); background: var(--bg-card-h); transform: translateY(-2px); }
     .step-num {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 28px; height: 28px; background: var(--grad); border-radius: 50%;
-      font-weight: 800; font-size: 0.78rem; color: #fff; margin-bottom: 0.75rem;
-      box-shadow: 0 0 12px rgba(99,102,241,0.35);
+      width: 30px; height: 30px; background: var(--grad); border-radius: 50%;
+      font-weight: 850; font-size: 0.78rem; color: #fff; margin-bottom: 0.9rem;
+      box-shadow: 0 0 14px rgba(99,102,241,0.4);
     }
-    .step h3 { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.35rem; }
-    .step p  { font-size: 0.8rem; color: var(--text-3); line-height: 1.55; }
+    .step h3 { font-size: 0.9rem; font-weight: 750; margin-bottom: 0.4rem; }
+    .step p  { font-size: 0.79rem; color: var(--text-3); line-height: 1.6; }
 
-    /* FOOTER */
+    /* ── CTA band ───────────────────────────────────────────────────────── */
+    .cta-band {
+      margin: 0 2.5rem 4rem;
+      background: var(--grad-soft);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 20px; padding: 3.5rem 2rem;
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .cta-band::before {
+      content: "";
+      position: absolute; top: -60px; left: 50%; transform: translateX(-50%);
+      width: 400px; height: 300px;
+      background: radial-gradient(ellipse, rgba(99,102,241,0.18) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .cta-band-title {
+      font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 900;
+      letter-spacing: -0.03em; margin-bottom: 0.75rem; position: relative; z-index: 1;
+    }
+    .cta-band-sub {
+      color: var(--text-2); font-size: 0.95rem; margin-bottom: 2rem;
+      position: relative; z-index: 1;
+    }
+    .cta-band .cta-group { justify-content: center; position: relative; z-index: 1; }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
     footer {
-      border-top: 1px solid var(--border); padding: 2rem;
+      border-top: 1px solid var(--border); padding: 2.25rem 2.5rem;
       display: flex; align-items: center; justify-content: space-between;
-      flex-wrap: wrap; gap: 1rem; max-width: 980px; margin: 0 auto;
+      flex-wrap: wrap; gap: 1rem; max-width: 1120px; margin: 0 auto;
     }
     .footer-left  { display: flex; align-items: center; gap: 0.75rem; }
-    .footer-copy  { font-size: 0.8rem; color: var(--text-3); }
-    .footer-links { display: flex; gap: 1.25rem; }
+    .footer-copy  { font-size: 0.78rem; color: var(--text-3); }
+    .footer-motto {
+      font-size: 0.72rem; color: var(--text-3); letter-spacing: 0.02em;
+    }
+    .footer-links { display: flex; gap: 1.4rem; }
     .footer-links a {
-      font-size: 0.8rem; color: var(--text-3); text-decoration: none; transition: color 0.15s;
+      font-size: 0.78rem; color: var(--text-3); text-decoration: none; transition: color 0.15s;
     }
     .footer-links a:hover { color: var(--text-2); }
 
-    @media (max-width: 640px) {
-      nav { padding: 0 1rem; }
-      .hero { padding: 5rem 1rem 4rem; }
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; gap: 2.5rem; padding: 4rem 1.5rem 3.5rem; }
+      .hero-right { display: none; }
+      .app-frame { transform: none; }
+      nav { padding: 0 1.25rem; }
+      .section { padding: 3.5rem 1.5rem; }
+      .cta-band { margin: 0 1.5rem 3rem; }
+      footer { padding: 1.75rem 1.5rem; flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 540px) {
+      h1 { font-size: 2rem; }
+      .hero { padding: 3.5rem 1rem 3rem; }
       .section { padding: 3rem 1rem; }
-      footer { padding: 1.5rem 1rem; flex-direction: column; align-items: flex-start; }
+      .cta-band { margin: 0 1rem 3rem; padding: 2.5rem 1.5rem; border-radius: 14px; }
+      footer { padding: 1.5rem 1rem; }
+      .stats-strip { padding: 1.5rem 1rem; }
+      .trust-bar { padding: 1.25rem 1rem; gap: 0.75rem 1.5rem; }
     }
   </style>
 </head>
 <body>
 
+<!-- ── Navigation ────────────────────────────────────────────────────────── -->
 <nav class="z1">
   <a class="logo" href="#">
     <div class="logo-mark">K</div>
@@ -291,17 +554,20 @@
   </div>
 </nav>
 
-<section class="hero">
-  <div class="hero-glow"></div>
-  <div class="z1">
+<!-- ── Hero ──────────────────────────────────────────────────────────────── -->
+<div class="hero z1">
+  <div class="hero-orb-1"></div>
+  <div class="hero-orb-2"></div>
+
+  <div class="hero-left">
     <div class="badge">
       <div class="badge-dot"></div>
-      v0.6.3 &mdash; Now available
+      v0.6.5 &mdash; Semantic search + installers
     </div>
-    <h1>Your documents.<br><span class="grad-text">Your AI. Your machine.</span></h1>
+    <h1>Your documents.<br><span class="grad-text">Your AI.<br>Your machine.</span></h1>
     <p class="hero-sub">
       Knovex is a private AI knowledge assistant that runs entirely on your desktop.
-      Chat with documents, build knowledge bases, and learn anything &mdash; no cloud required.
+      Chat with PDFs, build knowledge bases, and learn anything &mdash; no cloud required.
     </p>
     <div class="cta-group">
       <a id="primary-download" href="#platforms">
@@ -312,34 +578,110 @@
         &#9733; Star on GitHub
       </a>
     </div>
-    <p id="primary-note">Free &amp; open source &middot; v0.6.3</p>
+    <div class="hero-meta">
+      <span class="hero-meta-item">&#x1F193; Free &amp; open source</span>
+      <span class="hero-meta-dot"></span>
+      <span class="hero-meta-item">&#x1F512; Encrypted at rest</span>
+      <span class="hero-meta-dot"></span>
+      <span class="hero-meta-item">&#x26A1; 1 ms/query</span>
+    </div>
   </div>
-</section>
 
-<div class="stats z1">
-  <div class="stat"><span class="stat-val">8</span><span class="stat-lbl">Learn formats</span></div>
-  <div class="stat"><span class="stat-val">5+</span><span class="stat-lbl">LLM providers</span></div>
-  <div class="stat"><span class="stat-val">100%</span><span class="stat-lbl">Offline capable</span></div>
-  <div class="stat"><span class="stat-val">E2E</span><span class="stat-lbl">Encrypted keys</span></div>
+  <div class="hero-right">
+    <div class="app-frame">
+      <div class="titlebar">
+        <div class="tb-dot r"></div>
+        <div class="tb-dot y"></div>
+        <div class="tb-dot g"></div>
+        <span class="tb-title">Knovex &mdash; Research Notes KB</span>
+      </div>
+      <div class="app-body">
+        <div class="sidebar">
+          <div class="sb-section">Knowledge Bases</div>
+          <div class="sb-item active">
+            <div class="sb-dot" style="background:#6366F1;"></div>
+            Research Notes
+          </div>
+          <div class="sb-item">
+            <div class="sb-dot" style="background:#10B981;"></div>
+            Company Wiki
+          </div>
+          <div class="sb-item">
+            <div class="sb-dot" style="background:#F59E0B;"></div>
+            Legal Docs
+          </div>
+          <div class="sb-section" style="margin-top:8px;">Chats</div>
+          <div class="sb-item active" style="font-size:0.68rem;">&#x1F4AC; Q4 Analysis</div>
+          <div class="sb-item" style="font-size:0.68rem;">&#x1F4AC; Product Overview</div>
+        </div>
+        <div class="main-area">
+          <div class="chat-area">
+            <div class="msg user">
+              <div class="msg-content">
+                <div class="msg-bubble" style="margin-left:auto;">What are the key findings in the Q4 report regarding user retention?</div>
+              </div>
+              <div class="msg-avatar">U</div>
+            </div>
+            <div class="msg assistant">
+              <div class="msg-avatar">K</div>
+              <div class="msg-content">
+                <div class="msg-bubble">Based on the Q4 report, user retention improved by <strong style="color:#A5B4FC;">23%</strong> YoY. Three key drivers were identified: onboarding redesign, push notification tuning, and the new &ldquo;continue learning&rdquo; feature.</div>
+                <div class="msg-source">
+                  Sources:
+                  <span class="msg-source-tag">Q4-report.pdf &middot; p.14</span>
+                  <span class="msg-source-tag">exec-summary.docx</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input">
+            <div class="input-mock"></div>
+            <div class="send-btn"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
+<!-- ── Stats strip ────────────────────────────────────────────────────────── -->
+<div class="stats-strip z1">
+  <div class="stats-inner">
+    <div class="stat"><span class="stat-val">8</span><span class="stat-lbl">Learn formats</span></div>
+    <div class="stat"><span class="stat-val">6+</span><span class="stat-lbl">LLM providers</span></div>
+    <div class="stat"><span class="stat-val">100%</span><span class="stat-lbl">Offline capable</span></div>
+    <div class="stat"><span class="stat-val">1 ms</span><span class="stat-lbl">Query latency</span></div>
+    <div class="stat"><span class="stat-val">E2E</span><span class="stat-lbl">Encrypted keys</span></div>
+  </div>
+</div>
+
+<!-- ── Trust bar ──────────────────────────────────────────────────────────── -->
+<div class="trust-bar z1">
+  <div class="trust-item"><span class="trust-icon">&#x1F512;</span> No telemetry</div>
+  <div class="trust-item"><span class="trust-icon">&#x1F4BB;</span> Local SQLite</div>
+  <div class="trust-item"><span class="trust-icon">&#x1F4E6;</span> Self-contained binary</div>
+  <div class="trust-item"><span class="trust-icon">&#x1F310;</span> Optional cloud LLMs</div>
+  <div class="trust-item"><span class="trust-icon">&#x26A1;</span> FTS5 + dense ANN</div>
+</div>
+
+<!-- ── Download ───────────────────────────────────────────────────────────── -->
 <div class="section z1" id="platforms">
   <p class="section-label">Download</p>
-  <h2 class="section-title">One-click install</h2>
-  <p class="section-sub">Available for Windows, macOS, and Linux. No dependencies required.</p>
+  <h2 class="section-title">One-click install, zero dependencies</h2>
+  <p class="section-sub">Python, Node.js, and Docker not required. Everything is bundled inside the installer.</p>
   <div class="cards">
 
     <div class="card" id="card-win">
-      <span class="card-os-icon">&#x1F5BC;&#xFE0F;</span>
+      <span class="card-os-icon">&#x1FA9F;</span>
       <div class="card-title">Windows</div>
       <div class="card-subtitle">Windows 10 / 11 &mdash; 64-bit</div>
-      <a class="dl-btn win" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-Setup-0.6.3.exe" id="win-link">
+      <a class="dl-btn win" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-Setup-0.6.5.exe" id="win-link">
         <span class="dl-btn-label">&#8659; Knovex-Setup.exe</span>
-        <span class="dl-btn-meta">.exe</span>
+        <span class="dl-btn-meta">.exe &middot; NSIS</span>
       </a>
       <div class="dl-note">
         Run the installer &rarr; <strong>Next &rarr; Next &rarr; Install &rarr; Finish</strong>.<br>
-        Knovex appears in Start Menu &amp; Desktop automatically.<br><br>
+        Knovex appears in <strong>Start Menu</strong> &amp; <strong>Desktop</strong> automatically.<br><br>
         <em>SmartScreen on first run? Click &ldquo;More info &rarr; Run anyway&rdquo;.</em>
       </div>
     </div>
@@ -348,9 +690,9 @@
       <span class="card-os-icon">&#x1F34E;</span>
       <div class="card-title">macOS</div>
       <div class="card-subtitle">macOS 12 Monterey and later</div>
-      <a class="dl-btn mac" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.3.dmg" id="mac-link">
+      <a class="dl-btn mac" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.5.dmg" id="mac-link">
         <span class="dl-btn-label">&#8659; Knovex.dmg</span>
-        <span class="dl-btn-meta">.dmg</span>
+        <span class="dl-btn-meta">.dmg &middot; x64</span>
       </a>
       <div class="dl-note">
         Open the <strong>.dmg</strong> &rarr; drag <strong>Knovex</strong> to <strong>Applications</strong> &rarr; launch.<br><br>
@@ -362,11 +704,11 @@
       <span class="card-os-icon">&#x1F427;</span>
       <div class="card-title">Linux</div>
       <div class="card-subtitle">Ubuntu 20.04+ &middot; Debian &middot; Any x64</div>
-      <a class="dl-btn app" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.3.AppImage" id="appimg-link">
+      <a class="dl-btn app" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.5.AppImage" id="appimg-link">
         <span class="dl-btn-label">&#8659; Knovex.AppImage</span>
         <span class="dl-btn-meta">portable</span>
       </a>
-      <a class="dl-btn deb" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/knovex_0.6.3_amd64.deb" id="deb-link">
+      <a class="dl-btn deb" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/knovex_0.6.5_amd64.deb" id="deb-link">
         <span class="dl-btn-label">&#8659; knovex_amd64.deb</span>
         <span class="dl-btn-meta">Ubuntu / Debian</span>
       </a>
@@ -381,20 +723,26 @@
   </div>
 </div>
 
+<!-- ── Features ──────────────────────────────────────────────────────────── -->
 <div class="section z1">
   <p class="section-label">Features</p>
-  <h2 class="section-title">Everything you need</h2>
-  <p class="section-sub">A complete AI workspace built for privacy and productivity.</p>
+  <h2 class="section-title">A complete AI workspace</h2>
+  <p class="section-sub">Built for privacy-conscious professionals who want real control over their data.</p>
   <div class="features-grid">
     <div class="feat-cell">
       <span class="feat-icon">&#x1F4AC;</span>
       <div class="feat-name">Document Chat</div>
-      <div class="feat-desc">Ask questions across PDFs, Word docs, and Markdown files via RAG.</div>
+      <div class="feat-desc">Ask questions across PDFs, Word docs, and Markdown via hybrid FTS5 + semantic RAG.</div>
     </div>
     <div class="feat-cell">
       <span class="feat-icon">&#x1F9E0;</span>
       <div class="feat-name">Knowledge Bases</div>
-      <div class="feat-desc">Organise documents into named KBs with hybrid FTS5 + semantic retrieval.</div>
+      <div class="feat-desc">Organise files into named KBs. Index once, query forever at ~1 ms latency.</div>
+    </div>
+    <div class="feat-cell">
+      <span class="feat-icon">&#x1F50D;</span>
+      <div class="feat-name">Semantic Search<span class="feat-new">New</span></div>
+      <div class="feat-desc">Dense vector embeddings via local ONNX model (~45 MB) or OpenAI Embeddings API.</div>
     </div>
     <div class="feat-cell">
       <span class="feat-icon">&#x1F393;</span>
@@ -409,61 +757,164 @@
     <div class="feat-cell">
       <span class="feat-icon">&#x1F512;</span>
       <div class="feat-name">Encrypted at Rest</div>
-      <div class="feat-desc">API keys stored with Fernet encryption. Your secrets never leave your machine.</div>
+      <div class="feat-desc">API keys stored with Fernet AES-128. Your secrets never leave your machine.</div>
     </div>
     <div class="feat-cell">
       <span class="feat-icon">&#x1F310;</span>
       <div class="feat-name">Web Search</div>
       <div class="feat-desc">Ground answers in live results via DuckDuckGo, Serper, or Brave Search.</div>
     </div>
+    <div class="feat-cell">
+      <span class="feat-icon">&#x1F4CB;</span>
+      <div class="feat-name">Document Reader</div>
+      <div class="feat-desc">In-app rendering for PDF, DOCX, XLSX, CSV, Markdown &mdash; no external viewer needed.</div>
+    </div>
+    <div class="feat-cell">
+      <span class="feat-icon">&#x1F4CA;</span>
+      <div class="feat-name">File Summaries</div>
+      <div class="feat-desc">One-click brief or detailed summary of any file or entire knowledge base.</div>
+    </div>
   </div>
 </div>
 
+<!-- ── Privacy comparison ─────────────────────────────────────────────────── -->
+<div class="section z1">
+  <div class="privacy-grid">
+    <div class="privacy-left">
+      <p class="section-label" style="text-align:left;">Why Knovex</p>
+      <div class="privacy-title">Privacy isn&rsquo;t a checkbox.<br><span class="grad-text">It&rsquo;s the foundation.</span></div>
+      <p class="privacy-desc">
+        Most AI tools send your documents to third-party servers for indexing and retrieval.
+        Knovex inverts this: your files, your vectors, your database &mdash; all on your machine.
+        The LLM call is the only optional network hop.
+      </p>
+      <div class="privacy-points">
+        <div class="privacy-point">
+          <div class="pp-check">&#10003;</div>
+          <p class="pp-text"><strong>Zero document upload</strong> &mdash; files are indexed locally with SQLite FTS5 and optional ONNX embeddings.</p>
+        </div>
+        <div class="privacy-point">
+          <div class="pp-check">&#10003;</div>
+          <p class="pp-text"><strong>No telemetry, no analytics</strong> &mdash; Knovex never phones home. Check the source.</p>
+        </div>
+        <div class="privacy-point">
+          <div class="pp-check">&#10003;</div>
+          <p class="pp-text"><strong>Use Ollama for 100% offline</strong> &mdash; combine with a local LLM and your data never leaves the machine.</p>
+        </div>
+        <div class="privacy-point">
+          <div class="pp-check">&#10003;</div>
+          <p class="pp-text"><strong>Fernet-encrypted API keys</strong> &mdash; stored in your OS user directory, unreadable by other users.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="privacy-right">
+      <div class="compare-card">
+        <div class="compare-row">
+          <div class="compare-cell header">Feature</div>
+          <div class="compare-cell header">Knovex</div>
+          <div class="compare-cell header">Cloud AI tools</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">Docs stay on device</div>
+          <div class="compare-cell knovex"><span class="check">&#10003;</span> Always</div>
+          <div class="compare-cell cloud"><span class="cross">&#10007;</span> Uploaded</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">Works offline</div>
+          <div class="compare-cell knovex"><span class="check">&#10003;</span> Yes</div>
+          <div class="compare-cell cloud"><span class="cross">&#10007;</span> No</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">No subscription</div>
+          <div class="compare-cell knovex"><span class="check">&#10003;</span> Free</div>
+          <div class="compare-cell cloud"><span class="partial">&#8776;</span> $20+/mo</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">Open source</div>
+          <div class="compare-cell knovex"><span class="check">&#10003;</span> MIT</div>
+          <div class="compare-cell cloud"><span class="cross">&#10007;</span> Closed</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">Your LLM key</div>
+          <div class="compare-cell knovex"><span class="check">&#10003;</span> Optional</div>
+          <div class="compare-cell cloud"><span class="cross">&#10007;</span> Required</div>
+        </div>
+        <div class="compare-row">
+          <div class="compare-cell">Telemetry</div>
+          <div class="compare-cell knovex"><span class="check">&#10003;</span> None</div>
+          <div class="compare-cell cloud"><span class="cross">&#10007;</span> Yes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Quick start ────────────────────────────────────────────────────────── -->
 <div class="section z1">
   <p class="section-label">Get started</p>
   <h2 class="section-title">Up and running in minutes</h2>
-  <p class="section-sub">No Python, Node.js, or terminal required.</p>
+  <p class="section-sub">No Python, Node.js, or terminal required. Just download and install.</p>
   <div class="steps">
     <div class="step">
       <div class="step-num">1</div>
       <h3>Download &amp; Install</h3>
-      <p>Run the installer for your OS. Everything is bundled &mdash; no extra setup needed.</p>
+      <p>Run the installer for your OS. The backend, frontend, and database are all bundled inside.</p>
     </div>
     <div class="step">
       <div class="step-num">2</div>
-      <h3>Add your API key</h3>
-      <p>Open Settings &rarr; LLM. Paste your OpenAI or Anthropic key. It&rsquo;s encrypted immediately.</p>
+      <h3>Configure an LLM</h3>
+      <p>Open Settings &rarr; LLM. Paste your OpenAI, Anthropic, or Groq key &mdash; it&rsquo;s encrypted immediately.</p>
     </div>
     <div class="step">
       <div class="step-num">3</div>
       <h3>Upload documents</h3>
-      <p>Drag PDFs, DOCX, or text files into a Knowledge Base and Knovex indexes them instantly.</p>
+      <p>Drag PDFs, DOCX, XLSX, or text files into a Knowledge Base. Knovex indexes them in seconds.</p>
     </div>
     <div class="step">
       <div class="step-num">4</div>
       <h3>Chat &amp; Learn</h3>
-      <p>Ask questions, get citations, or open Learn Mode to turn any topic into interactive content.</p>
+      <p>Ask questions with cited sources, run web search, or open Learn Mode for interactive content.</p>
     </div>
   </div>
 </div>
 
+<!-- ── CTA band ───────────────────────────────────────────────────────────── -->
+<div class="cta-band z1">
+  <div class="cta-band-title">Ready to own your knowledge?</div>
+  <p class="cta-band-sub">Free, open source, and running entirely on your machine.</p>
+  <div class="cta-group">
+    <a id="cta-band-download" href="#platforms">
+      &#8659; Download Knovex
+    </a>
+    <a class="cta-alt" href="https://github.com/tailorgunjan93/knovex" target="_blank">
+      View on GitHub &rarr;
+    </a>
+  </div>
+</div>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
 <footer class="z1">
   <div class="footer-left">
-    <div class="logo-mark" style="width:24px;height:24px;font-size:0.72rem;">K</div>
-    <span class="footer-copy">&copy; 2026 Gunjan Tailor &middot; Knovex v0.6.3</span>
+    <div class="logo-mark" style="width:26px;height:26px;font-size:0.72rem;border-radius:7px;">K</div>
+    <div>
+      <span class="footer-copy">&copy; 2026 Gunjan Tailor &middot; Knovex v0.6.5</span><br>
+      <span class="footer-motto">Secure &middot; Fast &middot; Reliable &middot; Cost-Effective</span>
+    </div>
   </div>
   <div class="footer-links">
     <a href="https://github.com/tailorgunjan93/knovex" target="_blank">GitHub</a>
     <a href="https://github.com/tailorgunjan93/knovex/releases" target="_blank">All releases</a>
     <a href="https://github.com/tailorgunjan93/knovex/issues" target="_blank">Report a bug</a>
+    <a href="https://github.com/tailorgunjan93/knovex/blob/main/LICENSE" target="_blank">MIT License</a>
   </div>
 </footer>
 
 <script>
-  const VERSION = "0.6.3";
+  const VERSION = "0.6.5";
   const BASE    = "https://github.com/tailorgunjan93/knovex/releases/latest/download/";
   const platforms = {
-    win:   { icon: "🫟", label: "Download for Windows",  href: BASE + "Knovex-Setup-" + VERSION + ".exe", card: "card-win"   },
+    win:   { icon: "🛏", label: "Download for Windows",  href: BASE + "Knovex-Setup-" + VERSION + ".exe", card: "card-win"   },
     mac:   { icon: "🍎", label: "Download for macOS",    href: BASE + "Knovex-" + VERSION + ".dmg",       card: "card-mac"  },
     linux: { icon: "🐧", label: "Download for Linux",    href: BASE + "Knovex-" + VERSION + ".AppImage",  card: "card-linux"},
   };
@@ -474,17 +925,38 @@
     return "linux";
   }
   (function init() {
-    const os = detectOS(), info = platforms[os];
-    const btn = document.getElementById("primary-download");
+    const os   = detectOS();
+    const info = platforms[os];
+
+    // Primary hero CTA
+    const btn  = document.getElementById("primary-download");
     const icon = document.getElementById("dl-icon");
     const lbl  = document.getElementById("dl-label");
-    const note = document.getElementById("primary-note");
     if (btn && info) {
       btn.href = info.href;
       if (icon) icon.textContent = info.icon;
-      if (lbl)  lbl.textContent  = info.label;
-      if (note) note.textContent = "Free & open source · v" + VERSION;
+      if (lbl)  lbl.textContent  = "Download for " + (os === "win" ? "Windows" : os === "mac" ? "macOS" : "Linux");
     }
+
+    // Bottom CTA band button
+    const cta2 = document.getElementById("cta-band-download");
+    if (cta2 && info) {
+      cta2.href = info.href;
+      // Inherit the primary-download styling
+      cta2.style.display     = "inline-flex";
+      cta2.style.alignItems  = "center";
+      cta2.style.gap         = "9px";
+      cta2.style.background  = "linear-gradient(135deg,#4F46E5 0%,#7C3AED 50%,#9333EA 100%)";
+      cta2.style.color       = "#fff";
+      cta2.style.fontSize    = "0.93rem";
+      cta2.style.fontWeight  = "700";
+      cta2.style.padding     = "0.72rem 1.6rem";
+      cta2.style.borderRadius= "11px";
+      cta2.style.textDecoration = "none";
+      cta2.style.boxShadow   = "0 4px 24px rgba(99,102,241,0.4)";
+    }
+
+    // Highlight detected platform card
     const card = document.getElementById(info.card);
     if (card) card.classList.add("highlighted");
   })();

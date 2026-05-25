@@ -97,6 +97,13 @@ a = Analysis(
         "langchain_core",
         # ── Learn Mode routes (Sprint 6) ──────────────────────────────────
         "backend.api.learn",
+        # ── Setup / ONNX model download (Sprint 7) ────────────────────────
+        "backend.api.setup",
+        "backend.adapters.embedder",
+        "onnxruntime",
+        "onnxruntime.capi",
+        "tokenizers",
+        "numpy",
     ],
     hookspath=[],
     hooksconfig={},

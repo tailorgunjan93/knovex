@@ -51,10 +51,26 @@ class SearchSettings(BaseModel):
     api_key: str = ""
 
 
+class EmbeddingSettings(BaseModel):
+    """
+    Embedding / vector-search configuration.
+
+    Two modes:
+      provider = "local"  — first-launch ONNX download (all-MiniLM-L6-v2, ~45 MB).
+                            Falls back to FTS5-only when model not yet downloaded.
+      provider = "openai" — OpenAI Embeddings API (text-embedding-3-small).
+                            Requires an api_key.  No local disk footprint.
+    """
+    provider: str = "local"                     # "local" | "openai"
+    model: str = "text-embedding-3-small"       # openai model (ignored for local)
+    api_key: str = ""                           # openai key (empty = local fallback)
+
+
 class AppSettingsResponse(BaseModel):
     """Full settings payload returned by GET /api/settings."""
     llm: LLMSettings = Field(default_factory=LLMSettings)
     search: SearchSettings = Field(default_factory=SearchSettings)
+    embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     theme: str = "dark"                     # light | medium | dark
     kb_storage_path: str = ""
     backend_port: int = 8765
@@ -64,6 +80,7 @@ class AppSettingsUpdate(BaseModel):
     """Payload for PUT /api/settings."""
     llm: LLMSettings | None = None
     search: SearchSettings | None = None
+    embedding: EmbeddingSettings | None = None
     theme: str | None = None
     kb_storage_path: str | None = None
 

@@ -141,11 +141,13 @@ def create_app() -> FastAPI:
     from backend.api.reader import router as reader_router
     from backend.api.search import router as search_router
     from backend.api.settings import router as settings_router
+    from backend.api.setup import router as setup_router
     from backend.api.summarizer import router as summarizer_router
     from backend.api.tools import router as tools_router
 
     app.include_router(health_router, prefix="/api", tags=["health"])
     app.include_router(settings_router, prefix="/api", tags=["settings"])
+    app.include_router(setup_router, prefix="/api", tags=["setup"])
     app.include_router(tools_router, prefix="/api", tags=["tools"])
     app.include_router(kb_router, prefix="/api", tags=["knowledge-base"])
     app.include_router(reader_router, prefix="/api", tags=["reader"])

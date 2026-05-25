@@ -37,7 +37,7 @@ from typing import Any
 
 from backend.core.encryption import IEncryptor
 from backend.core.settings_store import ISettingsStore
-from backend.models.schemas import AppSettingsResponse, LLMSettings, SearchSettings
+from backend.models.schemas import AppSettingsResponse, EmbeddingSettings, LLMSettings, SearchSettings
 
 logger = logging.getLogger("knovex.settings")
 
@@ -49,6 +49,7 @@ SENSITIVE_FIELDS: frozenset[str] = frozenset({
     "llm.aws_access_key_id",
     "llm.aws_secret_access_key",
     "search.api_key",
+    "embedding.api_key",
 })
 
 
@@ -74,6 +75,11 @@ def _default_settings() -> dict[str, Any]:
         },
         "search": {
             "engine": "duckduckgo",
+            "api_key": "",
+        },
+        "embedding": {
+            "provider": "local",
+            "model": "text-embedding-3-small",
             "api_key": "",
         },
         "theme": "dark",
@@ -204,6 +210,7 @@ class SettingsService:
         """Convert raw dict to typed AppSettingsResponse."""
         llm_raw = raw.get("llm", {})
         search_raw = raw.get("search", {})
+        embedding_raw = raw.get("embedding", {})
 
         if masked:
             llm_display = {
@@ -213,13 +220,16 @@ class SettingsService:
                 "aws_secret_access_key": _mask(llm_raw.get("aws_secret_access_key", "")),
             }
             search_display = {**search_raw, "api_key": _mask(search_raw.get("api_key", ""))}
+            embedding_display = {**embedding_raw, "api_key": _mask(embedding_raw.get("api_key", ""))}
         else:
             llm_display = llm_raw
             search_display = search_raw
+            embedding_display = embedding_raw
 
         return AppSettingsResponse(
             llm=LLMSettings(**llm_display),
             search=SearchSettings(**search_display),
+            embedding=EmbeddingSettings(**embedding_display),
             theme=raw.get("theme", "dark"),
             kb_storage_path=raw.get("kb_storage_path", ""),
             backend_port=raw.get("backend_port", 8765),

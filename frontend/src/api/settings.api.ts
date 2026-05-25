@@ -21,9 +21,16 @@ export interface SearchSettings {
   api_key: string
 }
 
+export interface EmbeddingSettings {
+  provider: string   // "local" | "openai"
+  model: string      // openai model (ignored when provider = "local")
+  api_key: string    // openai key — empty = use local model
+}
+
 export interface AppSettings {
   llm: LLMSettings
   search: SearchSettings
+  embedding: EmbeddingSettings
   theme: string
   kb_storage_path: string
   backend_port: number
@@ -66,6 +73,7 @@ export const settingsApi = {
   async update(patch: Partial<{
     llm: Partial<LLMSettings>
     search: Partial<SearchSettings>
+    embedding: Partial<EmbeddingSettings>
     theme: string
     kb_storage_path: string
   }>): Promise<AppSettings> {

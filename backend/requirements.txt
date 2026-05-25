@@ -42,5 +42,10 @@ markdown>=3.7               # Markdown to HTML rendering
 # ─── File watcher (Sprint 2+) ─────────────────────────────────────────────────
 watchdog>=4.0               # Cross-platform file system event monitoring
 
+# ─── Local embeddings (Sprint 7 — optional, ~50 MB) ──────────────────────────
+onnxruntime>=1.17           # CPU-only ONNX inference for all-MiniLM-L6-v2
+tokenizers>=0.19            # Fast Rust tokenizer (no torch dependency)
+numpy>=1.26                 # Required by onnxruntime
+
 # ─── Web scraping (Sprint 6 — Learn Mode) ────────────────────────────────────
 beautifulsoup4>=4.12        # HTML parsing for URL scraping
