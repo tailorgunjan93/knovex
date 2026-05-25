@@ -98,12 +98,14 @@ a = Analysis(
         # ── Learn Mode routes (Sprint 6) ──────────────────────────────────
         "backend.api.learn",
         # ── Setup / ONNX model download (Sprint 7) ────────────────────────
+        # NOTE: onnxruntime, tokenizers, numpy are intentionally NOT listed here.
+        # They are imported lazily inside ONNXEmbedder._load() which is only called
+        # when the user actually runs an embedding.  Listing them as hiddenimports
+        # causes PyInstaller to bundle their native DLLs, which crashes the binary
+        # on Windows at boot time due to DLL load-order conflicts.
+        # The app falls back to NullEmbedder (FTS5-only) when they are absent.
         "backend.api.setup",
         "backend.adapters.embedder",
-        "onnxruntime",
-        "onnxruntime.capi",
-        "tokenizers",
-        "numpy",
     ],
     hookspath=[],
     hooksconfig={},
@@ -132,7 +134,9 @@ a = Analysis(
         "torchaudio",
         "torch._C",
         "transformers",
-        "tokenizers",
+        # "tokenizers" intentionally NOT excluded — it is a valid lazy import
+        # inside ONNXEmbedder._load().  Excluding it here would conflict with
+        # any future attempt to bundle it, and causes PyInstaller analysis errors.
         "sentence_transformers",
         "sentence_transformers.models",
         "huggingface_hub",

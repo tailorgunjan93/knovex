@@ -11,6 +11,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.6.7] — 2026-05-25
+
+### Fixed
+
+- **Backend fails to start after installation** — removed `onnxruntime`, `onnxruntime.capi`,
+  `tokenizers`, and `numpy` from PyInstaller `hiddenimports`. These packages are only
+  imported lazily inside `ONNXEmbedder._load()` (called only when dense embeddings are
+  actually run). Bundling their native Windows DLLs as hiddenimports caused load-order
+  conflicts that crashed the backend binary at boot time on Windows.
+- **`tokenizers` listed in both `hiddenimports` and `excludes`** — `excludes` silently
+  won, causing a broken dependency chain during PyInstaller analysis. Removed from both;
+  the package is optional at runtime (app falls back to FTS5-only via `NullEmbedder`).
+- **Backend crash details invisible to user** — `stdio: 'pipe'` was silently discarding
+  backend stdout/stderr. Now piped to `userData/backend.log` (appended on every launch).
+  The error dialog now shows the last 10 stderr lines and the log file path so crashes
+  are diagnosable without a debugger.
+
+---
+
 ## [0.6.6] — 2026-05-25
 
 Sprint 7 — Semantic Search · Copper Theme · Auto-update
@@ -505,7 +524,8 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.6.7...HEAD
+[0.6.7]: https://github.com/tailorgunjan93/knovex/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/tailorgunjan93/knovex/compare/v0.6.0...v0.6.6
 [0.6.0]: https://github.com/tailorgunjan93/knovex/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/tailorgunjan93/knovex/compare/v0.4.0...v0.5.0

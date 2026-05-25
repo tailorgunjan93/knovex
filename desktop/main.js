@@ -45,6 +45,7 @@ let mainWindow = null
 let tray = null
 let backendProcess = null
 let backendReady = false
+let backendStderrLines = []   // rolling buffer — last 30 lines for error dialog
 
 // ─── Backend spawn ────────────────────────────────────────────────────────────
 
@@ -77,16 +78,39 @@ function spawnBackend() {
   backendProcess = spawn(executable, args, {
     cwd,
     env: { ...process.env, PYTHONUNBUFFERED: '1' },
-    stdio: IS_DEV ? 'inherit' : 'pipe',
+    stdio: ['ignore', 'pipe', 'pipe'],  // always pipe so we can log + diagnose
+  })
+
+  // ── Log file (always written in production, mirrors console in dev) ─────────
+  const logPath = path.join(app.getPath('userData'), 'backend.log')
+  const logStream = fs.createWriteStream(logPath, { flags: 'a' })
+  logStream.write(`\n=== Knovex backend started ${new Date().toISOString()} ===\n`)
+
+  backendProcess.stdout.on('data', (chunk) => {
+    const text = chunk.toString()
+    console.log('[backend]', text.trimEnd())
+    logStream.write(text)
+  })
+
+  backendProcess.stderr.on('data', (chunk) => {
+    const text = chunk.toString()
+    console.error('[backend:err]', text.trimEnd())
+    logStream.write(text)
+    // Keep a rolling window of the last 30 lines for the error dialog
+    backendStderrLines.push(...text.split('\n').filter(Boolean))
+    if (backendStderrLines.length > 30) backendStderrLines = backendStderrLines.slice(-30)
   })
 
   backendProcess.on('exit', (code) => {
     console.log('[backend] exited with code:', code)
+    logStream.write(`=== backend exited code=${code} ===\n`)
+    logStream.end()
     backendReady = false
   })
 
   backendProcess.on('error', (err) => {
     console.error('[backend] spawn error:', err.message)
+    logStream.write(`=== spawn error: ${err.message} ===\n`)
   })
 }
 
@@ -376,9 +400,14 @@ app.on('ready', async () => {
     await waitForBackend()
   } catch (err) {
     console.error('[app] Backend failed to start:', err.message)
+    const logPath = path.join(app.getPath('userData'), 'backend.log')
+    const lastLines = backendStderrLines.slice(-10).join('\n')
+    const detail = lastLines
+      ? `Last error output:\n${lastLines}\n\nFull log: ${logPath}`
+      : `No output captured.\n\nCheck log file: ${logPath}`
     dialog.showErrorBox(
       'Knovex — Backend Error',
-      `The Knovex backend failed to start:\n\n${err.message}\n\nPlease try restarting the app.`,
+      `The Knovex backend failed to start:\n\n${err.message}\n\n${detail}\n\nPlease try restarting the app.`,
     )
     app.quit()
     return
