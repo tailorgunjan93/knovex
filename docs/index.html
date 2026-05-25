@@ -1,965 +1,1081 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-theme="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Knovex — AI Knowledge Assistant</title>
-  <meta name="description" content="Your AI-powered knowledge assistant. Chat with documents, build a knowledge base, and learn anything. One-click installer for Windows, macOS, and Linux." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Knovex — AI Knowledge Assistant for Desktop</title>
+<meta name="description" content="Knovex — your private AI knowledge assistant. Chat with documents, build knowledge bases, learn anything. One‑click installer for Windows, macOS and Linux. 100% on‑device." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:        #0B0B0C;
+    --bg-elev:   #111114;
+    --bg-elev-2: #16161A;
+    --line:      rgba(245,241,234,.08);
+    --line-2:    rgba(245,241,234,.14);
+    --fg:        #F5F1EA;
+    --fg-2:      rgba(245,241,234,.72);
+    --fg-3:      rgba(245,241,234,.50);
+    --fg-4:      rgba(245,241,234,.32);
+    --accent:    oklch(0.78 0.13 60);
+    --accent-2:  oklch(0.62 0.14 55);
+    --accent-ink:#1A140C;
+    --radius:    14px;
+    --radius-sm: 8px;
+    --maxw:      1200px;
+    --grid-color: rgba(245,241,234,.045);
+  }
+  html[data-theme="light"]{
+    --bg:        #F5F1EA;
+    --bg-elev:   #EFEAE0;
+    --bg-elev-2: #E7E1D5;
+    --line:      rgba(20,18,14,.08);
+    --line-2:    rgba(20,18,14,.16);
+    --fg:        #14120E;
+    --fg-2:      rgba(20,18,14,.72);
+    --fg-3:      rgba(20,18,14,.55);
+    --fg-4:      rgba(20,18,14,.32);
+    --accent-ink:#FFF8EE;
+    --grid-color: rgba(20,18,14,.05);
+  }
 
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--fg);
+    font: 400 16px/1.55 "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-feature-settings:"ss01","cv11";
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    overflow-x:hidden;
+  }
+  ::selection{background:var(--accent);color:var(--accent-ink)}
+  a{color:inherit;text-decoration:none}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:default;padding:0}
+  code,pre,kbd,samp{font-family:"Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace}
+  .mono{font-family:"Geist Mono", ui-monospace, monospace; font-feature-settings:"zero","ss01"}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 28px}
 
-    :root {
-      --bg:          #060912;
-      --bg-2:        #0C1021;
-      --bg-3:        #111827;
-      --bg-card:     rgba(255,255,255,0.028);
-      --bg-card-h:   rgba(255,255,255,0.05);
-      --border:      rgba(255,255,255,0.065);
-      --border-h:    rgba(255,255,255,0.13);
-      --indigo:      #6366F1;
-      --violet:      #8B5CF6;
-      --fuchsia:     #D946EF;
-      --grad:        linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #9333EA 100%);
-      --grad-text:   linear-gradient(135deg, #818CF8 0%, #A78BFA 50%, #C084FC 100%);
-      --grad-soft:   linear-gradient(135deg, rgba(79,70,229,0.15) 0%, rgba(147,51,234,0.15) 100%);
-      --text:        #F1F5F9;
-      --text-2:      #94A3B8;
-      --text-3:      #475569;
-      --green:       #10B981;
-      --win:         #38BDF8;
-      --mac:         #E2E8F0;
-      --linux:       #FB923C;
-      --radius:      16px;
-      --radius-sm:   10px;
-      --glow:        0 0 48px rgba(99,102,241,0.18);
-      --glow-sm:     0 0 24px rgba(99,102,241,0.12);
-    }
+  /* ── ambient backdrop ─────────────────────────────────────── */
+  .ambient{
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:
+      radial-gradient(900px 600px at 75% -10%, color-mix(in oklab, var(--accent) 18%, transparent), transparent 60%),
+      radial-gradient(700px 500px at 10% 10%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 55%);
+  }
+  .grid-bg{
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse at 50% 0%, #000 30%, transparent 75%);
+  }
 
-    body {
-      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
-    }
+  /* ── nav ──────────────────────────────────────────────────── */
+  nav.top{
+    position:sticky; top:0; z-index:50;
+    background:color-mix(in oklab, var(--bg) 78%, transparent);
+    -webkit-backdrop-filter:saturate(140%) blur(14px);
+    backdrop-filter:saturate(140%) blur(14px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-inner{display:flex; align-items:center; gap:24px; height:64px}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:-.01em}
+  .brand-mark{
+    width:28px; height:28px; border-radius:8px; position:relative;
+    background: conic-gradient(from 220deg at 50% 50%, var(--accent), color-mix(in oklab, var(--accent) 60%, #000), var(--accent));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), 0 2px 10px color-mix(in oklab, var(--accent) 30%, transparent);
+  }
+  .brand-mark::after{
+    content:""; position:absolute; inset:6px; border-radius:4px;
+    background:var(--bg);
+    clip-path: polygon(0 0, 55% 0, 100% 100%, 45% 100%, 0 55%);
+  }
+  html[data-theme="light"] .brand-mark::after{background:var(--bg)}
+  .brand-name{font-size:15px}
+  .brand-name .dot{color:var(--accent); margin:0 .15em}
+  .nav-links{display:flex; gap:6px; margin-left:auto; align-items:center}
+  .nav-link{
+    font-size:13.5px; color:var(--fg-2); padding:8px 12px; border-radius:8px;
+    transition: color .15s ease, background .15s ease;
+  }
+  .nav-link:hover{color:var(--fg); background:var(--line)}
+  .pill-version{
+    margin-left:8px; padding:6px 10px; border:1px solid var(--line-2);
+    border-radius:999px; font-size:11.5px; color:var(--fg-2);
+    display:inline-flex; align-items:center; gap:8px; cursor:default;
+  }
+  .pill-version .led{
+    width:6px; height:6px; border-radius:50%; background:#3ED68A;
+    box-shadow:0 0 0 3px color-mix(in oklab, #3ED68A 28%, transparent);
+  }
+  .theme-toggle{
+    margin-left:4px; padding:0; border-radius:999px;
+    border:1px solid var(--line-2);
+    background:color-mix(in oklab, var(--bg-elev) 60%, transparent);
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .theme-toggle:hover{ border-color: color-mix(in oklab, var(--accent) 50%, var(--line-2)) }
+  .tt-track{
+    position:relative; display:flex; align-items:center; justify-content:space-between;
+    width:58px; height:26px; padding:0 8px; border-radius:999px;
+  }
+  .tt-icon{ display:inline-flex; align-items:center; justify-content:center;
+            width:12px; height:12px; color:var(--fg-3); z-index:1;
+            transition: color .2s ease; }
+  .tt-thumb{
+    position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%;
+    background: var(--accent);
+    box-shadow: 0 1px 0 rgba(255,255,255,.2) inset,
+                0 2px 8px color-mix(in oklab, var(--accent) 50%, transparent);
+    transition: transform .25s cubic-bezier(.4,.0,.2,1);
+  }
+  html[data-theme="dark"]  .tt-thumb{ transform: translateX(0) }
+  html[data-theme="light"] .tt-thumb{ transform: translateX(32px) }
+  html[data-theme="dark"]  .tt-moon{ color: var(--accent-ink) }
+  html[data-theme="light"] .tt-sun{  color: var(--accent-ink) }
 
-    /* ── Background grid ───────────────────────────────────────────────── */
-    body::before {
-      content: "";
-      position: fixed; inset: 0;
-      background-image:
-        linear-gradient(rgba(99,102,241,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(99,102,241,0.025) 1px, transparent 1px);
-      background-size: 56px 56px;
-      pointer-events: none;
-      z-index: 0;
-    }
+  /* ── hero ─────────────────────────────────────────────────── */
+  main{position:relative; z-index:1}
+  .hero{ padding: 88px 0 64px; position:relative }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:10px;
+    padding:6px 10px 6px 6px; border:1px solid var(--line-2);
+    border-radius:999px; font-size:12px; color:var(--fg-2);
+    background:color-mix(in oklab, var(--bg-elev) 50%, transparent);
+  }
+  .eyebrow .tag{
+    background:var(--accent); color:var(--accent-ink);
+    padding:2px 8px; border-radius:999px; font-size:10.5px; font-weight:600;
+    letter-spacing:.04em; text-transform:uppercase;
+  }
+  h1.title{
+    font: 600 clamp(48px, 7.2vw, 92px)/1.02 "Geist", sans-serif;
+    letter-spacing: -0.035em;
+    margin: 22px 0 22px;
+    max-width: 16ch;
+    text-wrap:balance;
+  }
+  h1.title em{font-style:normal; color:var(--fg-3); font-weight:500}
+  h1.title .acc{ color:var(--accent); font-style:normal; }
+  .lede{
+    max-width: 52ch; color:var(--fg-2);
+    font-size: clamp(16px, 1.35vw, 18px); line-height:1.6;
+    margin: 0 0 36px;
+  }
+  .cta-row{display:flex; flex-wrap:wrap; gap:14px; align-items:center}
+  .btn{
+    display:inline-flex; align-items:center; gap:10px;
+    padding:14px 18px; border-radius:10px; font-weight:500; font-size:14.5px;
+    border:1px solid transparent; cursor:default; letter-spacing:-.005em;
+    transition: transform .12s ease, background .15s ease, border-color .15s ease, box-shadow .2s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn-primary{
+    background:var(--fg); color:var(--bg);
+    box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 6px 24px -8px color-mix(in oklab, var(--fg) 50%, transparent);
+  }
+  .btn-primary:hover{background:color-mix(in oklab, var(--fg) 92%, var(--accent) 8%)}
+  .btn-primary .sub{color:color-mix(in oklab, var(--bg) 70%, var(--fg) 30%); font-size:12px; margin-left:2px}
+  .btn-ghost{ color:var(--fg-2); border-color:var(--line-2) }
+  .btn-ghost:hover{ color:var(--fg); border-color:color-mix(in oklab, var(--line-2) 60%, var(--fg) 40%) }
+  .btn .glyph{ width:14px; height:14px; display:inline-flex; align-items:center; justify-content:center }
+  .os-line{
+    margin-top:14px; font-size:12.5px; color:var(--fg-3);
+    display:flex; align-items:center; gap:10px; letter-spacing:.01em;
+  }
+  .os-line .dot{width:4px; height:4px; border-radius:50%; background:var(--fg-4)}
 
-    .z1 { position: relative; z-index: 1; }
+  /* feature chips */
+  .chips{
+    display:flex; flex-wrap:wrap; gap:8px; margin-top:48px;
+    max-width: 900px;
+  }
+  .chip{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:8px 12px; border:1px solid var(--line);
+    border-radius:999px; font-size:12.5px; color:var(--fg-2);
+    background:color-mix(in oklab, var(--bg-elev) 55%, transparent);
+  }
+  .chip .ic{ width:6px; height:6px; border-radius:50%; background:var(--accent); opacity:.9 }
+  .chip.new-chip{
+    border-color:color-mix(in oklab, var(--accent) 35%, var(--line));
+    background:color-mix(in oklab, var(--accent) 8%, var(--bg-elev));
+    color:var(--fg);
+  }
+  .chip.new-chip .ic{ opacity:1; box-shadow:0 0 6px color-mix(in oklab, var(--accent) 60%, transparent) }
 
-    .grad-text {
-      background: var(--grad-text);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
+  /* ── product window ───────────────────────────────────────── */
+  .product{
+    margin: 80px 0 0;
+    border:1px solid var(--line-2); border-radius:18px; overflow:hidden;
+    background:linear-gradient(180deg, var(--bg-elev) 0%, var(--bg-elev-2) 100%);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.04) inset,
+      0 30px 80px -30px rgba(0,0,0,.6),
+      0 0 0 1px color-mix(in oklab, var(--accent) 6%, transparent);
+  }
+  .pw-bar{
+    display:flex; align-items:center; gap:14px; padding:12px 16px;
+    border-bottom:1px solid var(--line);
+  }
+  .pw-traffic{display:flex; gap:7px}
+  .pw-traffic span{width:11px; height:11px; border-radius:50%}
+  .pw-traffic span:nth-child(1){background:#FF5F57}
+  .pw-traffic span:nth-child(2){background:#FEBC2E}
+  .pw-traffic span:nth-child(3){background:#28C840}
+  .pw-title{font-size:12px; color:var(--fg-3); letter-spacing:.02em}
+  .pw-search{
+    margin-left:auto; font-size:12px; color:var(--fg-4);
+    border:1px solid var(--line); padding:5px 10px; border-radius:6px;
+    min-width:220px; background:color-mix(in oklab, var(--bg) 50%, transparent);
+  }
+  .pw-body{
+    display:grid; grid-template-columns: 220px 1fr; min-height: 480px;
+  }
+  .pw-side{ border-right:1px solid var(--line); padding:16px 12px; }
+  .pw-side h5{
+    font-size:10.5px; color:var(--fg-4); margin:14px 8px 6px;
+    text-transform:uppercase; letter-spacing:.12em; font-weight:600;
+  }
+  .pw-side h5:first-child{margin-top:0}
+  .pw-item{
+    display:flex; align-items:center; gap:10px; padding:7px 8px;
+    border-radius:6px; font-size:13px; color:var(--fg-2);
+  }
+  .pw-item .sq{ width:14px; height:14px; border-radius:4px; background:var(--line-2); flex:none }
+  .pw-item.active{ background:color-mix(in oklab, var(--accent) 18%, transparent); color:var(--fg) }
+  .pw-item.active .sq{ background:var(--accent) }
+  .pw-main{ padding: 26px 28px; display:flex; flex-direction:column; gap:18px; min-width:0 }
+  .pw-crumb{font-size:11.5px; color:var(--fg-4); letter-spacing:.06em; text-transform:uppercase}
+  .pw-h{ font-size: 22px; letter-spacing:-.01em; font-weight:600; margin:0 }
+  .pw-meta{display:flex; gap:14px; color:var(--fg-3); font-size:12.5px; flex-wrap:wrap}
+  .pw-meta b{color:var(--fg-2); font-weight:500}
+  .pw-msgs{ display:flex; flex-direction:column; gap:14px; flex:1; min-height:0 }
+  .msg{ display:flex; gap:12px; align-items:flex-start }
+  .msg .ava{
+    width:26px; height:26px; border-radius:50%; flex:none;
+    background:var(--line-2); display:flex; align-items:center; justify-content:center;
+    font-size:11px; color:var(--fg-2); font-weight:600;
+  }
+  .msg.user .ava{ background: color-mix(in oklab, var(--accent) 30%, transparent); color:var(--fg) }
+  .msg.bot  .ava{
+    background: conic-gradient(from 200deg, var(--accent), color-mix(in oklab, var(--accent) 50%, #000));
+    color: var(--accent-ink);
+  }
+  .msg .bub{
+    border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+    font-size:13.5px; line-height:1.55; color:var(--fg-2);
+    background: color-mix(in oklab, var(--bg) 30%, transparent);
+    max-width: 92%;
+  }
+  .msg .bub .src{
+    display:flex; gap:6px; align-items:center; margin-top:8px; flex-wrap:wrap;
+    color:var(--fg-3); font-size:11.5px;
+  }
+  .msg .bub .src .pg{
+    background: color-mix(in oklab, var(--accent) 18%, transparent);
+    color:var(--fg); border-radius:4px; padding:1px 6px;
+    font-family:"Geist Mono",monospace; font-size:11px;
+  }
+  .pw-input{
+    border:1px solid var(--line-2); border-radius:10px; padding:10px 12px;
+    display:flex; align-items:center; gap:10px; color:var(--fg-4); font-size:13px;
+    background:color-mix(in oklab, var(--bg) 40%, transparent);
+  }
+  .pw-input .send{
+    margin-left:auto; padding:5px 10px; border-radius:6px;
+    background:var(--accent); color:var(--accent-ink); font-size:11px; font-weight:600;
+    font-family:"Geist Mono", monospace; letter-spacing:.03em;
+  }
 
-    /* ── Nav ────────────────────────────────────────────────────────────── */
-    nav {
-      position: sticky; top: 0; z-index: 100;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 2.5rem; height: 62px;
-      background: rgba(6,9,18,0.80);
-      backdrop-filter: blur(20px) saturate(1.8);
-      -webkit-backdrop-filter: blur(20px) saturate(1.8);
-      border-bottom: 1px solid var(--border);
-    }
-    .logo {
-      display: flex; align-items: center; gap: 10px;
-      text-decoration: none; color: var(--text);
-      font-weight: 750; font-size: 1.05rem; letter-spacing: -0.015em;
-    }
-    .logo-mark {
-      width: 32px; height: 32px; background: var(--grad);
-      border-radius: 9px;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 900; font-size: 0.88rem; color: #fff;
-      box-shadow: 0 0 16px rgba(99,102,241,0.50), 0 2px 8px rgba(0,0,0,0.4);
-    }
-    .nav-right { display: flex; align-items: center; gap: 0.15rem; }
-    .nav-link {
-      color: var(--text-2); text-decoration: none;
-      font-size: 0.84rem; font-weight: 500;
-      padding: 0.4rem 0.8rem; border-radius: 7px;
-      transition: color 0.15s, background 0.15s;
-    }
-    .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.055); }
-    .nav-btn {
-      margin-left: 0.6rem; padding: 0.42rem 1.05rem;
-      background: var(--grad); color: #fff;
-      font-size: 0.84rem; font-weight: 650; border-radius: 8px;
-      text-decoration: none; transition: opacity 0.15s, transform 0.15s;
-      box-shadow: 0 2px 12px rgba(99,102,241,0.30);
-    }
-    .nav-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+  /* ── sections ─────────────────────────────────────────────── */
+  section{ position:relative; z-index:1; padding: 88px 0 }
+  .sec-head{ display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:36px; flex-wrap:wrap }
+  .sec-eyebrow{
+    font-family:"Geist Mono", monospace; font-size:11.5px; letter-spacing:.18em;
+    text-transform:uppercase; color:var(--fg-4);
+  }
+  .sec-eyebrow .num{ color:var(--accent); margin-right:8px }
+  h2.sec-h{
+    font: 500 clamp(28px, 3.4vw, 44px)/1.08 "Geist", sans-serif;
+    letter-spacing:-.022em; margin:8px 0 0; max-width: 22ch; text-wrap:balance;
+  }
+  .sec-sub{ color:var(--fg-3); max-width: 44ch; font-size:14.5px; text-align:right }
 
-    /* ── Hero ───────────────────────────────────────────────────────────── */
-    .hero {
-      position: relative;
-      padding: 5.5rem 2.5rem 4.5rem;
-      max-width: 1120px; margin: 0 auto;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      align-items: center;
-      gap: 4rem;
-      overflow: hidden;
-    }
-    .hero-orb-1 {
-      position: absolute; top: -120px; left: -100px;
-      width: 600px; height: 600px;
-      background: radial-gradient(ellipse, rgba(79,70,229,0.22) 0%, transparent 65%);
-      pointer-events: none; z-index: 0;
-    }
-    .hero-orb-2 {
-      position: absolute; bottom: -80px; right: -80px;
-      width: 500px; height: 500px;
-      background: radial-gradient(ellipse, rgba(147,51,234,0.14) 0%, transparent 65%);
-      pointer-events: none; z-index: 0;
-    }
-    .hero-left { position: relative; z-index: 1; }
-    .badge {
-      display: inline-flex; align-items: center; gap: 7px;
-      background: rgba(99,102,241,0.11); border: 1px solid rgba(99,102,241,0.22);
-      color: #A5B4FC; font-size: 0.72rem; font-weight: 650;
-      padding: 0.28rem 0.85rem; border-radius: 999px; margin-bottom: 1.8rem;
-      letter-spacing: 0.05em; text-transform: uppercase;
-    }
-    .badge-dot {
-      width: 6px; height: 6px; background: var(--green); border-radius: 50%;
-      box-shadow: 0 0 6px rgba(16,185,129,0.7);
-      animation: pulse 2.2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%,100% { opacity:1; transform:scale(1); box-shadow: 0 0 6px rgba(16,185,129,0.7); }
-      50%      { opacity:0.6; transform:scale(0.75); box-shadow: 0 0 3px rgba(16,185,129,0.4); }
-    }
-    h1 {
-      font-size: clamp(2.2rem, 4.5vw, 3.25rem);
-      font-weight: 900; line-height: 1.08;
-      letter-spacing: -0.035em; margin-bottom: 1.2rem;
-    }
-    .hero-sub {
-      color: var(--text-2); font-size: 1rem;
-      max-width: 440px; line-height: 1.72; font-weight: 400;
-      margin-bottom: 2.25rem;
-    }
-    .cta-group {
-      display: flex; align-items: center;
-      flex-wrap: wrap; gap: 0.65rem; margin-bottom: 1rem;
-    }
-    #primary-download {
-      display: inline-flex; align-items: center; gap: 9px;
-      background: var(--grad); color: #fff;
-      font-size: 0.93rem; font-weight: 700;
-      padding: 0.72rem 1.6rem; border-radius: 11px;
-      text-decoration: none;
-      box-shadow: 0 4px 24px rgba(99,102,241,0.4), 0 1px 4px rgba(0,0,0,0.3);
-      transition: box-shadow 0.2s, transform 0.15s;
-    }
-    #primary-download:hover {
-      box-shadow: 0 6px 36px rgba(99,102,241,0.58), 0 2px 8px rgba(0,0,0,0.4);
-      transform: translateY(-2px);
-    }
-    .cta-alt {
-      display: inline-flex; align-items: center; gap: 7px;
-      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
-      color: var(--text-2); font-size: 0.88rem; font-weight: 600;
-      padding: 0.72rem 1.2rem; border-radius: 11px;
-      text-decoration: none;
-      transition: border-color 0.15s, color 0.15s, background 0.15s;
-    }
-    .cta-alt:hover { border-color: var(--border-h); color: var(--text); background: rgba(255,255,255,0.07); }
-    .hero-meta {
-      display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;
-      font-size: 0.76rem; color: var(--text-3);
-    }
-    .hero-meta-item { display: flex; align-items: center; gap: 5px; }
-    .hero-meta-dot { width: 4px; height: 4px; background: var(--text-3); border-radius: 50%; }
+  /* ── platforms ────────────────────────────────────────────── */
+  .platforms{
+    display:grid; grid-template-columns: repeat(3, 1fr); gap:18px;
+  }
+  .plat{
+    position:relative;
+    border:1px solid var(--line-2); border-radius:16px; padding:24px;
+    background:linear-gradient(180deg, var(--bg-elev) 0%, color-mix(in oklab, var(--bg-elev-2) 80%, transparent) 100%);
+    display:flex; flex-direction:column; gap:18px;
+    transition: border-color .2s ease, transform .2s ease, box-shadow .25s ease;
+  }
+  .plat:hover{
+    border-color: color-mix(in oklab, var(--accent) 50%, var(--line-2));
+    transform: translateY(-2px);
+    box-shadow: 0 20px 60px -30px color-mix(in oklab, var(--accent) 30%, transparent);
+  }
+  .plat[data-detected="true"]{
+    border-color: color-mix(in oklab, var(--accent) 70%, var(--line-2));
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--accent) 50%, transparent),
+      0 20px 60px -30px color-mix(in oklab, var(--accent) 40%, transparent);
+  }
+  .plat .detected{
+    position:absolute; top:14px; right:14px;
+    padding:4px 8px; border-radius:999px; font-size:10.5px; font-weight:600;
+    background:var(--accent); color:var(--accent-ink); letter-spacing:.04em; text-transform:uppercase;
+    display:none;
+  }
+  .plat[data-detected="true"] .detected{display:inline-block}
+  .plat-head{ display:flex; align-items:center; gap:14px }
+  .plat-mark{
+    width:44px; height:44px; border-radius:11px; flex:none;
+    border:1px solid var(--line-2);
+    background:color-mix(in oklab, var(--bg) 60%, transparent);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--fg);
+  }
+  .plat-name{font-size:18px; font-weight:600; letter-spacing:-.01em}
+  .plat-req{font-size:12px; color:var(--fg-3); margin-top:2px}
+  .plat-size{
+    margin-left:auto; text-align:right; font-family:"Geist Mono", monospace;
+    font-size:11px; color:var(--fg-3); line-height:1.4;
+  }
+  .plat-size b{display:block; color:var(--fg-2); font-weight:500}
+  .plat-dl{ display:flex; flex-direction:column; gap:8px; }
+  .plat-dl a{
+    display:flex; align-items:center; gap:10px;
+    padding:12px 14px; border-radius:10px;
+    border:1px solid var(--line-2);
+    font-size:13.5px;
+    background:color-mix(in oklab, var(--bg) 30%, transparent);
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .plat-dl a:hover{ border-color: color-mix(in oklab, var(--accent) 70%, var(--line-2)); background:color-mix(in oklab, var(--accent) 5%, var(--bg)) }
+  .plat-dl a .file{ font-family:"Geist Mono", monospace; font-size:12.5px; color:var(--fg) }
+  .plat-dl a .arch{ margin-left:auto; color:var(--fg-4); font-size:11px; font-family:"Geist Mono", monospace }
+  .plat-dl a .arrow{ width:14px; height:14px; color:var(--fg-3); flex:none; transition:transform .2s ease }
+  .plat-dl a:hover .arrow{ transform: translateY(2px); color:var(--accent) }
+  .plat-note{ color:var(--fg-3); font-size:12px; line-height:1.55 }
+  .plat-note kbd{
+    border:1px solid var(--line-2); padding:1px 6px; border-radius:4px;
+    font-size:11px; color:var(--fg-2); background:color-mix(in oklab, var(--bg) 50%, transparent);
+  }
+  .plat-snippet{
+    background:#08080A; color:#E8E2D6;
+    border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; font-size:12px; font-family:"Geist Mono", monospace;
+    line-height:1.6; position:relative; overflow:hidden;
+  }
+  html[data-theme="light"] .plat-snippet{ background:#1A1814; color:#F5F1EA }
+  .plat-snippet .prompt{ color:var(--accent); user-select:none; margin-right:8px }
+  .plat-snippet button.copy{
+    position:absolute; top:6px; right:6px;
+    font-size:10px; color:var(--fg-3); padding:3px 7px;
+    border-radius:5px; border:1px solid var(--line);
+    background:color-mix(in oklab, var(--bg) 60%, transparent);
+    font-family:"Geist Mono", monospace; letter-spacing:.05em;
+    transition: color .15s ease, border-color .15s ease;
+  }
+  .plat-snippet button.copy:hover{ color:var(--accent); border-color:color-mix(in oklab, var(--accent) 50%, var(--line)) }
+  .plat-snippet button.copy[data-copied="true"]{ color:#3ED68A; border-color:#3ED68A55 }
 
-    /* ── App preview mockup ─────────────────────────────────────────────── */
-    .hero-right { position: relative; z-index: 1; }
-    .app-frame {
-      background: var(--bg-2);
-      border: 1px solid var(--border-h);
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04), var(--glow);
-      transform: perspective(1200px) rotateY(-4deg) rotateX(2deg);
-      transition: transform 0.4s ease;
-    }
-    .app-frame:hover {
-      transform: perspective(1200px) rotateY(-1deg) rotateX(0.5deg);
-    }
-    .titlebar {
-      background: var(--bg-3); height: 38px;
-      display: flex; align-items: center; padding: 0 14px; gap: 7px;
-      border-bottom: 1px solid var(--border);
-    }
-    .tb-dot { width: 11px; height: 11px; border-radius: 50%; }
-    .tb-dot.r { background: #FF5F56; }
-    .tb-dot.y { background: #FFBD2E; }
-    .tb-dot.g { background: #27C93F; }
-    .tb-title {
-      margin-left: auto; margin-right: auto;
-      font-size: 0.72rem; color: var(--text-3); font-weight: 500;
-    }
-    .app-body { display: flex; height: 340px; }
-    .sidebar {
-      width: 200px; background: rgba(0,0,0,0.25);
-      border-right: 1px solid var(--border);
-      padding: 12px 10px;
-      flex-shrink: 0;
-      display: flex; flex-direction: column; gap: 4px;
-    }
-    .sb-section { font-size: 0.62rem; color: var(--text-3); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 8px 4px; }
-    .sb-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 8px; border-radius: 6px;
-      font-size: 0.72rem; font-weight: 500; color: var(--text-2);
-      cursor: default;
-    }
-    .sb-item.active { background: rgba(99,102,241,0.15); color: #A5B4FC; }
-    .sb-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .main-area { flex: 1; display: flex; flex-direction: column; }
-    .chat-area { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
-    .msg { display: flex; gap: 8px; }
-    .msg-avatar {
-      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.55rem; font-weight: 800; margin-top: 2px;
-    }
-    .msg.user .msg-avatar { background: rgba(99,102,241,0.3); color: #A5B4FC; }
-    .msg.assistant .msg-avatar { background: var(--grad); color: #fff; }
-    .msg-content { flex: 1; }
-    .msg-bubble {
-      font-size: 0.68rem; line-height: 1.5; color: var(--text-2);
-      background: rgba(255,255,255,0.04); border: 1px solid var(--border);
-      border-radius: 8px; padding: 7px 10px;
-      max-width: 280px;
-    }
-    .msg.user .msg-bubble { background: rgba(99,102,241,0.1); border-color: rgba(99,102,241,0.2); color: var(--text); margin-left: auto; }
-    .msg-source {
-      font-size: 0.58rem; color: var(--text-3); margin-top: 3px;
-      display: flex; align-items: center; gap: 4px;
-    }
-    .msg-source-tag {
-      background: rgba(99,102,241,0.1); color: #A5B4FC;
-      border-radius: 4px; padding: 1px 5px; font-size: 0.57rem;
-    }
-    .chat-input {
-      height: 40px; background: rgba(0,0,0,0.2); border-top: 1px solid var(--border);
-      display: flex; align-items: center; gap: 8px; padding: 0 12px;
-    }
-    .input-mock {
-      flex: 1; height: 22px; background: rgba(255,255,255,0.05);
-      border: 1px solid var(--border); border-radius: 5px;
-    }
-    .send-btn {
-      width: 22px; height: 22px; background: var(--grad);
-      border-radius: 5px; flex-shrink: 0;
-    }
+  /* ── features grid ────────────────────────────────────────── */
+  .features-grid{
+    display:grid; grid-template-columns: repeat(3, 1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  }
+  .feat{
+    background:var(--bg-elev); padding:28px 24px;
+    display:flex; flex-direction:column; gap:10px;
+    transition:background .2s ease;
+  }
+  .feat:hover{ background:var(--bg-elev-2) }
+  .feat-icon{ font-size:22px; display:block; line-height:1 }
+  .feat-title{ font-size:14px; font-weight:600; letter-spacing:-.01em }
+  .feat-title .badge-new{
+    display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--accent-ink);
+    background:var(--accent); padding:2px 5px; border-radius:4px; margin-left:7px;
+    vertical-align:middle;
+  }
+  .feat-desc{ color:var(--fg-3); font-size:13px; line-height:1.55 }
 
-    /* ── Stats strip ────────────────────────────────────────────────────── */
-    .stats-strip {
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-      background: rgba(255,255,255,0.015);
-      padding: 2rem 2.5rem;
-    }
-    .stats-inner {
-      max-width: 900px; margin: 0 auto;
-      display: flex; justify-content: space-around; flex-wrap: wrap; gap: 1.5rem;
-    }
-    .stat { text-align: center; }
-    .stat-val {
-      display: block; font-size: 1.7rem; font-weight: 850;
-      background: var(--grad-text);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-      letter-spacing: -0.03em; line-height: 1;
-    }
-    .stat-lbl { font-size: 0.76rem; color: var(--text-3); font-weight: 500; margin-top: 5px; }
+  /* ── steps ────────────────────────────────────────────────── */
+  .steps{
+    display:grid; grid-template-columns: repeat(4, 1fr); gap:0;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+  }
+  .step{
+    padding: 28px 24px 36px; border-left:1px solid var(--line);
+    display:flex; flex-direction:column; gap:10px; position:relative;
+  }
+  .step:first-child{border-left:0}
+  .step .n{
+    font-family:"Geist Mono", monospace; font-size:11.5px;
+    color:var(--accent); letter-spacing:.08em;
+  }
+  .step h3{ font: 500 18px/1.25 "Geist", sans-serif; margin:0; letter-spacing:-.01em }
+  .step p{ color:var(--fg-3); font-size:13.5px; line-height:1.55; margin:0 }
+  .step .vis{
+    margin-top:auto; height:72px; border:1px solid var(--line);
+    border-radius:8px;
+    background:
+      linear-gradient(180deg, transparent 49.5%, var(--line) 50%, transparent 50.5%) 0 0 / 100% 12px,
+      var(--bg-elev);
+    opacity:.7;
+  }
 
-    /* ── Trust bar ──────────────────────────────────────────────────────── */
-    .trust-bar {
-      display: flex; justify-content: center; flex-wrap: wrap; gap: 1rem 2.5rem;
-      padding: 1.5rem 2rem;
-    }
-    .trust-item {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 0.78rem; color: var(--text-3); font-weight: 500;
-    }
-    .trust-icon { font-size: 0.9rem; }
+  /* ── footer ───────────────────────────────────────────────── */
+  footer{
+    position:relative; z-index:1; padding: 56px 0 80px;
+    border-top:1px solid var(--line);
+  }
+  .foot{display:flex; flex-wrap:wrap; gap:24px; align-items:flex-start; justify-content:space-between}
+  .foot small{ color:var(--fg-3); font-size:12.5px; line-height:1.65 }
+  .foot-links{display:flex; gap:18px; flex-wrap:wrap}
+  .foot-links a{ color:var(--fg-3); font-size:12.5px }
+  .foot-links a:hover{color:var(--fg)}
+  .foot-motto{
+    font-family:"Geist Mono", monospace; font-size:11px; color:var(--fg-4);
+    letter-spacing:.06em; margin-top:6px;
+  }
+  .kbd-hint{
+    display:inline-flex; align-items:center; gap:6px;
+    color:var(--fg-4); font-size:11.5px;
+  }
+  .kbd-hint kbd{
+    border:1px solid var(--line-2); padding:1px 5px; border-radius:4px;
+    font-family:"Geist Mono", monospace; font-size:10.5px; color:var(--fg-2);
+  }
 
-    /* ── Sections ───────────────────────────────────────────────────────── */
-    .section { max-width: 1060px; margin: 0 auto; padding: 4.5rem 2.5rem; }
-    .section-label {
-      text-align: center; font-size: 0.7rem; font-weight: 750;
-      letter-spacing: 0.12em; text-transform: uppercase; color: #818CF8; margin-bottom: 0.5rem;
-    }
-    .section-title {
-      text-align: center;
-      font-size: clamp(1.55rem, 3.5vw, 2.2rem);
-      font-weight: 850; letter-spacing: -0.025em; margin-bottom: 0.65rem;
-    }
-    .section-sub {
-      text-align: center; color: var(--text-2);
-      font-size: 0.95rem; max-width: 500px; margin: 0 auto 3rem; line-height: 1.7;
-    }
+  /* ── stat strip ───────────────────────────────────────────── */
+  .stats-strip{
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    padding:32px 0;
+    position:relative; z-index:1;
+  }
+  .stats-inner{
+    max-width:var(--maxw); margin:0 auto; padding:0 28px;
+    display:grid; grid-template-columns:repeat(5,1fr); gap:1px;
+    background:var(--line);
+  }
+  .stat{
+    background:var(--bg-elev);
+    padding:20px 24px; display:flex; flex-direction:column; gap:4px;
+  }
+  .stat-val{
+    font: 600 28px/1 "Geist", sans-serif;
+    letter-spacing:-.03em; color:var(--accent);
+  }
+  .stat-lbl{ font-size:12px; color:var(--fg-3); font-weight:400; letter-spacing:.005em }
 
-    /* ── Platform cards ─────────────────────────────────────────────────── */
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px,1fr)); gap: 1.25rem; }
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 2rem 1.75rem;
-      transition: border-color 0.2s, background 0.2s, box-shadow 0.25s;
-      position: relative; overflow: hidden;
-    }
-    .card::before {
-      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
-    }
-    .card:hover {
-      border-color: var(--border-h);
-      background: var(--bg-card-h);
-      box-shadow: var(--glow-sm);
-      transform: translateY(-2px);
-    }
-    .card { transition: border-color 0.2s, background 0.2s, box-shadow 0.25s, transform 0.2s; }
-    .card.highlighted {
-      border-color: rgba(99,102,241,0.38);
-      box-shadow: 0 0 0 1px rgba(99,102,241,0.15), var(--glow);
-    }
-    .card.highlighted::after {
-      content: "Recommended";
-      position: absolute; top: 14px; right: 14px;
-      background: rgba(99,102,241,0.15); color: #A5B4FC;
-      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-      padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(99,102,241,0.2);
-    }
-    .card-os-icon { font-size: 2rem; margin-bottom: 0.9rem; display: block; }
-    .card-title { font-size: 1.05rem; font-weight: 750; margin-bottom: 0.2rem; }
-    .card-subtitle { font-size: 0.78rem; color: var(--text-3); margin-bottom: 1.4rem; }
+  /* ── reveal animation ─────────────────────────────────────── */
+  .reveal{opacity:0; transform: translateY(14px); transition: opacity .6s ease, transform .6s ease}
+  .reveal.in{opacity:1; transform:none}
 
-    .dl-btn {
-      display: flex; align-items: center; justify-content: space-between;
-      width: 100%; padding: 0.65rem 1rem; border-radius: 9px;
-      text-decoration: none; font-weight: 650; font-size: 0.83rem;
-      margin-bottom: 0.55rem; border: 1px solid transparent;
-      transition: opacity 0.15s, transform 0.15s;
-    }
-    .dl-btn:hover { opacity: 0.85; transform: translateY(-1px); }
-    .dl-btn-label { display: flex; align-items: center; gap: 7px; }
-    .dl-btn-meta  { font-size: 0.7rem; opacity: 0.65; font-weight: 500; }
-
-    .dl-btn.win { background:rgba(56,189,248,0.1);  color:var(--win);  border-color:rgba(56,189,248,0.2);  }
-    .dl-btn.mac { background:rgba(226,232,240,0.05); color:var(--mac);  border-color:rgba(226,232,240,0.1); }
-    .dl-btn.app { background:rgba(251,146,60,0.09);  color:var(--linux);border-color:rgba(251,146,60,0.2);  }
-    .dl-btn.deb { background:rgba(251,146,60,0.05);  color:#FDBA74;    border-color:rgba(251,146,60,0.12); }
-
-    .dl-note {
-      margin-top: 1.1rem; padding-top: 1.1rem; border-top: 1px solid var(--border);
-      font-size: 0.75rem; color: var(--text-3); line-height: 1.65;
-    }
-    .dl-note code {
-      font-family: "SF Mono","Fira Code","Cascadia Code",monospace;
-      background: rgba(255,255,255,0.06); padding: 0.15em 0.45em;
-      border-radius: 4px; font-size: 0.7rem; color: var(--text-2);
-    }
-    .dl-note strong { color: var(--text-2); font-weight: 650; }
-
-    /* ── Feature grid ───────────────────────────────────────────────────── */
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1px; background: var(--border);
-      border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
-    }
-    @media (max-width: 720px) { .features-grid { grid-template-columns: repeat(2,1fr); } }
-    @media (max-width: 480px) { .features-grid { grid-template-columns: 1fr; } }
-    .feat-cell {
-      background: var(--bg); padding: 1.75rem 1.5rem;
-      transition: background 0.2s;
-    }
-    .feat-cell:hover { background: rgba(99,102,241,0.04); }
-    .feat-icon {
-      font-size: 1.5rem; margin-bottom: 0.7rem; display: block;
-    }
-    .feat-name { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.3rem; }
-    .feat-desc { font-size: 0.78rem; color: var(--text-3); line-height: 1.6; }
-    .feat-new {
-      display: inline-block; font-size: 0.58rem; font-weight: 750;
-      background: rgba(16,185,129,0.12); color: #34D399; letter-spacing: 0.06em;
-      text-transform: uppercase; padding: 1px 6px; border-radius: 4px;
-      margin-left: 6px; vertical-align: middle;
-      border: 1px solid rgba(16,185,129,0.2);
-    }
-
-    /* ── Why private section ────────────────────────────────────────────── */
-    .privacy-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 3rem;
-      align-items: center;
-    }
-    @media (max-width: 720px) { .privacy-grid { grid-template-columns: 1fr; } }
-    .privacy-left {}
-    .privacy-title {
-      font-size: clamp(1.4rem,3vw,2rem); font-weight: 850;
-      letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 1rem;
-    }
-    .privacy-desc { color: var(--text-2); font-size: 0.92rem; line-height: 1.75; margin-bottom: 1.5rem; }
-    .privacy-points { display: flex; flex-direction: column; gap: 0.85rem; }
-    .privacy-point { display: flex; align-items: flex-start; gap: 10px; }
-    .pp-check {
-      width: 20px; height: 20px; background: rgba(16,185,129,0.12); color: #10B981;
-      border-radius: 50%; display: flex; align-items: center; justify-content: center;
-      font-size: 0.68rem; font-weight: 800; flex-shrink: 0; margin-top: 1px;
-    }
-    .pp-text { font-size: 0.82rem; color: var(--text-2); line-height: 1.55; }
-    .pp-text strong { color: var(--text); font-weight: 650; }
-
-    .compare-card {
-      background: var(--bg-2); border: 1px solid var(--border);
-      border-radius: var(--radius); overflow: hidden;
-    }
-    .compare-row {
-      display: grid; grid-template-columns: 1fr 1fr 1fr;
-      border-bottom: 1px solid var(--border);
-    }
-    .compare-row:last-child { border-bottom: none; }
-    .compare-cell {
-      padding: 0.85rem 1rem; font-size: 0.78rem;
-      display: flex; align-items: center;
-    }
-    .compare-cell:not(:first-child) { border-left: 1px solid var(--border); justify-content: center; }
-    .compare-cell.header {
-      font-size: 0.7rem; font-weight: 750; color: var(--text-3);
-      letter-spacing: 0.06em; text-transform: uppercase;
-      background: rgba(0,0,0,0.2); padding: 0.65rem 1rem;
-    }
-    .compare-cell.knovex { color: #A5B4FC; font-weight: 600; }
-    .compare-cell.cloud  { color: var(--text-3); }
-    .check   { color: #10B981; font-size: 0.9rem; }
-    .cross   { color: #F87171; font-size: 0.9rem; }
-    .partial { color: #FBBF24; font-size: 0.9rem; }
-
-    /* ── Steps ──────────────────────────────────────────────────────────── */
-    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 1.5rem; }
-    .step {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 1.75rem 1.5rem;
-      transition: border-color 0.2s, background 0.2s, transform 0.2s;
-    }
-    .step:hover { border-color: var(--border-h); background: var(--bg-card-h); transform: translateY(-2px); }
-    .step-num {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 30px; height: 30px; background: var(--grad); border-radius: 50%;
-      font-weight: 850; font-size: 0.78rem; color: #fff; margin-bottom: 0.9rem;
-      box-shadow: 0 0 14px rgba(99,102,241,0.4);
-    }
-    .step h3 { font-size: 0.9rem; font-weight: 750; margin-bottom: 0.4rem; }
-    .step p  { font-size: 0.79rem; color: var(--text-3); line-height: 1.6; }
-
-    /* ── CTA band ───────────────────────────────────────────────────────── */
-    .cta-band {
-      margin: 0 2.5rem 4rem;
-      background: var(--grad-soft);
-      border: 1px solid rgba(99,102,241,0.2);
-      border-radius: 20px; padding: 3.5rem 2rem;
-      text-align: center; position: relative; overflow: hidden;
-    }
-    .cta-band::before {
-      content: "";
-      position: absolute; top: -60px; left: 50%; transform: translateX(-50%);
-      width: 400px; height: 300px;
-      background: radial-gradient(ellipse, rgba(99,102,241,0.18) 0%, transparent 65%);
-      pointer-events: none;
-    }
-    .cta-band-title {
-      font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 900;
-      letter-spacing: -0.03em; margin-bottom: 0.75rem; position: relative; z-index: 1;
-    }
-    .cta-band-sub {
-      color: var(--text-2); font-size: 0.95rem; margin-bottom: 2rem;
-      position: relative; z-index: 1;
-    }
-    .cta-band .cta-group { justify-content: center; position: relative; z-index: 1; }
-
-    /* ── Footer ─────────────────────────────────────────────────────────── */
-    footer {
-      border-top: 1px solid var(--border); padding: 2.25rem 2.5rem;
-      display: flex; align-items: center; justify-content: space-between;
-      flex-wrap: wrap; gap: 1rem; max-width: 1120px; margin: 0 auto;
-    }
-    .footer-left  { display: flex; align-items: center; gap: 0.75rem; }
-    .footer-copy  { font-size: 0.78rem; color: var(--text-3); }
-    .footer-motto {
-      font-size: 0.72rem; color: var(--text-3); letter-spacing: 0.02em;
-    }
-    .footer-links { display: flex; gap: 1.4rem; }
-    .footer-links a {
-      font-size: 0.78rem; color: var(--text-3); text-decoration: none; transition: color 0.15s;
-    }
-    .footer-links a:hover { color: var(--text-2); }
-
-    /* ── Responsive ─────────────────────────────────────────────────────── */
-    @media (max-width: 860px) {
-      .hero { grid-template-columns: 1fr; gap: 2.5rem; padding: 4rem 1.5rem 3.5rem; }
-      .hero-right { display: none; }
-      .app-frame { transform: none; }
-      nav { padding: 0 1.25rem; }
-      .section { padding: 3.5rem 1.5rem; }
-      .cta-band { margin: 0 1.5rem 3rem; }
-      footer { padding: 1.75rem 1.5rem; flex-direction: column; align-items: flex-start; }
-    }
-    @media (max-width: 540px) {
-      h1 { font-size: 2rem; }
-      .hero { padding: 3.5rem 1rem 3rem; }
-      .section { padding: 3rem 1rem; }
-      .cta-band { margin: 0 1rem 3rem; padding: 2.5rem 1.5rem; border-radius: 14px; }
-      footer { padding: 1.5rem 1rem; }
-      .stats-strip { padding: 1.5rem 1rem; }
-      .trust-bar { padding: 1.25rem 1rem; gap: 0.75rem 1.5rem; }
-    }
-  </style>
+  /* ── responsive ───────────────────────────────────────────── */
+  @media (max-width: 980px){
+    .platforms{ grid-template-columns: 1fr }
+    .features-grid{ grid-template-columns: repeat(2,1fr) }
+    .steps{ grid-template-columns: 1fr 1fr }
+    .stats-inner{ grid-template-columns: repeat(3,1fr) }
+    .pw-body{ grid-template-columns: 1fr; min-height: 0 }
+    .pw-side{ display:none }
+    .sec-sub{ text-align:left }
+  }
+  @media (max-width: 640px){
+    .wrap{padding:0 18px}
+    .hero{ padding: 56px 0 40px }
+    .nav-links .nav-link{display:none}
+    .nav-links .pill-version{margin-left:auto}
+    .steps{ grid-template-columns: 1fr }
+    .step{ border-left:0; border-top:1px solid var(--line) }
+    .step:first-child{border-top:0}
+    .pw-search{display:none}
+    .features-grid{ grid-template-columns: 1fr }
+    .stats-inner{ grid-template-columns: 1fr 1fr }
+  }
+</style>
 </head>
 <body>
+  <div class="ambient"></div>
+  <div class="grid-bg"></div>
 
-<!-- ── Navigation ────────────────────────────────────────────────────────── -->
-<nav class="z1">
-  <a class="logo" href="#">
-    <div class="logo-mark">K</div>
-    Knovex
-  </a>
-  <div class="nav-right">
-    <a class="nav-link" href="https://github.com/tailorgunjan93/knovex" target="_blank">GitHub</a>
-    <a class="nav-link" href="https://github.com/tailorgunjan93/knovex/releases" target="_blank">Releases</a>
-    <a class="nav-link" href="https://github.com/tailorgunjan93/knovex/issues" target="_blank">Issues</a>
-    <a class="nav-btn" href="#platforms">Download</a>
-  </div>
-</nav>
-
-<!-- ── Hero ──────────────────────────────────────────────────────────────── -->
-<div class="hero z1">
-  <div class="hero-orb-1"></div>
-  <div class="hero-orb-2"></div>
-
-  <div class="hero-left">
-    <div class="badge">
-      <div class="badge-dot"></div>
-      v0.6.5 &mdash; Semantic search + installers
-    </div>
-    <h1>Your documents.<br><span class="grad-text">Your AI.<br>Your machine.</span></h1>
-    <p class="hero-sub">
-      Knovex is a private AI knowledge assistant that runs entirely on your desktop.
-      Chat with PDFs, build knowledge bases, and learn anything &mdash; no cloud required.
-    </p>
-    <div class="cta-group">
-      <a id="primary-download" href="#platforms">
-        <span id="dl-icon">&#8659;</span>
-        <span id="dl-label">Download Free</span>
+  <!-- ── nav ─────────────────────────────────────────────────── -->
+  <nav class="top">
+    <div class="wrap nav-inner">
+      <a href="#" class="brand" aria-label="Knovex home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">Knovex<span class="dot">.</span></span>
       </a>
-      <a class="cta-alt" href="https://github.com/tailorgunjan93/knovex" target="_blank">
-        &#9733; Star on GitHub
-      </a>
-    </div>
-    <div class="hero-meta">
-      <span class="hero-meta-item">&#x1F193; Free &amp; open source</span>
-      <span class="hero-meta-dot"></span>
-      <span class="hero-meta-item">&#x1F512; Encrypted at rest</span>
-      <span class="hero-meta-dot"></span>
-      <span class="hero-meta-item">&#x26A1; 1 ms/query</span>
-    </div>
-  </div>
-
-  <div class="hero-right">
-    <div class="app-frame">
-      <div class="titlebar">
-        <div class="tb-dot r"></div>
-        <div class="tb-dot y"></div>
-        <div class="tb-dot g"></div>
-        <span class="tb-title">Knovex &mdash; Research Notes KB</span>
+      <div class="nav-links">
+        <a class="nav-link" href="#platforms">Download</a>
+        <a class="nav-link" href="#setup">Setup</a>
+        <a class="nav-link" href="https://github.com/tailorgunjan93/knovex/releases" target="_blank">Changelog</a>
+        <a class="nav-link" href="https://github.com/tailorgunjan93/knovex" target="_blank">GitHub</a>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light / dark theme" title="Toggle theme (T)">
+          <span class="tt-track" aria-hidden="true">
+            <span class="tt-icon tt-sun">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <circle cx="6" cy="6" r="2.4" fill="currentColor"/>
+                <g stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
+                  <path d="M6 1v1.4M6 9.6V11M1 6h1.4M9.6 6H11M2.5 2.5l1 1M8.5 8.5l1 1M2.5 9.5l1-1M8.5 3.5l1-1"/>
+                </g>
+              </svg>
+            </span>
+            <span class="tt-icon tt-moon">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M9.5 7.2A4 4 0 0 1 4.8 2.5a.4.4 0 0 0-.6-.4A4.6 4.6 0 1 0 9.9 7.8a.4.4 0 0 0-.4-.6z" fill="currentColor"/>
+              </svg>
+            </span>
+            <span class="tt-thumb" aria-hidden="true"></span>
+          </span>
+        </button>
+        <span class="pill-version" title="Latest stable release">
+          <span class="led" aria-hidden="true"></span>
+          <span class="mono">v0.6.5</span>
+          <span style="color:var(--fg-4)">·</span>
+          <span style="color:var(--fg-3)">stable</span>
+        </span>
       </div>
-      <div class="app-body">
-        <div class="sidebar">
-          <div class="sb-section">Knowledge Bases</div>
-          <div class="sb-item active">
-            <div class="sb-dot" style="background:#6366F1;"></div>
-            Research Notes
-          </div>
-          <div class="sb-item">
-            <div class="sb-dot" style="background:#10B981;"></div>
-            Company Wiki
-          </div>
-          <div class="sb-item">
-            <div class="sb-dot" style="background:#F59E0B;"></div>
-            Legal Docs
-          </div>
-          <div class="sb-section" style="margin-top:8px;">Chats</div>
-          <div class="sb-item active" style="font-size:0.68rem;">&#x1F4AC; Q4 Analysis</div>
-          <div class="sb-item" style="font-size:0.68rem;">&#x1F4AC; Product Overview</div>
+    </div>
+  </nav>
+
+  <main>
+    <!-- ── hero ────────────────────────────────────────────────── -->
+    <section class="hero">
+      <div class="wrap">
+        <span class="eyebrow reveal">
+          <span class="tag">v0.6.5</span>
+          Semantic search — ONNX embeddings + OpenAI API support
+        </span>
+
+        <h1 class="title reveal">
+          Your AI knowledge<br/>
+          assistant, <em>built for</em><br/>
+          <span class="acc">the desktop.</span>
+        </h1>
+
+        <p class="lede reveal">
+          Chat with your documents, build a private knowledge base, and learn anything with
+          eight AI‑powered formats. Knovex runs entirely on your machine — your files never
+          leave it. Now with semantic search via local ONNX or OpenAI embeddings.
+        </p>
+
+        <div class="cta-row reveal">
+          <a class="btn btn-primary" href="#platforms" id="cta-primary">
+            <span class="glyph" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1.5v8M7 9.5L3.5 6M7 9.5L10.5 6M2 12.5h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span id="cta-label">Download for your OS</span>
+            <span class="sub mono" id="cta-sub">— detecting…</span>
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/tailorgunjan93/knovex/releases" target="_blank">
+            All releases
+            <span class="glyph" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </a>
+          <span class="kbd-hint">press <kbd>D</kbd> to jump to downloads</span>
         </div>
-        <div class="main-area">
-          <div class="chat-area">
-            <div class="msg user">
-              <div class="msg-content">
-                <div class="msg-bubble" style="margin-left:auto;">What are the key findings in the Q4 report regarding user retention?</div>
+
+        <div class="os-line reveal">
+          <span class="mono" style="color:var(--fg-2)">v0.6.5</span>
+          <span class="dot"></span>
+          <span>Free &amp; open source — MIT license</span>
+          <span class="dot"></span>
+          <span>No Python, Node or Docker needed</span>
+          <span class="dot"></span>
+          <span>SHA‑256 verified releases</span>
+        </div>
+
+        <div class="chips reveal">
+          <span class="chip new-chip"><span class="ic"></span>Semantic search — ONNX + OpenAI embeddings</span>
+          <span class="chip"><span class="ic"></span>100% offline — no cloud required</span>
+          <span class="chip"><span class="ic"></span>RAG over PDF · DOCX · XLSX · TXT · MD</span>
+          <span class="chip"><span class="ic"></span>8 learn formats + quiz &amp; flashcards</span>
+          <span class="chip"><span class="ic"></span>API keys encrypted at rest (Fernet AES)</span>
+          <span class="chip"><span class="ic"></span>OpenAI · Anthropic · Groq · Gemini · Ollama</span>
+        </div>
+
+        <!-- ── product window ── -->
+        <div class="product reveal" id="product-window" aria-label="Knovex product preview">
+          <div class="pw-bar">
+            <div class="pw-traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="pw-title mono">knovex — Knowledge / Q4 Analysis</div>
+            <div class="pw-search mono">⌘K  search anything</div>
+          </div>
+          <div class="pw-body">
+            <aside class="pw-side">
+              <h5>Knowledge bases</h5>
+              <div class="pw-item active"><span class="sq"></span>Q4 Analysis</div>
+              <div class="pw-item"><span class="sq"></span>Research papers</div>
+              <div class="pw-item"><span class="sq"></span>Company wiki</div>
+              <div class="pw-item"><span class="sq"></span>Legal contracts</div>
+              <h5>Learn formats</h5>
+              <div class="pw-item"><span class="sq"></span>Quiz</div>
+              <div class="pw-item"><span class="sq"></span>Flashcards</div>
+              <div class="pw-item"><span class="sq"></span>Story</div>
+              <div class="pw-item"><span class="sq"></span>Mind map</div>
+            </aside>
+            <div class="pw-main">
+              <div class="pw-crumb mono">Knowledge / Q4 Analysis · Semantic search enabled</div>
+              <h3 class="pw-h">What drove the user retention improvement?</h3>
+              <div class="pw-meta">
+                <span>📎 <b>5 sources</b></span>
+                <span>🔍 <b>semantic · FTS5</b></span>
+                <span>⏱ <b>0.9s</b></span>
+                <span>🧠 <b>gpt-4o-mini</b></span>
               </div>
-              <div class="msg-avatar">U</div>
-            </div>
-            <div class="msg assistant">
-              <div class="msg-avatar">K</div>
-              <div class="msg-content">
-                <div class="msg-bubble">Based on the Q4 report, user retention improved by <strong style="color:#A5B4FC;">23%</strong> YoY. Three key drivers were identified: onboarding redesign, push notification tuning, and the new &ldquo;continue learning&rdquo; feature.</div>
-                <div class="msg-source">
-                  Sources:
-                  <span class="msg-source-tag">Q4-report.pdf &middot; p.14</span>
-                  <span class="msg-source-tag">exec-summary.docx</span>
+              <div class="pw-msgs">
+                <div class="msg user">
+                  <div class="ava">GT</div>
+                  <div class="bub">What were the three biggest drivers of retention improvement in Q4, and how did they compare to Q3?</div>
+                </div>
+                <div class="msg bot">
+                  <div class="ava" aria-hidden="true">K</div>
+                  <div class="bub">
+                    Retention improved <b>23 % YoY</b> in Q4, driven by three changes:
+                    <b>onboarding redesign</b> (+9 pp), <b>push‑notification tuning</b> (+8 pp),
+                    and the new <b>"continue learning" feature</b> (+6 pp).
+                    Compared to Q3, all three metrics accelerated — onboarding alone was flat at
+                    +2 pp in Q3.
+                    <div class="src">
+                      Citations:
+                      <span class="pg">Q4-exec-summary.pdf · p.7</span>
+                      <span class="pg">retention-dashboard.xlsx</span>
+                      <span class="pg">product-review.docx · §3</span>
+                    </div>
+                  </div>
                 </div>
               </div>
+              <div class="pw-input">
+                <span style="color:var(--fg-3)">›</span>
+                Ask a follow‑up, or type <span class="mono" style="color:var(--fg-2)">/learn</span> to generate a quiz from these docs…
+                <span class="send">↵ send</span>
+              </div>
             </div>
           </div>
-          <div class="chat-input">
-            <div class="input-mock"></div>
-            <div class="send-btn"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── stats ───────────────────────────────────────────────── -->
+    <div class="stats-strip reveal">
+      <div class="stats-inner">
+        <div class="stat"><div class="stat-val">1 ms</div><div class="stat-lbl">Avg. query latency</div></div>
+        <div class="stat"><div class="stat-val">8</div><div class="stat-lbl">Learn formats</div></div>
+        <div class="stat"><div class="stat-val">6+</div><div class="stat-lbl">LLM providers</div></div>
+        <div class="stat"><div class="stat-val">100%</div><div class="stat-lbl">Offline capable</div></div>
+        <div class="stat"><div class="stat-val">0</div><div class="stat-lbl">Telemetry / analytics</div></div>
+      </div>
+    </div>
+
+    <!-- ── platforms ───────────────────────────────────────────── -->
+    <section id="platforms">
+      <div class="wrap">
+        <div class="sec-head">
+          <div>
+            <div class="sec-eyebrow reveal"><span class="num">01</span>Download</div>
+            <h2 class="sec-h reveal">One installer per platform.<br/>Everything bundled inside.</h2>
+          </div>
+          <p class="sec-sub reveal">No Python, no Node, no command‑line gymnastics. Ships as a single native binary that bundles the backend, database and UI — auto‑updates and stays out of your way.</p>
+        </div>
+
+        <div class="platforms">
+
+          <!-- Windows -->
+          <article class="plat reveal" data-os="win">
+            <span class="detected mono">Detected</span>
+            <div class="plat-head">
+              <div class="plat-mark" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <rect x="2"  y="3"  width="8" height="8" rx="0.5" fill="currentColor"/>
+                  <rect x="12" y="3"  width="8" height="8" rx="0.5" fill="currentColor"/>
+                  <rect x="2"  y="12" width="8" height="8" rx="0.5" fill="currentColor"/>
+                  <rect x="12" y="12" width="8" height="8" rx="0.5" fill="currentColor"/>
+                </svg>
+              </div>
+              <div>
+                <div class="plat-name">Windows</div>
+                <div class="plat-req">Windows 10 / 11 — 64‑bit</div>
+              </div>
+              <div class="plat-size">
+                <b>~85 MB</b>
+                .exe NSIS
+              </div>
+            </div>
+            <div class="plat-dl">
+              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-Setup-0.6.5.exe">
+                <span class="file">Knovex‑Setup‑0.6.5.exe</span>
+                <span class="arch">x64</span>
+                <svg class="arrow" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 2v9M7 11L3.5 7.5M7 11l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </a>
+            </div>
+            <p class="plat-note">
+              Run the installer → <kbd>Next</kbd> → <kbd>Next</kbd> → <kbd>Install</kbd> → <kbd>Finish</kbd>.
+              Knovex appears in your Start Menu and Desktop.
+              SmartScreen on first run? Click <kbd>More info</kbd> → <kbd>Run anyway</kbd>.
+            </p>
+          </article>
+
+          <!-- macOS -->
+          <article class="plat reveal" data-os="mac">
+            <span class="detected mono">Detected</span>
+            <div class="plat-head">
+              <div class="plat-mark" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <path d="M14.6 11.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.9-.8-3.1-.8-1.6 0-3.1.9-3.9 2.4-1.7 2.9-.4 7.2 1.2 9.5.8 1.1 1.8 2.4 3.1 2.3 1.2-.1 1.7-.8 3.1-.8s1.9.8 3.2.8c1.3 0 2.2-1.1 3-2.3.9-1.3 1.3-2.6 1.3-2.7-.1 0-2.5-1-2.5-3.8-.4-.2-.5-.2-.5-.2zM12.3 4.6c.6-.8 1.1-2 1-3.1-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.8-1.4z" fill="currentColor"/>
+                </svg>
+              </div>
+              <div>
+                <div class="plat-name">macOS</div>
+                <div class="plat-req">macOS 12 Monterey and later</div>
+              </div>
+              <div class="plat-size">
+                <b>~92 MB</b>
+                .dmg · x64
+              </div>
+            </div>
+            <div class="plat-dl">
+              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.5.dmg">
+                <span class="file">Knovex‑0.6.5.dmg</span>
+                <span class="arch">Intel x64</span>
+                <svg class="arrow" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 2v9M7 11L3.5 7.5M7 11l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </a>
+            </div>
+            <p class="plat-note">
+              Open the <kbd>.dmg</kbd>, drag Knovex to <kbd>Applications</kbd>, launch.
+              On first open Gatekeeper may flag it — right‑click → <kbd>Open</kbd> → <kbd>Open</kbd> to allow.
+            </p>
+          </article>
+
+          <!-- Linux -->
+          <article class="plat reveal" data-os="linux">
+            <span class="detected mono">Detected</span>
+            <div class="plat-head">
+              <div class="plat-mark" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <path d="M11 2c-2.2 0-3.5 1.8-3.5 4.2 0 1.2.4 2 .4 2.8 0 1.2-1.8 2-2.9 4.5C3.9 16.2 3 19 4.2 19.7c1 .6 2-1 2.6-1 .8 0 .7 1.3 2 1.7 1.5.4 4.2.4 5.7 0 1.3-.4 1.2-1.7 2-1.7.6 0 1.6 1.6 2.6 1 1.2-.7.3-3.5-.8-6.2-1.1-2.5-2.9-3.3-2.9-4.5 0-.8.4-1.6.4-2.8 0-2.4-1.3-4.2-3.5-4.2h-1.3zm.7 2.2c.7 0 1.3.6 1.3 1.4s-.6 1.4-1.3 1.4c-.4 0-.8-.2-1-.5h-.1c-.2.3-.5.5-.9.5-.7 0-1.3-.6-1.3-1.4S9 4.2 9.7 4.2c.4 0 .7.2.9.5h.1c.3-.3.6-.5 1-.5z" fill="currentColor"/>
+                </svg>
+              </div>
+              <div>
+                <div class="plat-name">Linux</div>
+                <div class="plat-req">Ubuntu 20.04+ / Debian / any x64</div>
+              </div>
+              <div class="plat-size">
+                <b>~88 MB</b>
+                AppImage · .deb
+              </div>
+            </div>
+            <div class="plat-dl">
+              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.5.AppImage">
+                <span class="file">Knovex‑0.6.5.AppImage</span>
+                <span class="arch">x86_64 portable</span>
+                <svg class="arrow" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 2v9M7 11L3.5 7.5M7 11l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </a>
+              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/knovex_0.6.5_amd64.deb">
+                <span class="file">knovex_0.6.5_amd64.deb</span>
+                <span class="arch">debian / ubuntu</span>
+                <svg class="arrow" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 2v9M7 11L3.5 7.5M7 11l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </a>
+            </div>
+            <div class="plat-snippet">
+              <button class="copy" data-copy="chmod +x Knovex-*.AppImage && ./Knovex-*.AppImage">copy</button>
+              <div><span class="prompt">$</span>chmod +x Knovex-*.AppImage</div>
+              <div><span class="prompt">$</span>./Knovex-*.AppImage</div>
+            </div>
+            <div class="plat-snippet" style="margin-top:-8px">
+              <button class="copy" data-copy="sudo dpkg -i knovex_*_amd64.deb">copy</button>
+              <div><span class="prompt">$</span>sudo dpkg -i knovex_*_amd64.deb</div>
+            </div>
+          </article>
+
+        </div>
+
+        <div style="margin-top:24px; display:flex; gap:18px; flex-wrap:wrap; color:var(--fg-3); font-size:12.5px; align-items:center">
+          <span>Looking for older versions? <a href="https://github.com/tailorgunjan93/knovex/releases" target="_blank" style="color:var(--fg-2); border-bottom:1px solid var(--line-2)">Browse all releases →</a></span>
+          <span style="margin-left:auto; color:var(--fg-4)">Secure · Fast · Reliable · Cost-Effective</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── features ────────────────────────────────────────────── -->
+    <section id="features">
+      <div class="wrap">
+        <div class="sec-head">
+          <div>
+            <div class="sec-eyebrow reveal"><span class="num">02</span>Features</div>
+            <h2 class="sec-h reveal">Everything you need,<br/>nothing you don't.</h2>
+          </div>
+          <p class="sec-sub reveal">Built for privacy‑conscious professionals. All compute runs on‑device. Cloud is optional — and only ever for the LLM call.</p>
+        </div>
+        <div class="features-grid reveal">
+          <div class="feat">
+            <span class="feat-icon">🔍</span>
+            <div class="feat-title">Semantic Search <span class="badge-new">New</span></div>
+            <div class="feat-desc">Dense vector embeddings via local ONNX (~45 MB, one‑time download) or the OpenAI Embeddings API. Hybrid FTS5 + ANN + RRF fusion for best recall.</div>
+          </div>
+          <div class="feat">
+            <span class="feat-icon">💬</span>
+            <div class="feat-title">Document Chat</div>
+            <div class="feat-desc">Ask questions across PDFs, Word, Excel and Markdown via RAG. Every answer cites the exact page and section it came from.</div>
+          </div>
+          <div class="feat">
+            <span class="feat-icon">🧠</span>
+            <div class="feat-title">Knowledge Bases</div>
+            <div class="feat-desc">Organise files into named KBs. Index once, query at ~1 ms with SQLite FTS5. Stale‑file detection keeps the index in sync automatically.</div>
+          </div>
+          <div class="feat">
+            <span class="feat-icon">🎓</span>
+            <div class="feat-title">Learn Mode</div>
+            <div class="feat-desc">Turn any document or topic into a quiz, flashcard set, mind map, timeline, story, ELI5, speed‑learn or brainstorm session.</div>
+          </div>
+          <div class="feat">
+            <span class="feat-icon">🔧</span>
+            <div class="feat-title">Any LLM Provider</div>
+            <div class="feat-desc">OpenAI, Anthropic, Groq, Gemini, AWS Bedrock, Cerebras, Ollama — swap without restarting. Powered by LiteLLM under the hood.</div>
+          </div>
+          <div class="feat">
+            <span class="feat-icon">🔒</span>
+            <div class="feat-title">Encrypted at Rest</div>
+            <div class="feat-desc">All API keys are stored with Fernet AES‑128 symmetric encryption. Keys live in your OS user directory, readable only by your account.</div>
+          </div>
+          <div class="feat">
+            <span class="feat-icon">🌐</span>
+            <div class="feat-title">Web Search</div>
+            <div class="feat-desc">Ground answers in live web results via DuckDuckGo (free), Serper.dev or Brave Search. Toggle per chat — sources cited inline.</div>
+          </div>
+          <div class="feat">
+            <span class="feat-icon">📄</span>
+            <div class="feat-title">Document Reader</div>
+            <div class="feat-desc">In‑app rendering for PDF, DOCX, XLSX, CSV and Markdown. Inline Q&amp;A on any open file — no switching to an external viewer.</div>
+          </div>
+          <div class="feat">
+            <span class="feat-icon">📊</span>
+            <div class="feat-title">File Summaries</div>
+            <div class="feat-desc">One‑click brief or detailed summary for any file or an entire knowledge base. Exportable as Markdown.</div>
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</div>
+    </section>
 
-<!-- ── Stats strip ────────────────────────────────────────────────────────── -->
-<div class="stats-strip z1">
-  <div class="stats-inner">
-    <div class="stat"><span class="stat-val">8</span><span class="stat-lbl">Learn formats</span></div>
-    <div class="stat"><span class="stat-val">6+</span><span class="stat-lbl">LLM providers</span></div>
-    <div class="stat"><span class="stat-val">100%</span><span class="stat-lbl">Offline capable</span></div>
-    <div class="stat"><span class="stat-val">1 ms</span><span class="stat-lbl">Query latency</span></div>
-    <div class="stat"><span class="stat-val">E2E</span><span class="stat-lbl">Encrypted keys</span></div>
-  </div>
-</div>
-
-<!-- ── Trust bar ──────────────────────────────────────────────────────────── -->
-<div class="trust-bar z1">
-  <div class="trust-item"><span class="trust-icon">&#x1F512;</span> No telemetry</div>
-  <div class="trust-item"><span class="trust-icon">&#x1F4BB;</span> Local SQLite</div>
-  <div class="trust-item"><span class="trust-icon">&#x1F4E6;</span> Self-contained binary</div>
-  <div class="trust-item"><span class="trust-icon">&#x1F310;</span> Optional cloud LLMs</div>
-  <div class="trust-item"><span class="trust-icon">&#x26A1;</span> FTS5 + dense ANN</div>
-</div>
-
-<!-- ── Download ───────────────────────────────────────────────────────────── -->
-<div class="section z1" id="platforms">
-  <p class="section-label">Download</p>
-  <h2 class="section-title">One-click install, zero dependencies</h2>
-  <p class="section-sub">Python, Node.js, and Docker not required. Everything is bundled inside the installer.</p>
-  <div class="cards">
-
-    <div class="card" id="card-win">
-      <span class="card-os-icon">&#x1FA9F;</span>
-      <div class="card-title">Windows</div>
-      <div class="card-subtitle">Windows 10 / 11 &mdash; 64-bit</div>
-      <a class="dl-btn win" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-Setup-0.6.5.exe" id="win-link">
-        <span class="dl-btn-label">&#8659; Knovex-Setup.exe</span>
-        <span class="dl-btn-meta">.exe &middot; NSIS</span>
-      </a>
-      <div class="dl-note">
-        Run the installer &rarr; <strong>Next &rarr; Next &rarr; Install &rarr; Finish</strong>.<br>
-        Knovex appears in <strong>Start Menu</strong> &amp; <strong>Desktop</strong> automatically.<br><br>
-        <em>SmartScreen on first run? Click &ldquo;More info &rarr; Run anyway&rdquo;.</em>
-      </div>
-    </div>
-
-    <div class="card" id="card-mac">
-      <span class="card-os-icon">&#x1F34E;</span>
-      <div class="card-title">macOS</div>
-      <div class="card-subtitle">macOS 12 Monterey and later</div>
-      <a class="dl-btn mac" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.5.dmg" id="mac-link">
-        <span class="dl-btn-label">&#8659; Knovex.dmg</span>
-        <span class="dl-btn-meta">.dmg &middot; x64</span>
-      </a>
-      <div class="dl-note">
-        Open the <strong>.dmg</strong> &rarr; drag <strong>Knovex</strong> to <strong>Applications</strong> &rarr; launch.<br><br>
-        <em>First launch: right-click &rarr; Open to bypass Gatekeeper.</em>
-      </div>
-    </div>
-
-    <div class="card" id="card-linux">
-      <span class="card-os-icon">&#x1F427;</span>
-      <div class="card-title">Linux</div>
-      <div class="card-subtitle">Ubuntu 20.04+ &middot; Debian &middot; Any x64</div>
-      <a class="dl-btn app" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.5.AppImage" id="appimg-link">
-        <span class="dl-btn-label">&#8659; Knovex.AppImage</span>
-        <span class="dl-btn-meta">portable</span>
-      </a>
-      <a class="dl-btn deb" href="https://github.com/tailorgunjan93/knovex/releases/latest/download/knovex_0.6.5_amd64.deb" id="deb-link">
-        <span class="dl-btn-label">&#8659; knovex_amd64.deb</span>
-        <span class="dl-btn-meta">Ubuntu / Debian</span>
-      </a>
-      <div class="dl-note">
-        <strong>AppImage</strong>:<br>
-        <code>chmod +x Knovex-*.AppImage &amp;&amp; ./Knovex-*.AppImage</code><br><br>
-        <strong>Debian / Ubuntu</strong>:<br>
-        <code>sudo dpkg -i knovex_*_amd64.deb</code>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ── Features ──────────────────────────────────────────────────────────── -->
-<div class="section z1">
-  <p class="section-label">Features</p>
-  <h2 class="section-title">A complete AI workspace</h2>
-  <p class="section-sub">Built for privacy-conscious professionals who want real control over their data.</p>
-  <div class="features-grid">
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F4AC;</span>
-      <div class="feat-name">Document Chat</div>
-      <div class="feat-desc">Ask questions across PDFs, Word docs, and Markdown via hybrid FTS5 + semantic RAG.</div>
-    </div>
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F9E0;</span>
-      <div class="feat-name">Knowledge Bases</div>
-      <div class="feat-desc">Organise files into named KBs. Index once, query forever at ~1 ms latency.</div>
-    </div>
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F50D;</span>
-      <div class="feat-name">Semantic Search<span class="feat-new">New</span></div>
-      <div class="feat-desc">Dense vector embeddings via local ONNX model (~45 MB) or OpenAI Embeddings API.</div>
-    </div>
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F393;</span>
-      <div class="feat-name">Learn Mode</div>
-      <div class="feat-desc">8 formats: quiz, flashcards, mind map, timeline, story, ELI5, speed-learn, brainstorm.</div>
-    </div>
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F527;</span>
-      <div class="feat-name">Any LLM Provider</div>
-      <div class="feat-desc">OpenAI, Anthropic, Groq, Gemini, Bedrock, Ollama &mdash; swap without restarting.</div>
-    </div>
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F512;</span>
-      <div class="feat-name">Encrypted at Rest</div>
-      <div class="feat-desc">API keys stored with Fernet AES-128. Your secrets never leave your machine.</div>
-    </div>
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F310;</span>
-      <div class="feat-name">Web Search</div>
-      <div class="feat-desc">Ground answers in live results via DuckDuckGo, Serper, or Brave Search.</div>
-    </div>
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F4CB;</span>
-      <div class="feat-name">Document Reader</div>
-      <div class="feat-desc">In-app rendering for PDF, DOCX, XLSX, CSV, Markdown &mdash; no external viewer needed.</div>
-    </div>
-    <div class="feat-cell">
-      <span class="feat-icon">&#x1F4CA;</span>
-      <div class="feat-name">File Summaries</div>
-      <div class="feat-desc">One-click brief or detailed summary of any file or entire knowledge base.</div>
-    </div>
-  </div>
-</div>
-
-<!-- ── Privacy comparison ─────────────────────────────────────────────────── -->
-<div class="section z1">
-  <div class="privacy-grid">
-    <div class="privacy-left">
-      <p class="section-label" style="text-align:left;">Why Knovex</p>
-      <div class="privacy-title">Privacy isn&rsquo;t a checkbox.<br><span class="grad-text">It&rsquo;s the foundation.</span></div>
-      <p class="privacy-desc">
-        Most AI tools send your documents to third-party servers for indexing and retrieval.
-        Knovex inverts this: your files, your vectors, your database &mdash; all on your machine.
-        The LLM call is the only optional network hop.
-      </p>
-      <div class="privacy-points">
-        <div class="privacy-point">
-          <div class="pp-check">&#10003;</div>
-          <p class="pp-text"><strong>Zero document upload</strong> &mdash; files are indexed locally with SQLite FTS5 and optional ONNX embeddings.</p>
+    <!-- ── steps ───────────────────────────────────────────────── -->
+    <section id="setup">
+      <div class="wrap">
+        <div class="sec-head">
+          <div>
+            <div class="sec-eyebrow reveal"><span class="num">03</span>Setup</div>
+            <h2 class="sec-h reveal">Up and running in four steps.<br/>Or fewer, if you use Ollama.</h2>
+          </div>
+          <p class="sec-sub reveal">Installation is identical across platforms — pick your model provider once, drop in your documents, and ask away.</p>
         </div>
-        <div class="privacy-point">
-          <div class="pp-check">&#10003;</div>
-          <p class="pp-text"><strong>No telemetry, no analytics</strong> &mdash; Knovex never phones home. Check the source.</p>
-        </div>
-        <div class="privacy-point">
-          <div class="pp-check">&#10003;</div>
-          <p class="pp-text"><strong>Use Ollama for 100% offline</strong> &mdash; combine with a local LLM and your data never leaves the machine.</p>
-        </div>
-        <div class="privacy-point">
-          <div class="pp-check">&#10003;</div>
-          <p class="pp-text"><strong>Fernet-encrypted API keys</strong> &mdash; stored in your OS user directory, unreadable by other users.</p>
+
+        <div class="steps">
+          <div class="step reveal">
+            <span class="n">STEP&nbsp;01</span>
+            <h3>Download &amp; install</h3>
+            <p>Run the installer for your OS. Knovex installs in seconds — backend, frontend and database all bundled. No Python or Node needed.</p>
+            <div class="vis" aria-hidden="true"></div>
+          </div>
+          <div class="step reveal">
+            <span class="n">STEP&nbsp;02</span>
+            <h3>Add a model</h3>
+            <p>Open <kbd style="border:1px solid var(--line-2); padding:1px 5px; border-radius:4px; font-family:'Geist Mono',monospace; font-size:11px;">Settings · LLM</kbd> and paste an OpenAI, Anthropic or Groq key — or point to a local Ollama. Keys are encrypted on save.</p>
+            <div class="vis" aria-hidden="true"></div>
+          </div>
+          <div class="step reveal">
+            <span class="n">STEP&nbsp;03</span>
+            <h3>Build a knowledge base</h3>
+            <p>Drag and drop PDFs, DOCX, XLSX or Markdown into a KB. Knovex chunks, indexes with FTS5, and optionally embeds for semantic search — all locally.</p>
+            <div class="vis" aria-hidden="true"></div>
+          </div>
+          <div class="step reveal">
+            <span class="n">STEP&nbsp;04</span>
+            <h3>Chat &amp; learn</h3>
+            <p>Ask questions with cited sources, toggle web search, or hit <kbd style="border:1px solid var(--line-2); padding:1px 5px; border-radius:4px; font-family:'Geist Mono',monospace; font-size:11px;">/learn</kbd> to generate a quiz, flashcard set, story, mindmap or timeline.</p>
+            <div class="vis" aria-hidden="true"></div>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
+  </main>
 
-    <div class="privacy-right">
-      <div class="compare-card">
-        <div class="compare-row">
-          <div class="compare-cell header">Feature</div>
-          <div class="compare-cell header">Knovex</div>
-          <div class="compare-cell header">Cloud AI tools</div>
+  <!-- ── footer ──────────────────────────────────────────────────── -->
+  <footer>
+    <div class="wrap foot">
+      <div>
+        <div class="brand" style="margin-bottom:10px">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">Knovex<span class="dot">.</span></span>
         </div>
-        <div class="compare-row">
-          <div class="compare-cell">Docs stay on device</div>
-          <div class="compare-cell knovex"><span class="check">&#10003;</span> Always</div>
-          <div class="compare-cell cloud"><span class="cross">&#10007;</span> Uploaded</div>
-        </div>
-        <div class="compare-row">
-          <div class="compare-cell">Works offline</div>
-          <div class="compare-cell knovex"><span class="check">&#10003;</span> Yes</div>
-          <div class="compare-cell cloud"><span class="cross">&#10007;</span> No</div>
-        </div>
-        <div class="compare-row">
-          <div class="compare-cell">No subscription</div>
-          <div class="compare-cell knovex"><span class="check">&#10003;</span> Free</div>
-          <div class="compare-cell cloud"><span class="partial">&#8776;</span> $20+/mo</div>
-        </div>
-        <div class="compare-row">
-          <div class="compare-cell">Open source</div>
-          <div class="compare-cell knovex"><span class="check">&#10003;</span> MIT</div>
-          <div class="compare-cell cloud"><span class="cross">&#10007;</span> Closed</div>
-        </div>
-        <div class="compare-row">
-          <div class="compare-cell">Your LLM key</div>
-          <div class="compare-cell knovex"><span class="check">&#10003;</span> Optional</div>
-          <div class="compare-cell cloud"><span class="cross">&#10007;</span> Required</div>
-        </div>
-        <div class="compare-row">
-          <div class="compare-cell">Telemetry</div>
-          <div class="compare-cell knovex"><span class="check">&#10003;</span> None</div>
-          <div class="compare-cell cloud"><span class="cross">&#10007;</span> Yes</div>
-        </div>
+        <small>
+          &copy; 2026 Gunjan Tailor. Free &amp; open source under the MIT license.<br/>
+          Built for people who are tired of cloud lock-in and data leakage.
+        </small>
+        <div class="foot-motto">SECURE · FAST · RELIABLE · COST-EFFECTIVE</div>
+      </div>
+      <div class="foot-links">
+        <a href="https://github.com/tailorgunjan93/knovex" target="_blank">GitHub</a>
+        <a href="https://github.com/tailorgunjan93/knovex/releases" target="_blank">Releases</a>
+        <a href="https://github.com/tailorgunjan93/knovex/issues" target="_blank">Issues</a>
+        <a href="https://github.com/tailorgunjan93/knovex/blob/main/LICENSE" target="_blank">MIT License</a>
+        <a href="https://github.com/tailorgunjan93/knovex/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
       </div>
     </div>
-  </div>
-</div>
+  </footer>
 
-<!-- ── Quick start ────────────────────────────────────────────────────────── -->
-<div class="section z1">
-  <p class="section-label">Get started</p>
-  <h2 class="section-title">Up and running in minutes</h2>
-  <p class="section-sub">No Python, Node.js, or terminal required. Just download and install.</p>
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">1</div>
-      <h3>Download &amp; Install</h3>
-      <p>Run the installer for your OS. The backend, frontend, and database are all bundled inside.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <h3>Configure an LLM</h3>
-      <p>Open Settings &rarr; LLM. Paste your OpenAI, Anthropic, or Groq key &mdash; it&rsquo;s encrypted immediately.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <h3>Upload documents</h3>
-      <p>Drag PDFs, DOCX, XLSX, or text files into a Knowledge Base. Knovex indexes them in seconds.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">4</div>
-      <h3>Chat &amp; Learn</h3>
-      <p>Ask questions with cited sources, run web search, or open Learn Mode for interactive content.</p>
-    </div>
-  </div>
-</div>
-
-<!-- ── CTA band ───────────────────────────────────────────────────────────── -->
-<div class="cta-band z1">
-  <div class="cta-band-title">Ready to own your knowledge?</div>
-  <p class="cta-band-sub">Free, open source, and running entirely on your machine.</p>
-  <div class="cta-group">
-    <a id="cta-band-download" href="#platforms">
-      &#8659; Download Knovex
-    </a>
-    <a class="cta-alt" href="https://github.com/tailorgunjan93/knovex" target="_blank">
-      View on GitHub &rarr;
-    </a>
-  </div>
-</div>
-
-<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
-<footer class="z1">
-  <div class="footer-left">
-    <div class="logo-mark" style="width:26px;height:26px;font-size:0.72rem;border-radius:7px;">K</div>
-    <div>
-      <span class="footer-copy">&copy; 2026 Gunjan Tailor &middot; Knovex v0.6.5</span><br>
-      <span class="footer-motto">Secure &middot; Fast &middot; Reliable &middot; Cost-Effective</span>
-    </div>
-  </div>
-  <div class="footer-links">
-    <a href="https://github.com/tailorgunjan93/knovex" target="_blank">GitHub</a>
-    <a href="https://github.com/tailorgunjan93/knovex/releases" target="_blank">All releases</a>
-    <a href="https://github.com/tailorgunjan93/knovex/issues" target="_blank">Report a bug</a>
-    <a href="https://github.com/tailorgunjan93/knovex/blob/main/LICENSE" target="_blank">MIT License</a>
-  </div>
-</footer>
+  <!-- ── tweaks ──────────────────────────────────────────────────── -->
+  <div id="tweaks-root"></div>
 
 <script>
-  const VERSION = "0.6.5";
-  const BASE    = "https://github.com/tailorgunjan93/knovex/releases/latest/download/";
-  const platforms = {
-    win:   { icon: "🛏", label: "Download for Windows",  href: BASE + "Knovex-Setup-" + VERSION + ".exe", card: "card-win"   },
-    mac:   { icon: "🍎", label: "Download for macOS",    href: BASE + "Knovex-" + VERSION + ".dmg",       card: "card-mac"  },
-    linux: { icon: "🐧", label: "Download for Linux",    href: BASE + "Knovex-" + VERSION + ".AppImage",  card: "card-linux"},
-  };
-  function detectOS() {
-    const ua = navigator.userAgent;
-    if (/Win/i.test(ua)) return "win";
-    if (/Mac/i.test(ua)) return "mac";
-    return "linux";
-  }
-  (function init() {
-    const os   = detectOS();
-    const info = platforms[os];
+  /* ── OS detection + CTA wiring ── */
+  (function(){
+    const VERSION = "0.6.5";
+    const BASE = "https://github.com/tailorgunjan93/knovex/releases/latest/download/";
+    const MAP = {
+      win:   { label: "Windows",  sub: "— .exe · NSIS · ~85 MB", file: "Knovex-Setup-" + VERSION + ".exe" },
+      mac:   { label: "macOS",    sub: "— .dmg · Intel · ~92 MB", file: "Knovex-" + VERSION + ".dmg" },
+      linux: { label: "Linux",    sub: "— AppImage · ~88 MB",    file: "Knovex-" + VERSION + ".AppImage" },
+    };
+    const ua = navigator.userAgent || "";
+    let os = "win";
+    if(/Mac|iPhone|iPad|Macintosh/i.test(ua)) os = "mac";
+    else if(/Linux|X11/i.test(ua) && !/Android/i.test(ua)) os = "linux";
 
-    // Primary hero CTA
-    const btn  = document.getElementById("primary-download");
-    const icon = document.getElementById("dl-icon");
-    const lbl  = document.getElementById("dl-label");
-    if (btn && info) {
-      btn.href = info.href;
-      if (icon) icon.textContent = info.icon;
-      if (lbl)  lbl.textContent  = "Download for " + (os === "win" ? "Windows" : os === "mac" ? "macOS" : "Linux");
-    }
+    const info = MAP[os];
+    const cta = document.getElementById("cta-primary");
+    const lbl = document.getElementById("cta-label");
+    const sub = document.getElementById("cta-sub");
+    if(cta)  cta.href = BASE + info.file;
+    if(lbl)  lbl.textContent = "Download for " + info.label;
+    if(sub)  sub.textContent = info.sub;
 
-    // Bottom CTA band button
-    const cta2 = document.getElementById("cta-band-download");
-    if (cta2 && info) {
-      cta2.href = info.href;
-      // Inherit the primary-download styling
-      cta2.style.display     = "inline-flex";
-      cta2.style.alignItems  = "center";
-      cta2.style.gap         = "9px";
-      cta2.style.background  = "linear-gradient(135deg,#4F46E5 0%,#7C3AED 50%,#9333EA 100%)";
-      cta2.style.color       = "#fff";
-      cta2.style.fontSize    = "0.93rem";
-      cta2.style.fontWeight  = "700";
-      cta2.style.padding     = "0.72rem 1.6rem";
-      cta2.style.borderRadius= "11px";
-      cta2.style.textDecoration = "none";
-      cta2.style.boxShadow   = "0 4px 24px rgba(99,102,241,0.4)";
-    }
-
-    // Highlight detected platform card
-    const card = document.getElementById(info.card);
-    if (card) card.classList.add("highlighted");
+    const card = document.querySelector('.plat[data-os="' + os + '"]');
+    if(card) card.dataset.detected = "true";
   })();
+
+  /* ── Scroll reveal ── */
+  (function(){
+    const io = new IntersectionObserver((entries) => {
+      for(const e of entries){
+        if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); }
+      }
+    }, { threshold: 0.08, rootMargin: "0px 0px -40px 0px" });
+    document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+  })();
+
+  /* ── Copy buttons ── */
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button.copy");
+    if(!b) return;
+    navigator.clipboard?.writeText(b.dataset.copy || "");
+    b.dataset.copied = "true";
+    const old = b.textContent;
+    b.textContent = "copied ✓";
+    setTimeout(() => { b.textContent = old; delete b.dataset.copied; }, 1400);
+  });
+
+  /* ── Keyboard shortcuts: D → downloads, T → theme ── */
+  document.addEventListener("keydown", (e) => {
+    if(/input|textarea/i.test(e.target?.tagName)) return;
+    if(e.key === "d" || e.key === "D")
+      document.getElementById("platforms")?.scrollIntoView({ behavior: "smooth" });
+    if(e.key === "t" || e.key === "T")
+      document.getElementById("theme-toggle")?.click();
+  });
+
+  /* ── Theme toggle ── */
+  (function(){
+    if(!document.documentElement.dataset.theme)
+      document.documentElement.dataset.theme = "dark";
+    document.getElementById("theme-toggle")?.addEventListener("click", () => {
+      const cur  = document.documentElement.dataset.theme || "dark";
+      const next = cur === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      try { window.parent.postMessage({ type: "__edit_mode_set_keys", edits: { theme: next } }, "*"); } catch(_){}
+    });
+  })();
+</script>
+
+<!-- React + Babel for Tweaks panel only -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel">
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "theme": "dark",
+    "accent": "copper",
+    "density": "regular",
+    "showProductWindow": true
+  }/*EDITMODE-END*/;
+
+  const ACCENTS = {
+    copper:   { color: "oklch(0.78 0.13 60)",  ink: "#1A140C" },
+    electric: { color: "oklch(0.72 0.18 250)", ink: "#0B0F1A" },
+    emerald:  { color: "oklch(0.74 0.14 165)", ink: "#0B1812" },
+    magenta:  { color: "oklch(0.72 0.20 340)", ink: "#1A0B14" },
+    citrus:   { color: "oklch(0.86 0.16 105)", ink: "#181A0B" },
+  };
+
+  function App() {
+    const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+    React.useEffect(() => {
+      document.documentElement.dataset.theme = t.theme;
+      const a = ACCENTS[t.accent] || ACCENTS.copper;
+      document.documentElement.style.setProperty("--accent",     a.color);
+      document.documentElement.style.setProperty("--accent-ink", a.ink);
+      const dens = { compact: 14.5, regular: 16, comfy: 17.5 }[t.density] || 16;
+      document.body.style.fontSize = dens + "px";
+      const pw = document.getElementById("product-window");
+      if(pw) pw.style.display = t.showProductWindow ? "" : "none";
+    }, [t]);
+
+    return (
+      <TweaksPanel title="Knovex.io tweaks">
+        <TweakSection label="Appearance" />
+        <TweakRadio label="Theme" value={t.theme}
+                    options={["dark","light"]}
+                    onChange={(v) => setTweak("theme", v)} />
+        <TweakSelect label="Accent" value={t.accent}
+                    options={["copper","electric","emerald","magenta","citrus"]}
+                    onChange={(v) => setTweak("accent", v)} />
+        <TweakRadio label="Density" value={t.density}
+                    options={["compact","regular","comfy"]}
+                    onChange={(v) => setTweak("density", v)} />
+        <TweakSection label="Layout" />
+        <TweakToggle label="Show product preview" value={t.showProductWindow}
+                    onChange={(v) => setTweak("showProductWindow", v)} />
+      </TweaksPanel>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("tweaks-root")).render(<App />);
 </script>
 </body>
 </html>
