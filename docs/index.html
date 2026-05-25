@@ -544,7 +544,7 @@
         </button>
         <span class="pill-version" title="Latest stable release">
           <span class="led" aria-hidden="true"></span>
-          <span class="mono">v0.6.5</span>
+          <span class="mono" data-version-pill>v0.6.6</span>
           <span style="color:var(--fg-4)">·</span>
           <span style="color:var(--fg-3)">stable</span>
         </span>
@@ -557,7 +557,7 @@
     <section class="hero">
       <div class="wrap">
         <span class="eyebrow reveal">
-          <span class="tag">v0.6.5</span>
+          <span class="tag" data-version-pill>v0.6.6</span>
           Semantic search — ONNX embeddings + OpenAI API support
         </span>
 
@@ -595,7 +595,7 @@
         </div>
 
         <div class="os-line reveal">
-          <span class="mono" style="color:var(--fg-2)">v0.6.5</span>
+          <span class="mono" style="color:var(--fg-2)" data-version-pill>v0.6.6</span>
           <span class="dot"></span>
           <span>Free &amp; open source — MIT license</span>
           <span class="dot"></span>
@@ -721,8 +721,8 @@
               </div>
             </div>
             <div class="plat-dl">
-              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-Setup-0.6.5.exe">
-                <span class="file">Knovex‑Setup‑0.6.5.exe</span>
+              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-Setup-0.6.6.exe" data-asset="win">
+                <span class="file">Knovex‑Setup‑0.6.6.exe</span>
                 <span class="arch">x64</span>
                 <svg class="arrow" viewBox="0 0 14 14" fill="none">
                   <path d="M7 2v9M7 11L3.5 7.5M7 11l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -755,8 +755,8 @@
               </div>
             </div>
             <div class="plat-dl">
-              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.5.dmg">
-                <span class="file">Knovex‑0.6.5.dmg</span>
+              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.6.dmg" data-asset="mac">
+                <span class="file">Knovex‑0.6.6.dmg</span>
                 <span class="arch">Intel x64</span>
                 <svg class="arrow" viewBox="0 0 14 14" fill="none">
                   <path d="M7 2v9M7 11L3.5 7.5M7 11l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -788,15 +788,15 @@
               </div>
             </div>
             <div class="plat-dl">
-              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.5.AppImage">
-                <span class="file">Knovex‑0.6.5.AppImage</span>
+              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/Knovex-0.6.6.AppImage" data-asset="appimage">
+                <span class="file">Knovex‑0.6.6.AppImage</span>
                 <span class="arch">x86_64 portable</span>
                 <svg class="arrow" viewBox="0 0 14 14" fill="none">
                   <path d="M7 2v9M7 11L3.5 7.5M7 11l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </a>
-              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/knovex_0.6.5_amd64.deb">
-                <span class="file">knovex_0.6.5_amd64.deb</span>
+              <a href="https://github.com/tailorgunjan93/knovex/releases/latest/download/knovex_0.6.6_amd64.deb" data-asset="deb">
+                <span class="file">knovex_0.6.6_amd64.deb</span>
                 <span class="arch">debian / ubuntu</span>
                 <svg class="arrow" viewBox="0 0 14 14" fill="none">
                   <path d="M7 2v9M7 11L3.5 7.5M7 11l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -952,30 +952,78 @@
   <div id="tweaks-root"></div>
 
 <script>
-  /* ── OS detection + CTA wiring ── */
+  /* ── OS detection + CTA wiring + live GitHub release links ── */
   (function(){
-    const VERSION = "0.6.5";
-    const BASE = "https://github.com/tailorgunjan93/knovex/releases/latest/download/";
-    const MAP = {
-      win:   { label: "Windows",  sub: "— .exe · NSIS · ~85 MB", file: "Knovex-Setup-" + VERSION + ".exe" },
-      mac:   { label: "macOS",    sub: "— .dmg · Intel · ~92 MB", file: "Knovex-" + VERSION + ".dmg" },
-      linux: { label: "Linux",    sub: "— AppImage · ~88 MB",    file: "Knovex-" + VERSION + ".AppImage" },
-    };
+    /* Fallback version used before the GitHub API responds */
+    const FALLBACK_VERSION = "0.6.6";
+    const REPO = "tailorgunjan93/knovex";
+    const BASE = "https://github.com/" + REPO + "/releases/latest/download/";
+
+    /* Detect OS */
     const ua = navigator.userAgent || "";
     let os = "win";
     if(/Mac|iPhone|iPad|Macintosh/i.test(ua)) os = "mac";
     else if(/Linux|X11/i.test(ua) && !/Android/i.test(ua)) os = "linux";
 
-    const info = MAP[os];
-    const cta = document.getElementById("cta-primary");
-    const lbl = document.getElementById("cta-label");
-    const sub = document.getElementById("cta-sub");
-    if(cta)  cta.href = BASE + info.file;
-    if(lbl)  lbl.textContent = "Download for " + info.label;
-    if(sub)  sub.textContent = info.sub;
+    const OS_INFO = {
+      win:   { label: "Windows", sub: "— .exe · NSIS · ~85 MB" },
+      mac:   { label: "macOS",   sub: "— .dmg · Intel · ~92 MB" },
+      linux: { label: "Linux",   sub: "— AppImage · ~88 MB" },
+    };
 
-    const card = document.querySelector('.plat[data-os="' + os + '"]');
-    if(card) card.dataset.detected = "true";
+    /* Wire up all download links and CTA for a given version string */
+    function applyVersion(v) {
+      const files = {
+        win:      "Knovex-Setup-" + v + ".exe",
+        mac:      "Knovex-" + v + ".dmg",
+        appimage: "Knovex-" + v + ".AppImage",
+        deb:      "knovex_" + v + "_amd64.deb",
+      };
+
+      /* Update static download cards */
+      document.querySelectorAll("[data-asset]").forEach(function(a) {
+        const key = a.dataset.asset;
+        if(files[key]) {
+          a.href = BASE + files[key];
+          const fileSpan = a.querySelector(".file");
+          if(fileSpan) fileSpan.textContent = files[key].replace(/-/g, "‑"); /* non-breaking hyphen */
+        }
+      });
+
+      /* Update hero CTA */
+      const ctaFile = files[os] || files.win;
+      const info = OS_INFO[os];
+      const cta = document.getElementById("cta-primary");
+      const lbl = document.getElementById("cta-label");
+      const sub = document.getElementById("cta-sub");
+      if(cta) cta.href = BASE + ctaFile;
+      if(lbl) lbl.textContent = "Download for " + info.label;
+      if(sub) sub.textContent = info.sub;
+
+      /* Mark detected OS card */
+      const card = document.querySelector('.plat[data-os="' + os + '"]');
+      if(card) card.dataset.detected = "true";
+
+      /* Update any visible version pills */
+      document.querySelectorAll("[data-version-pill]").forEach(function(el) {
+        el.textContent = "v" + v;
+      });
+    }
+
+    /* Apply fallback immediately so links work before API responds */
+    applyVersion(FALLBACK_VERSION);
+
+    /* Fetch latest release from GitHub API and update to real version */
+    fetch("https://api.github.com/repos/" + REPO + "/releases/latest", {
+      headers: { "Accept": "application/vnd.github+json" },
+    })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(data) {
+      if(!data || !data.tag_name) return;
+      const v = data.tag_name.replace(/^v/, "");
+      applyVersion(v);
+    })
+    .catch(function(){/* silently keep fallback */});
   })();
 
   /* ── Scroll reveal ── */
