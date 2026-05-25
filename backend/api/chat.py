@@ -28,8 +28,8 @@ from backend.core.dependencies import (
 )
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
-    ChatMessagesResponse,
     ChatMessageResponse,
+    ChatMessagesResponse,
     ChatSessionCreate,
     ChatSessionListResponse,
     ChatSessionResponse,
@@ -67,8 +67,8 @@ def _message_to_response(msg) -> ChatMessageResponse:
         role=msg.role,
         content=msg.content,
         created_at=msg.created_at,
-        sources=[s for s in msg.sources],
-        web_sources=[s for s in msg.web_sources],
+        sources=list(msg.sources),
+        web_sources=list(msg.web_sources),
     )
 
 
@@ -120,7 +120,7 @@ async def get_session(
     try:
         session = await chat_svc.get_session(session_id)
     except EntityNotFoundError as exc:
-        raise _handle_not_found(exc)
+        raise _handle_not_found(exc) from exc
     return _session_to_response(session)
 
 
@@ -137,9 +137,9 @@ async def rename_session(
     try:
         session = await chat_svc.rename_session(session_id, body.title)
     except EntityNotFoundError as exc:
-        raise _handle_not_found(exc)
+        raise _handle_not_found(exc) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _session_to_response(session)
 
 
@@ -171,7 +171,7 @@ async def get_messages(
     try:
         await chat_svc.get_session(session_id)  # validate exists
     except EntityNotFoundError as exc:
-        raise _handle_not_found(exc)
+        raise _handle_not_found(exc) from exc
     messages = await chat_svc.get_messages(session_id)
     return ChatMessagesResponse(
         session_id=session_id,
@@ -208,7 +208,7 @@ async def stream_chat(
     try:
         await chat_svc.get_session(session_id)
     except EntityNotFoundError as exc:
-        raise _handle_not_found(exc)
+        raise _handle_not_found(exc) from exc
 
     current = await settings_svc.get()
     llm = current.llm
@@ -256,4 +256,4 @@ async def export_session(
     try:
         return await chat_svc.export_session(session_id)
     except EntityNotFoundError as exc:
-        raise _handle_not_found(exc)
+        raise _handle_not_found(exc) from exc

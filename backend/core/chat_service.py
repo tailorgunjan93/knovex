@@ -26,8 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from backend.core.domain.chat import ChatMessage, ChatSession
 from backend.core.llm_service import LLMService

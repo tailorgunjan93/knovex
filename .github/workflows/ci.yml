@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_call:   # allow release.yml to call this as a reusable workflow
 
 jobs:
   # ─── Python backend ────────────────────────────────────────────────────────

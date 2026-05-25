@@ -22,9 +22,9 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from backend.adapters.web_search import SearchResult, StubWebSearchAdapter
 from backend.core.chat_service import ChatService
@@ -33,7 +33,6 @@ from backend.core.providers.base import ProviderCredentials
 from backend.core.search_service import SearchService
 from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.chat_repository import IChatRepository
-
 
 # ---------------------------------------------------------------------------
 # In-memory repository — no SQLite, no I/O, fully synchronous-safe

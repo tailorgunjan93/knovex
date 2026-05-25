@@ -52,7 +52,6 @@ from backend.core.llm_service import LLMService
 from backend.core.settings_service import SettingsService
 from backend.core.settings_store import ISettingsStore, JsonSettingsStore
 
-
 # ---------------------------------------------------------------------------
 # Infrastructure providers — produced once per process
 # ---------------------------------------------------------------------------
@@ -292,12 +291,12 @@ def get_watcher_service():
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------
 
-from backend.adapters.http_client import IHttpClient         # noqa: E402
-from backend.core.chat_service import ChatService            # noqa: E402
-from backend.core.kb_service import KBService                # noqa: E402
-from backend.core.learn_service import LearnService          # noqa: E402
-from backend.core.reader_service import ReaderService        # noqa: E402
-from backend.core.search_service import SearchService        # noqa: E402
+from backend.adapters.http_client import IHttpClient  # noqa: E402
+from backend.core.chat_service import ChatService  # noqa: E402
+from backend.core.kb_service import KBService  # noqa: E402
+from backend.core.learn_service import LearnService  # noqa: E402
+from backend.core.reader_service import ReaderService  # noqa: E402
+from backend.core.search_service import SearchService  # noqa: E402
 from backend.core.summarizer_service import SummariserService  # noqa: E402
 
 SettingsServiceDep   = Annotated[SettingsService,   Depends(get_settings_service)]

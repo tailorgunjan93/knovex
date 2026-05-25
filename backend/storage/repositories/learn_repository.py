@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from backend.core.domain.learn import LearnSession, UserStats
-from backend.storage.repositories.base import EntityNotFoundError, SQLiteRepository
+from backend.storage.repositories.base import SQLiteRepository
 
 logger = logging.getLogger("knovex.repos.learn")
 
@@ -164,13 +164,12 @@ class SQLiteLearnRepository(ILearnRepository):
 # ---------------------------------------------------------------------------
 
 def _row_to_session(row: dict[str, Any]) -> LearnSession:
+    import contextlib
     content = None
     raw_content = row.get("content")
     if raw_content:
-        try:
+        with contextlib.suppress(json.JSONDecodeError, TypeError):
             content = json.loads(raw_content)
-        except (json.JSONDecodeError, TypeError):
-            pass
     return LearnSession(
         id=row["id"],
         topic=row["topic"],
@@ -186,11 +185,10 @@ def _row_to_session(row: dict[str, Any]) -> LearnSession:
 
 
 def _row_to_stats(row: dict[str, Any]) -> UserStats:
+    import contextlib
     badges: list[str] = []
-    try:
+    with contextlib.suppress(json.JSONDecodeError, TypeError):
         badges = json.loads(row.get("badges") or "[]")
-    except (json.JSONDecodeError, TypeError):
-        pass
     return UserStats(
         xp=int(row.get("xp") or 0),
         level=int(row.get("level") or 1),

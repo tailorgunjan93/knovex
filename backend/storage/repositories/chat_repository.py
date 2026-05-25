@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Any
 
 from backend.core.domain.chat import ChatMessage, ChatSession
-from backend.storage.repositories.base import EntityNotFoundError, SQLiteRepository
+from backend.storage.repositories.base import SQLiteRepository
 
 logger = logging.getLogger("knovex.repos.chat")
 
@@ -192,16 +192,13 @@ def _row_to_session(row: dict[str, Any]) -> ChatSession:
 
 
 def _row_to_message(row: dict[str, Any]) -> ChatMessage:
+    import contextlib
     sources: list[dict] = []
     web_sources: list[dict] = []
-    try:
+    with contextlib.suppress(json.JSONDecodeError, TypeError):
         sources = json.loads(row.get("sources") or "[]")
-    except (json.JSONDecodeError, TypeError):
-        pass
-    try:
+    with contextlib.suppress(json.JSONDecodeError, TypeError):
         web_sources = json.loads(row.get("web_sources") or "[]")
-    except (json.JSONDecodeError, TypeError):
-        pass
     return ChatMessage(
         id=row["id"],
         session_id=row["session_id"],

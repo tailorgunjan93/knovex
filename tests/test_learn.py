@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -29,7 +28,6 @@ from backend.core.domain.learn import LearnSession, UserStats
 from backend.core.learn_service import LearnService
 from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.learn_repository import ILearnRepository
-
 
 # ---------------------------------------------------------------------------
 # In-memory repository stub
@@ -369,7 +367,7 @@ class TestStreamSessionLLMError:
     @pytest.mark.asyncio
     async def test_llm_error_saves_session_as_error(self):
         svc, repo = _make_svc(fail=True)
-        events = await _drain(svc.stream_session(
+        await _drain(svc.stream_session(
             topic="Test", format="quiz", source_type="topic",
             difficulty="beginner", source_ref=None,
             provider="openai", model="gpt-4o-mini", credentials=_creds(),
@@ -549,7 +547,6 @@ class TestReviewFlashcard:
         ("easy",  7),
     ])
     async def test_ease_rating_sets_next_review(self, svc_with_flashcards, ease, expected_days):
-        from datetime import timedelta
         result = await svc_with_flashcards.review_flashcard(
             session_id="fc-001",
             card_index=0,
@@ -605,7 +602,7 @@ class TestSessionCRUD:
         svc, repo = _make_svc(
             complete_json={"questions": [{"q": "Q", "options": ["A", "B", "C", "D"], "correct": 0, "explanation": "E"}]}
         )
-        events = await _drain(svc.stream_session(
+        await _drain(svc.stream_session(
             topic="Chemistry", format="quiz", source_type="topic",
             difficulty="intermediate", source_ref=None,
             provider="openai", model="gpt-4o-mini", credentials=_creds(),
@@ -652,7 +649,7 @@ class TestUserStats:
     @pytest.mark.asyncio
     async def test_completing_session_earns_xp(self):
         svc, repo = _make_svc(tokens=["Hello"])
-        events = await _drain(svc.stream_session(
+        await _drain(svc.stream_session(
             topic="Quasars", format="eli5", source_type="topic",
             difficulty="beginner", source_ref=None,
             provider="openai", model="gpt-4o-mini", credentials=_creds(),

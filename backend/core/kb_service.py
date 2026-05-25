@@ -29,7 +29,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from backend.core.domain.file_record import FileRecord, FileStatus, SUPPORTED_FORMATS
+from backend.core.domain.file_record import SUPPORTED_FORMATS, FileRecord, FileStatus
 from backend.core.domain.kb import KB
 from backend.core.ingestion_service import IngestionService, compute_sha256
 from backend.events.bus import EventBus
@@ -51,9 +51,9 @@ from backend.models.schemas import (
     KBUpdate,
     ReindexResponse,
 )
+from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.file_repository import IFileRepository
 from backend.storage.repositories.kb_repository import IKBRepository
-from backend.storage.repositories.base import EntityNotFoundError
 
 logger = logging.getLogger("knovex.kb_service")
 

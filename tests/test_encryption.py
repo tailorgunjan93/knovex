@@ -15,15 +15,11 @@ Coverage:
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from backend.core.encryption import FernetEncryptor, NullEncryptor
-
 
 # ---------------------------------------------------------------------------
 # FernetEncryptor unit tests
@@ -66,8 +62,8 @@ class TestFernetEncryptor:
         assert enc.is_encrypted("") is False
         assert enc.is_encrypted("some-random-value") is False
 
-    def test_fernet_token_starts_with_gAAAAA(self, enc: FernetEncryptor):
-        """Fernet tokens always have the gAAAAA prefix (standard base64 header)."""
+    def test_fernet_token_has_expected_prefix(self, enc: FernetEncryptor):
+        """Fernet tokens always start with gAAAAA (standard base64-encoded header)."""
         ct = enc.encrypt("test-value")
         assert ct.startswith("gAAAAA")
 

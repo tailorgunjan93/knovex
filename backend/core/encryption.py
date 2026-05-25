@@ -12,8 +12,8 @@ Concrete implementations:
 
 from __future__ import annotations
 
+import contextlib
 import logging
-import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -109,10 +109,9 @@ class FernetEncryptor(IEncryptor):
         key = Fernet.generate_key()
         key_file.parent.mkdir(parents=True, exist_ok=True)
         key_file.write_bytes(key)
-        try:
+        with contextlib.suppress(OSError):  # chmod not supported on Windows
+            import os
             os.chmod(key_file, 0o600)
-        except OSError:
-            pass  # chmod not supported on Windows
         logger.info("Generated new Fernet key at %s", key_file)
         return Fernet(key)
 

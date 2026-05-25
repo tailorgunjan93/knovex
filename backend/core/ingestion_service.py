@@ -31,10 +31,8 @@ from pathlib import Path
 from typing import Any
 
 from backend.adapters.document_parsers import (
-    IPDFAdapter,
     IParagraphAdapter,
-    PageContent,
-    ParagraphContent,
+    IPDFAdapter,
     PyMuPDFAdapter,
     PythonDocxAdapter,
 )

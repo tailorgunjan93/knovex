@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 logger = logging.getLogger("knovex.adapters.llm")
 

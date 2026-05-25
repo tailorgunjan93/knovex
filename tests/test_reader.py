@@ -20,24 +20,22 @@ Coverage:
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from backend.adapters.document_parsers import (
     PageContent,
     ParagraphContent,
-    StubPDFAdapter,
     StubParagraphAdapter,
+    StubPDFAdapter,
 )
 from backend.core.domain.file_record import FileRecord
 from backend.core.reader_service import ReaderService, _heading_level
 from backend.models.schemas import FileAskRequest
 from backend.storage.repositories.base import EntityNotFoundError
-
 
 # ---------------------------------------------------------------------------
 # Async generator factory helper
@@ -311,7 +309,8 @@ async def test_get_content_not_ready():
 @pytest.mark.asyncio
 async def test_get_content_stale_readable():
     """Stale files should still be readable."""
-    import tempfile, os
+    import os
+    import tempfile
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write("Content here.\n")
         tmp = f.name

@@ -26,12 +26,12 @@ import csv
 import io
 import json
 import logging
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, AsyncGenerator
 
 from backend.adapters.document_parsers import (
-    IPDFAdapter,
     IParagraphAdapter,
+    IPDFAdapter,
     PyMuPDFAdapter,
     PythonDocxAdapter,
 )

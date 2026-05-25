@@ -114,7 +114,7 @@ async def stream_learn_session(
             credentials=credentials,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return StreamingResponse(
         stream,
@@ -155,7 +155,7 @@ async def get_session(
     try:
         session = await learn_svc.get_session(session_id)
     except EntityNotFoundError as exc:
-        raise _handle_not_found(exc)
+        raise _handle_not_found(exc) from exc
     return _session_to_response(session)
 
 
@@ -198,9 +198,9 @@ async def submit_quiz_answer(
             answer=body.answer,
         )
     except EntityNotFoundError as exc:
-        raise _handle_not_found(exc)
+        raise _handle_not_found(exc) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return QuizAnswerResponse(**result)
 
@@ -232,9 +232,9 @@ async def review_flashcard(
             ease_rating=ease_rating,
         )
     except EntityNotFoundError as exc:
-        raise _handle_not_found(exc)
+        raise _handle_not_found(exc) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------

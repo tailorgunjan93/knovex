@@ -12,7 +12,6 @@ Tests verify:
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 
@@ -42,7 +41,7 @@ def test_http_response_json():
 def test_http_response_json_invalid():
     from backend.adapters.http_client import HttpResponse
     r = HttpResponse(status_code=200, text="not-json")
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         r.json()
 
 
@@ -136,7 +135,7 @@ async def test_stub_llm_client_stream_not_empty():
 # ---------------------------------------------------------------------------
 
 def test_stub_pdf_adapter():
-    from backend.adapters.document_parsers import StubPDFAdapter, PageContent
+    from backend.adapters.document_parsers import PageContent, StubPDFAdapter
     pages = [
         PageContent(page_num=1, text="First page text"),
         PageContent(page_num=2, text="Second page text"),
@@ -160,7 +159,7 @@ def test_stub_pdf_adapter_empty():
 # ---------------------------------------------------------------------------
 
 def test_stub_paragraph_adapter():
-    from backend.adapters.document_parsers import StubParagraphAdapter, ParagraphContent
+    from backend.adapters.document_parsers import ParagraphContent, StubParagraphAdapter
     paragraphs = [
         ParagraphContent(text="Introduction", style="Heading 1"),
         ParagraphContent(text="Body text here.", style="Normal"),

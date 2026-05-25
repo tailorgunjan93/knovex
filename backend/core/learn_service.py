@@ -26,21 +26,18 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import datetime
-from typing import AsyncGenerator
 
 from backend.core.domain.learn import (
     VALID_DIFFICULTIES,
     VALID_FORMATS,
-    LearnSession,
-    UserStats,
     XP_FLASHCARD_DECK,
     XP_QUIZ_CORRECT,
-    XP_QUIZ_PERFECT,
     XP_SESSION_COMPLETE,
     XP_STREAK_BONUS,
-    xp_for_next_level,
-    xp_to_level,
+    LearnSession,
+    UserStats,
 )
 from backend.core.llm_service import LLMService
 from backend.core.providers.base import ProviderCredentials
@@ -343,7 +340,6 @@ class LearnService:
     async def _award_session_xp(self, session: LearnSession) -> tuple[int, list[str]]:
         """Award XP for completing a session. Returns (xp_earned, new_badges)."""
         stats = await self._repo.get_user_stats()
-        old_level = stats.level
         new_badges: list[str] = []
 
         # Base completion XP

@@ -63,9 +63,9 @@ async def summarize_file(
             credentials=credentials,
         )
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return StreamingResponse(
         gen,

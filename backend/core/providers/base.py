@@ -22,8 +22,9 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from backend.adapters.llm_client import ILLMClient
 from backend.models.schemas import LLMModelInfo, TestLLMResponse
@@ -51,7 +52,7 @@ class ProviderCredentials:
     aws_secret_access_key: str = ""
 
     @classmethod
-    def empty(cls) -> "ProviderCredentials":
+    def empty(cls) -> ProviderCredentials:
         return cls()
 
 

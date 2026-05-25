@@ -17,11 +17,12 @@ OCP: Adding a new provider never touches this file.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, AsyncGenerator, Any
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
 from backend.core.providers.base import ProviderCredentials
 from backend.core.providers.factory import LLMProviderFactory
-from backend.models.schemas import LLMModelInfo, LLMModelsResponse, TestLLMResponse
+from backend.models.schemas import LLMModelsResponse, TestLLMResponse
 
 if TYPE_CHECKING:
     from backend.core.providers.base import LLMProvider
@@ -150,7 +151,7 @@ class LLMService:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _get_provider(self, provider_name: str) -> "LLMProvider":
+    def _get_provider(self, provider_name: str) -> LLMProvider:
         try:
             return self._factory.create(provider_name)
         except ValueError as exc:

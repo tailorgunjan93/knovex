@@ -68,9 +68,9 @@ async def get_file_content(
     try:
         return await reader_svc.get_content(kb_id, file_id, page=page)
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -128,9 +128,9 @@ async def ask_file(
         # Trigger validation only — result not needed here
         await reader_svc._require_file(kb_id, file_id)  # noqa: SLF001
     except EntityNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return StreamingResponse(
         reader_svc.ask(

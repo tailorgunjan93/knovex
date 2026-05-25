@@ -11,13 +11,13 @@ from backend.storage.repositories.base import (
     RepositoryError,
     SQLiteRepository,
 )
-from backend.storage.repositories.kb_repository import (
-    IKBRepository,
-    SQLiteKBRepository,
-)
 from backend.storage.repositories.file_repository import (
     IFileRepository,
     SQLiteFileRepository,
+)
+from backend.storage.repositories.kb_repository import (
+    IKBRepository,
+    SQLiteKBRepository,
 )
 
 __all__ = [

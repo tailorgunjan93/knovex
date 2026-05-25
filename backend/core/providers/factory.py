@@ -38,10 +38,10 @@ class LLMProviderFactory:
     The factory simply looks them up by name.
     """
 
-    _registry: dict[str, type["LLMProvider"]] = {}
+    _registry: dict[str, type[LLMProvider]] = {}
 
     @classmethod
-    def register(cls, name: str, provider_class: type["LLMProvider"]) -> None:
+    def register(cls, name: str, provider_class: type[LLMProvider]) -> None:
         """Register a provider class under *name*."""
         cls._registry[name.lower()] = provider_class
         logger.debug("Registered LLM provider: %s → %s", name, provider_class.__name__)
@@ -50,8 +50,8 @@ class LLMProviderFactory:
     def create(
         cls,
         provider_name: str,
-        llm_client: "ILLMClient | None" = None,
-    ) -> "LLMProvider":
+        llm_client: ILLMClient | None = None,
+    ) -> LLMProvider:
         """
         Instantiate and return the provider for *provider_name*.
 
@@ -94,7 +94,7 @@ def register_provider(name: str):
         class OpenAIProvider(LLMProvider):
             ...
     """
-    def decorator(cls: type["LLMProvider"]) -> type["LLMProvider"]:
+    def decorator(cls: type[LLMProvider]) -> type[LLMProvider]:
         LLMProviderFactory.register(name, cls)
         return cls
     return decorator

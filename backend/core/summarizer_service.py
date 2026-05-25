@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from backend.core.llm_service import LLMService
 from backend.core.providers.base import ProviderCredentials

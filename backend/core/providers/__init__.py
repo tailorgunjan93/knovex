@@ -8,13 +8,13 @@ Adding a new provider = create a new module, add the import here.
 Nothing else changes.
 """
 
-from backend.core.providers.factory import LLMProviderFactory, register_provider  # noqa: F401
 from backend.core.providers import (  # noqa: F401
-    openai,
     anthropic,
-    groq,
-    gemini,
-    cerebras,
     bedrock,
+    cerebras,
+    gemini,
+    groq,
     ollama,
+    openai,
 )
+from backend.core.providers.factory import LLMProviderFactory, register_provider  # noqa: F401

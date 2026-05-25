@@ -33,7 +33,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger("knovex.events")
 
@@ -127,7 +128,7 @@ class EventBus:
             return_exceptions=True,
         )
 
-        for handler, result in zip(handlers, results):
+        for handler, result in zip(handlers, results, strict=False):
             if isinstance(result, Exception):
                 logger.error(
                     "Handler '%s' raised on event '%s': %s",

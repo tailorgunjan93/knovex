@@ -13,9 +13,6 @@ Strategy:
 
 from __future__ import annotations
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Core / Config
 # ---------------------------------------------------------------------------
@@ -41,14 +38,15 @@ def test_schemas_import():
 # ---------------------------------------------------------------------------
 
 def test_domain_kb_import():
-    from backend.core.domain.kb import KB  # noqa: F401
     import uuid
+
+    from backend.core.domain.kb import KB  # noqa: F401
     kb = KB(id=str(uuid.uuid4()), name="test", color="#ff0000", icon="📚")
     assert kb.name == "test"
 
 
 def test_domain_file_record_import():
-    from backend.core.domain.file_record import FileRecord, SUPPORTED_FORMATS  # noqa: F401
+    from backend.core.domain.file_record import SUPPORTED_FORMATS, FileRecord  # noqa: F401
     assert "pdf" in SUPPORTED_FORMATS
     assert "docx" in SUPPORTED_FORMATS
 
@@ -62,7 +60,12 @@ def test_llm_adapter_imports():
 
 
 def test_http_adapter_imports():
-    from backend.adapters.http_client import IHttpClient, HttpxAdapter, StubHttpClient, HttpResponse  # noqa: F401
+    from backend.adapters.http_client import (  # noqa: F401
+        HttpResponse,
+        HttpxAdapter,
+        IHttpClient,
+        StubHttpClient,
+    )
     r = HttpResponse(status_code=200, text='{"ok": true}')
     assert r.ok is True
     assert r.json() == {"ok": True}
@@ -70,14 +73,14 @@ def test_http_adapter_imports():
 
 def test_document_parser_imports():
     from backend.adapters.document_parsers import (  # noqa: F401
-        IPDFAdapter,
         IParagraphAdapter,
+        IPDFAdapter,
         PageContent,
         ParagraphContent,
         PyMuPDFAdapter,
         PythonDocxAdapter,
-        StubPDFAdapter,
         StubParagraphAdapter,
+        StubPDFAdapter,
     )
 
 
@@ -87,13 +90,13 @@ def test_document_parser_imports():
 
 def test_ingestion_service_imports():
     from backend.core.ingestion_service import (  # noqa: F401
-        IngestionService,
-        IFileParser,
-        get_parser,
-        PlainTextParser,
         CSVParser,
-        PDFParser,
         DOCXParser,
+        IFileParser,
+        IngestionService,
+        PDFParser,
+        PlainTextParser,
+        get_parser,
     )
     # All parsers must be registered
     for fmt in ("txt", "md", "csv", "pdf", "docx", "udf"):
@@ -129,8 +132,9 @@ def test_search_service_imports():
 
 
 def test_chat_domain_imports():
-    from backend.core.domain.chat import ChatSession, ChatMessage  # noqa: F401
     import uuid
+
+    from backend.core.domain.chat import ChatMessage, ChatSession  # noqa: F401
     session = ChatSession(id=str(uuid.uuid4()), title="Test")
     assert session.title == "Test"
     msg = ChatMessage(
@@ -144,12 +148,12 @@ def test_chat_domain_imports():
 
 def test_web_search_adapter_imports():
     from backend.adapters.web_search import (  # noqa: F401
+        BraveAdapter,
+        DuckDuckGoAdapter,
         IWebSearchAdapter,
         SearchResult,
-        StubWebSearchAdapter,
-        DuckDuckGoAdapter,
         SerperAdapter,
-        BraveAdapter,
+        StubWebSearchAdapter,
         get_search_adapter,
     )
     stub = StubWebSearchAdapter()
@@ -236,16 +240,16 @@ def test_search_routes_registered():
 def test_learn_domain_imports():
     """Learn domain entities must import and work correctly."""
     from backend.core.domain.learn import (  # noqa: F401
+        VALID_DIFFICULTIES,
+        VALID_FORMATS,
+        XP_FLASHCARD_DECK,
+        XP_QUIZ_CORRECT,
+        XP_SESSION_COMPLETE,
+        XP_STREAK_BONUS,
         LearnSession,
         UserStats,
-        VALID_FORMATS,
-        VALID_DIFFICULTIES,
-        XP_SESSION_COMPLETE,
-        XP_QUIZ_CORRECT,
-        XP_FLASHCARD_DECK,
-        XP_STREAK_BONUS,
-        xp_to_level,
         xp_for_next_level,
+        xp_to_level,
     )
     assert "quiz" in VALID_FORMATS
     assert "flashcard" in VALID_FORMATS
@@ -276,8 +280,8 @@ def test_learn_repository_imports():
 def test_encryption_imports():
     """Encryption module must expose FernetEncryptor and NullEncryptor."""
     from backend.core.encryption import (  # noqa: F401
-        IEncryptor,
         FernetEncryptor,
+        IEncryptor,
         NullEncryptor,
     )
     enc = NullEncryptor()
