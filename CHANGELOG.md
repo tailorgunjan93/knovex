@@ -9,7 +9,71 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-*Planned — Sprint 7+*
+---
+
+## [0.6.6] — 2026-05-25
+
+Sprint 7 — Semantic Search · Copper Theme · Auto-update
+
+### Added
+
+#### Backend — Embedding layer (Sprint 7)
+- **`backend/adapters/embedder.py`** — `IEmbedder` ABC + three implementations
+  - `OpenAIEmbedder` — calls `text-embedding-3-small` via httpx (batched, up to 96 texts per request)
+  - `ONNXEmbedder` — local `all-MiniLM-L6-v2` via onnxruntime; lazy-loaded, mean-pooled + L2-normalised (384-dim)
+  - `NullEmbedder` — silent no-op fallback; retrieval degrades gracefully to FTS5-only
+  - `build_embedder(api_key, provider, model)` factory: OpenAI key → OpenAI; local model ready → ONNX; else Null
+  - `model_files_ready()`, `download_model(progress_cb)`, `_download_file()` — stdlib urllib download with 64 KB streaming + progress hook
+- **`backend/api/setup.py`** — first-launch model download endpoints
+  - `GET  /api/setup/models/status` → `{ready, model_name, size_bytes, path}`
+  - `POST /api/setup/models/download` → SSE stream: `progress` / `done` / `error` events
+  - Async bridge: blocking download runs in `run_in_executor`, progress pushed via `asyncio.Queue`
+- **`backend/models/schemas.py`** — `EmbeddingSettings` model (`provider`, `model`, `api_key`); added `embedding` field to `AppSettingsResponse` and `AppSettingsUpdate`
+- **`backend/core/settings_service.py`** — `embedding.api_key` added to `SENSITIVE_FIELDS`; embedding defaults wired into `_default_settings()`
+- **`backend/requirements.txt`** — added `onnxruntime>=1.17`, `tokenizers>=0.19`, `numpy>=1.26`
+- **`backend/knovex-backend.spec`** — `backend.api.setup`, `backend.adapters.embedder`, `onnxruntime`, `tokenizers`, `numpy` added to `hiddenimports`
+
+#### Frontend — Embedding settings UI
+- **`frontend/src/api/settings.api.ts`** — `EmbeddingSettings` interface + `embedding` field in `AppSettings` and update patch type
+- **`frontend/src/api/setup.api.ts`** — `setupApi.getModelStatus()` and `setupApi.downloadModel(onProgress, signal)` via SSE fetch
+- **`frontend/src/pages/Settings/LLMSettings.tsx`** — Embeddings section:
+  - Provider toggle (Local ONNX / OpenAI API)
+  - Optional masked OpenAI embedding API key field with show/hide toggle
+  - Local model status card: file size, path, `LinearProgress` download bar, cancel button
+  - "Save Embedding Settings" button
+
+#### Desktop — Auto-update
+- **`desktop/main.js`** — `electron-updater` wired up (production only, 8 s startup delay)
+  - `autoDownload = true` — new releases download silently in background
+  - `update-downloaded` → sends `app:update-downloaded` IPC to renderer with `{version, releaseNotes}`
+  - `app:install-update` IPC handler → `autoUpdater.quitAndInstall()`
+  - Download progress forwarded to renderer via `app:update-progress`
+- **`desktop/preload.js`** — exposes `onUpdateDownloaded`, `onUpdateProgress`, `installUpdate` on `window.knovex`
+- **`frontend/src/types/electron.d.ts`** — TypeScript declarations for all three update APIs
+- **`frontend/src/components/Layout/AppShell.tsx`** — copper top banner with "Restart now" button + dismiss; uses MUI `Collapse` for slide-in/out
+
+#### Design — Copper warm-dark theme
+- **`frontend/src/theme/index.ts`** — complete theme rewrite
+  - Accent: `#C8924A` (copper — `oklch(0.78 0.13 60)` match) replacing violet `#7C3AED`
+  - Dark: `#0B0B0C` bg / `#111114` paper / `#F5F1EA` warm off-white text
+  - Light: `#F5F1EA` bg / `#EFEAE0` paper / `#14120E` text (warm parchment)
+  - Medium: `#E7E1D5` bg / `#DDD7CB` paper
+  - Font: **Geist** + Geist Mono (matches the download page)
+  - `action.hover/selected/focus` tokens use copper alpha — all components inherit automatically
+- **`frontend/index.html`** — Geist + Geist Mono loaded from Google Fonts
+- **`frontend/src/components/Layout/Sidebar.tsx`** — active background now uses `theme.palette.action.selected` (theme-aware, no hardcoded colour)
+- **`desktop/main.js`** — `backgroundColor` updated to `#0B0B0C`
+
+#### Download page
+- **`docs/index.html`** — full redesign matching Claude Design aesthetic:
+  - Geist fonts, copper `oklch` accent, `html[data-theme]` light/dark, conic-gradient K brand mark
+  - Stats strip, 3×3 features grid, v0.6.6 download URLs, copy buttons, reveal animations
+- **`docs/tweaks-panel.jsx`** — React Tweaks Panel with 5 accent presets + PostMessage protocol
+
+### Changed
+- `desktop/package.json` — version `0.6.6`
+- `frontend/package.json` — version `0.6.6`
+- `backend/core/config.py` — `version = "0.6.6"`
 
 ---
 
@@ -441,7 +505,9 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/tailorgunjan93/knovex/compare/v0.6.0...v0.6.6
+[0.6.0]: https://github.com/tailorgunjan93/knovex/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/tailorgunjan93/knovex/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tailorgunjan93/knovex/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tailorgunjan93/knovex/compare/v0.2.0...v0.3.0
