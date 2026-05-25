@@ -68,9 +68,6 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "allowElevation": true,
-      "installerIcon": "assets/icon.png",
-      "uninstallerIcon": "assets/icon.png",
-      "installerHeaderIcon": "assets/icon.png",
       "shortcutName": "Knovex",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
@@ -99,26 +96,7 @@
 
     "dmg": {
       "title": "Knovex ${version}",
-      "background": null,
-      "window": {
-        "width": 540,
-        "height": 380
-      },
-      "contents": [
-        {
-          "x": 150,
-          "y": 185,
-          "type": "file"
-        },
-        {
-          "x": 390,
-          "y": 185,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ],
-      "iconSize": 100,
-      "iconTextSize": 12
+      "iconSize": 100
     },
 
     "linux": {
