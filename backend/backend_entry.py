@@ -55,13 +55,16 @@ def main() -> None:
         if base_dir not in sys.path:
             sys.path.insert(0, base_dir)
 
-    # ── Import the app object BEFORE calling uvicorn ──────────────────────────
-    # This explicit import statement is what causes PyInstaller's build-time
-    # analyser to trace backend.main and freeze its full dependency tree.
-    # See module-level docstring for the full explanation.
-    from backend.main import app  # noqa: E402  (import not at top of file)
+    # ── Import uvicorn and the app object ────────────────────────────────────
+    # Both imports must come AFTER the sys.path patch above so that, when
+    # frozen, PyInstaller's FrozenImporter is used rather than the OS filesystem.
+    #
+    # Passing the ASGI callable directly (not the string "backend.main:app")
+    # ensures PyInstaller's build-time analyser can trace backend.main and
+    # freeze its full dependency tree.  See module-level docstring for details.
+    import uvicorn  # noqa: E402  (import inside function — intentional)
 
-    import uvicorn
+    from backend.main import app  # noqa: E402
 
     uvicorn.run(
         app,            # ASGI callable — NOT the string "backend.main:app"
