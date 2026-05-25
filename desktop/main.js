@@ -73,6 +73,28 @@ function spawnBackend() {
   const { executable, args } = getBackendExecutable()
   const cwd = IS_DEV ? path.join(__dirname, '..') : __dirname
 
+  // ── Pre-flight: verify the binary exists before trying to spawn ──────────────
+  if (!IS_DEV && !fs.existsSync(executable)) {
+    const logPath = path.join(app.getPath('userData'), 'backend.log')
+    const msg = [
+      `Backend binary not found at:`,
+      `  ${executable}`,
+      ``,
+      `resourcesPath : ${process.resourcesPath}`,
+      `__dirname     : ${__dirname}`,
+      ``,
+      `This usually means the installer was built without the backend binary.`,
+      `Please re-download and reinstall Knovex from:`,
+      `  https://tailorgunjan93.github.io/knovex/`,
+    ].join('\n')
+    fs.mkdirSync(path.dirname(logPath), { recursive: true })
+    fs.appendFileSync(logPath, `\n=== ${new Date().toISOString()} ===\n${msg}\n`)
+    dialog.showErrorBox('Knovex — Installation Error', msg)
+    app.quit()
+    return
+  }
+
+  console.log('[backend] resourcesPath:', process.resourcesPath)
   console.log('[backend] spawning:', executable, args.join(' '))
 
   backendProcess = spawn(executable, args, {

@@ -11,6 +11,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.6.9] — 2026-05-25
+
+### Fixed
+
+- **Backend binary missing from installer (ENOENT on launch)** — `onnxruntime` (100+ MB),
+  `tokenizers`, and `numpy` were listed in `requirements.txt`, causing the PyInstaller
+  CI build step to time out or fail. When PyInstaller fails, `backend/dist/knovex-backend/`
+  is never produced, so `extraResources` copies nothing and the installer ships with no
+  backend binary at all. Removed all three from `requirements.txt`; they are runtime-optional
+  (only needed after the user downloads the ONNX model via Settings → Embedding).
+- **Pre-flight binary check in Electron** — `spawnBackend()` now calls `fs.existsSync()`
+  on the executable path before attempting to spawn. If the binary is missing, shows an
+  actionable error dialog with the exact path, `process.resourcesPath`, and a download link
+  instead of 40 silent health-check attempts followed by a generic "did not start" message.
+- Also logs `process.resourcesPath` and `__dirname` at startup for path diagnostics.
+
+---
+
 ## [0.6.8] — 2026-05-25
 
 ### Fixed
@@ -539,7 +557,8 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.6.8...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.6.9...HEAD
+[0.6.9]: https://github.com/tailorgunjan93/knovex/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/tailorgunjan93/knovex/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/tailorgunjan93/knovex/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/tailorgunjan93/knovex/compare/v0.6.0...v0.6.6

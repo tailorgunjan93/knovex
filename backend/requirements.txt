@@ -42,10 +42,20 @@ markdown>=3.7               # Markdown to HTML rendering
 # ─── File watcher (Sprint 2+) ─────────────────────────────────────────────────
 watchdog>=4.0               # Cross-platform file system event monitoring
 
-# ─── Local embeddings (Sprint 7 — optional, ~50 MB) ──────────────────────────
-onnxruntime>=1.17           # CPU-only ONNX inference for all-MiniLM-L6-v2
-tokenizers>=0.19            # Fast Rust tokenizer (no torch dependency)
-numpy>=1.26                 # Required by onnxruntime
+# ─── Local embeddings (Sprint 7 — OPTIONAL, NOT installed at build time) ─────
+# onnxruntime, tokenizers, numpy are intentionally excluded from this file.
+# They are only imported lazily inside ONNXEmbedder._load(), which is called
+# only when the user downloads the ONNX model through the Setup UI.
+# Including them here causes the PyInstaller CI build to time out or fail,
+# resulting in a missing backend binary in the installer.
+#
+# Users who want local ONNX embeddings click "Download model" in Settings →
+# Embedding, which downloads the model files.  onnxruntime + tokenizers should
+# be pre-installed in their Python environment separately, OR the app falls back
+# gracefully to NullEmbedder (FTS5-only mode).
+#
+# For development with ONNX embeddings:
+#   pip install onnxruntime>=1.17 tokenizers>=0.19 numpy>=1.26
 
 # ─── Web scraping (Sprint 6 — Learn Mode) ────────────────────────────────────
 beautifulsoup4>=4.12        # HTML parsing for URL scraping
