@@ -104,18 +104,16 @@ jobs:
       - name: Package with electron-builder (AppImage)
         if: matrix.platform == 'linux'
         working-directory: desktop
-        run: npx electron-builder --linux AppImage
+        run: npx electron-builder --linux AppImage --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package with electron-builder (deb)
         if: matrix.platform == 'linux-deb'
         working-directory: desktop
-        run: npx electron-builder --linux deb
+        run: npx electron-builder --linux deb --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package with electron-builder (win/mac)
         if: "!startsWith(matrix.platform, 'linux')"
@@ -123,7 +121,6 @@ jobs:
         run: npm run build:${{ matrix.platform }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── Upload installer as artifact ──────────────────────────────────────
       - name: Upload installer artifact

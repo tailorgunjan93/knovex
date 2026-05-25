@@ -1,16 +1,21 @@
 {
   "name": "knovex-desktop",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Knovex Desktop — Electron shell",
+  "homepage": "https://tailorgunjan93.github.io/knovex/",
+  "author": {
+    "name": "Gunjan Tailor",
+    "email": "tailorgunjan89@gmail.com"
+  },
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
+    "build": "electron-builder --publish never",
+    "build:win": "electron-builder --win --publish never",
+    "build:mac": "electron-builder --mac --publish never",
+    "build:linux": "electron-builder --linux --publish never"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
@@ -60,7 +65,6 @@
       ],
       "icon": "assets/icon.png",
       "artifactName": "Knovex-Setup-${version}.exe",
-      "publisherName": "Gunjan Tailor",
       "verifyUpdateCodeSignature": false
     },
 
@@ -82,7 +86,7 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": ["x64"]
         }
       ],
       "icon": "assets/icon.png",
@@ -90,8 +94,7 @@
       "category": "public.app-category.productivity",
       "darkModeSupport": true,
       "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlementsInherit": null
+      "gatekeeperAssess": false
     },
 
     "dmg": {
