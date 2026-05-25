@@ -27,6 +27,9 @@ Sprint 4 additions:
   - get_chat_service()       — ChatService with FTS5 retrieval + SSE streaming
   - get_summariser_service() — SummariserService for file / KB summaries
 
+Sprint 6 additions:
+  - get_learn_service()      — LearnService for all 8 learn formats + gamification
+
 Usage in routes::
 
     from backend.core.dependencies import KBServiceDep, ReaderServiceDep
@@ -245,6 +248,26 @@ def get_summariser_service(
     )
 
 
+def get_learn_service(
+    backend=Depends(get_sqlite_backend),
+):
+    """
+    Provide LearnService wired with learn repository + LLMService.
+
+    Not cached: LearnService is stateless; the expensive singletons
+    (LLMService) are cached/shared.
+
+    DIP: LearnService receives ILearnRepository + LLMService (abstractions).
+    """
+    from backend.core.learn_service import LearnService
+    from backend.storage.repositories.learn_repository import SQLiteLearnRepository
+
+    return LearnService(
+        learn_repo=SQLiteLearnRepository(backend),
+        llm_svc=get_llm_service(),
+    )
+
+
 @lru_cache(maxsize=1)
 def get_watcher_service():
     """
@@ -272,6 +295,7 @@ def get_watcher_service():
 from backend.adapters.http_client import IHttpClient         # noqa: E402
 from backend.core.chat_service import ChatService            # noqa: E402
 from backend.core.kb_service import KBService                # noqa: E402
+from backend.core.learn_service import LearnService          # noqa: E402
 from backend.core.reader_service import ReaderService        # noqa: E402
 from backend.core.search_service import SearchService        # noqa: E402
 from backend.core.summarizer_service import SummariserService  # noqa: E402
@@ -283,4 +307,5 @@ ReaderServiceDep     = Annotated[ReaderService,       Depends(get_reader_service
 ChatServiceDep       = Annotated[ChatService,         Depends(get_chat_service)]
 SummariserServiceDep = Annotated[SummariserService,   Depends(get_summariser_service)]
 SearchServiceDep     = Annotated[SearchService,       Depends(get_search_service)]
+LearnServiceDep      = Annotated[LearnService,        Depends(get_learn_service)]
 HttpClientDep        = Annotated[IHttpClient,         Depends(get_http_client)]

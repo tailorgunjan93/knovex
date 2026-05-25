@@ -29,6 +29,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import WifiTetheringIcon from '@mui/icons-material/WifiTethering'
 import RadarIcon from '@mui/icons-material/Radar'
+import LockIcon from '@mui/icons-material/Lock'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, type AppSettings } from '@/api/settings.api'
 
@@ -326,6 +327,18 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
           ✓ Settings saved
         </Typography>
       )}
+
+      <Divider />
+
+      {/* Encryption notice */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+        <LockIcon sx={{ fontSize: 16, color: 'success.main' }} />
+        <Typography variant="caption">
+          API keys are encrypted at rest using Fernet symmetric encryption.
+          The key is stored in your user config directory (
+          <code>~/.config/Knovex/.knovex.key</code>), readable only by your OS user.
+        </Typography>
+      </Box>
     </Box>
   )
 }

@@ -6,7 +6,7 @@
 
 *Secure · Fast · Reliable · Cost-Effective*
 
-[![Version](https://img.shields.io/badge/version-0.5.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](CHANGELOG.md)
 [![CI](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml/badge.svg)](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](#)
@@ -31,7 +31,7 @@ Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid 
 | 3 | File Reader + Inline Q&A | ✅ v0.3.0 |
 | 4 | Chat + Summariser + Web Search | ✅ v0.4.0 |
 | 5 | Settings UI + Desktop Packaging | ✅ v0.5.0 |
-| 6 | Learn Mode | 🔜 Planned |
+| 6 | Learn Mode + Encryption Verification | ✅ v0.6.0 |
 
 ---
 
@@ -70,10 +70,13 @@ Knovex runs completely **offline and local** — your files never leave your mac
 - Summariser: brief (~150 words) or detailed (~600 words) of a file or entire KB
 - Blinking cursor animation, AbortController stop mid-stream
 
-### ✨ Learn Mode *(v0.6.0 — planned)*
-- Flash quizzes, flashcard decks, animated mind maps, story mode, timelines, ELI5, speed-learn, brainstorm
-- Gamification: XP points, streaks, difficulty levels, achievement badges
-- Web search enrichment
+### ✨ Learn Mode *(v0.6.0)*
+- **8 formats**: Quiz (interactive MCQ), Flashcards (spaced repetition), Mind Map (collapsible tree), Timeline (chronological events), Story (narrative markdown), ELI5, Speed Learn (bullet summary), Brainstorm (creative connections)
+- **Gamification**: XP points, level progression (10 tiers), daily streaks, 10 achievement badges
+- All formats stream via SSE — JSON formats via LLM + parse + re-stream, text formats real-time
+- Per-question XP rewards in quiz mode; spaced-repetition interval scheduling for flashcards
+- **Session history sidebar** — reload any past session and interact with it
+- **Encrypted keys**: Fernet AES-128 symmetric encryption; key at `~/.config/Knovex/.knovex.key`; proven by 25 dedicated encryption tests
 
 ### ⚙️ Settings + Packaging *(v0.5.0)*
 - LLM: OpenAI, Anthropic (Claude), Groq, Gemini, Cerebras, AWS Bedrock, Ollama

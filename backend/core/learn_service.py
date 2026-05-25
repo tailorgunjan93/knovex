@@ -1,0 +1,470 @@
+"""
+Learn Service — Sprint 6
+
+Responsibilities:
+  - Generate learning content for 8 formats via LLM
+  - Stream SSE events for all format generation
+  - Submit quiz answers + award XP
+  - Rate flashcards (spaced repetition ease)
+  - Maintain user stats (XP, level, streak, badges)
+
+Architecture:
+  SRP  — only learn-mode coordination; no DB writes except via repository
+  DIP  — depends on ILearnRepository, LLMService (abstractions)
+  OCP  — new format = new prompt + parser; nothing else changes
+  Strategy — each format has its own _prompt_* and _parse_* method
+
+SSE event protocol (same family as Chat / Summariser):
+    data: {"type": "token",  "content": "..."}
+    data: {"type": "done",   "session_id": "...", "xp_earned": N, "new_badges": [...]}
+    data: {"type": "error",  "error": "..."}
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+import uuid
+from datetime import datetime
+from typing import AsyncGenerator
+
+from backend.core.domain.learn import (
+    VALID_DIFFICULTIES,
+    VALID_FORMATS,
+    LearnSession,
+    UserStats,
+    XP_FLASHCARD_DECK,
+    XP_QUIZ_CORRECT,
+    XP_QUIZ_PERFECT,
+    XP_SESSION_COMPLETE,
+    XP_STREAK_BONUS,
+    xp_for_next_level,
+    xp_to_level,
+)
+from backend.core.llm_service import LLMService
+from backend.core.providers.base import ProviderCredentials
+from backend.storage.repositories.base import EntityNotFoundError
+from backend.storage.repositories.learn_repository import ILearnRepository
+
+logger = logging.getLogger("knovex.learn")
+
+# ── Streaming text formats (free prose) ─────────────────────────────────────
+_TEXT_FORMATS = frozenset({"story", "eli5", "speedlearn", "brainstorm"})
+
+# ── Badge definitions ────────────────────────────────────────────────────────
+_BADGE_FIRST_STEP    = "first_step"
+_BADGE_QUIZ_MASTER   = "quiz_master"
+_BADGE_PERFECT_QUIZ  = "perfect_quiz"
+_BADGE_FLASHCARD_10  = "flashcard_ninja"
+_BADGE_MINDMAP_5     = "mind_mapper"
+_BADGE_STORY_5       = "storyteller"
+_BADGE_SPEED_10      = "speed_learner"
+_BADGE_STREAK_7      = "7_day_streak"
+_BADGE_LEVEL_5       = "level_5"
+_BADGE_EXPLORER      = "explorer"     # try all 8 formats
+
+
+class LearnService:
+    """
+    Facade for all learn-mode operations.
+    Injected with a learn repository and the shared LLMService.
+    """
+
+    def __init__(
+        self,
+        learn_repo: ILearnRepository,
+        llm_svc: LLMService,
+    ) -> None:
+        self._repo    = learn_repo
+        self._llm_svc = llm_svc
+
+    # ==================================================================
+    # Session management
+    # ==================================================================
+
+    async def list_sessions(self, limit: int = 50) -> list[LearnSession]:
+        return await self._repo.find_sessions(limit=limit)
+
+    async def get_session(self, session_id: str) -> LearnSession:
+        session = await self._repo.find_by_id(session_id)
+        if session is None:
+            raise EntityNotFoundError("LearnSession", session_id)
+        return session
+
+    async def delete_session(self, session_id: str) -> None:
+        await self._repo.delete(session_id)
+
+    async def get_user_stats(self) -> UserStats:
+        return await self._repo.get_user_stats()
+
+    # ==================================================================
+    # Content generation — SSE stream
+    # ==================================================================
+
+    async def stream_session(
+        self,
+        topic: str,
+        format: str,
+        source_type: str,
+        difficulty: str,
+        source_ref: str | None,
+        provider: str,
+        model: str,
+        credentials: ProviderCredentials,
+        context_text: str = "",
+    ) -> AsyncGenerator[str, None]:
+        """
+        Create a LearnSession, generate content, stream SSE events.
+
+        For text formats (story, eli5, speedlearn, brainstorm):
+            streams tokens in real-time via LLMService.stream()
+        For JSON formats (quiz, flashcard, mindmap, timeline):
+            generates via LLMService.complete(), then streams the JSON string
+            as token chunks so the client gets consistent SSE events.
+
+        Raises ValueError for invalid format/difficulty before the first yield.
+        """
+        if format not in VALID_FORMATS:
+            raise ValueError(f"Invalid format '{format}'. Must be one of: {sorted(VALID_FORMATS)}")
+        if difficulty not in VALID_DIFFICULTIES:
+            raise ValueError(f"Invalid difficulty '{difficulty}'")
+
+        session = LearnSession(
+            id=str(uuid.uuid4()),
+            topic=topic,
+            format=format,
+            source_type=source_type,
+            source_ref=source_ref,
+            difficulty=difficulty,
+            status="generating",
+        )
+        await self._repo.save(session)
+
+        try:
+            if format in _TEXT_FORMATS:
+                content_str, new_content = await self._generate_text(
+                    format, topic, difficulty, context_text,
+                    provider, model, credentials,
+                )
+                # For text, stream the already-accumulated string as chunks
+                async for event in self._stream_text_gen(
+                    format, topic, difficulty, context_text,
+                    provider, model, credentials,
+                ):
+                    yield event
+                    # Accumulate text for saving
+                    if '"type": "token"' in event:
+                        try:
+                            data = json.loads(event[len("data: "):])
+                            new_content["text"] = new_content.get("text", "") + data["content"]
+                        except Exception:
+                            pass
+            else:
+                # JSON format: generate with complete(), stream as tokens
+                messages = self._build_prompt(format, topic, difficulty, context_text)
+                try:
+                    raw = await self._llm_svc.complete(
+                        messages=messages,
+                        provider=provider,
+                        model=model,
+                        credentials=credentials,
+                        max_tokens=2048,
+                        temperature=0.7,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(f"LLM generation failed: {exc}") from exc
+
+                # Parse JSON — strip markdown code fences if present
+                cleaned = _strip_code_fences(raw)
+                try:
+                    new_content = json.loads(cleaned)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"LLM returned invalid JSON: {exc}\n\nRaw response:\n{raw[:200]}") from exc
+
+                # Stream the JSON string as token chunks
+                json_str = json.dumps(new_content)
+                chunk_size = 40
+                for i in range(0, len(json_str), chunk_size):
+                    chunk = json_str[i: i + chunk_size]
+                    yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+
+        except Exception as exc:
+            logger.exception("LearnService stream failed for session %s: %s", session.id, exc)
+            session.mark_error(str(exc))
+            await self._repo.save(session)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
+            return
+
+        # ── Mark complete + award XP ──────────────────────────────────────
+        session.mark_ready(new_content)
+        await self._repo.save(session)
+
+        xp_earned, new_badges = await self._award_session_xp(session)
+        yield f"data: {json.dumps({'type': 'done', 'session_id': session.id, 'xp_earned': xp_earned, 'new_badges': new_badges})}\n\n"
+
+    async def _stream_text_gen(
+        self,
+        format: str,
+        topic: str,
+        difficulty: str,
+        context_text: str,
+        provider: str,
+        model: str,
+        credentials: ProviderCredentials,
+    ) -> AsyncGenerator[str, None]:
+        """Async generator that actually streams tokens for text formats."""
+        messages = self._build_prompt(format, topic, difficulty, context_text)
+        async for token in self._llm_svc.stream(
+            messages=messages,
+            provider=provider,
+            model=model,
+            credentials=credentials,
+            max_tokens=1024,
+            temperature=0.7,
+        ):
+            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+    async def _generate_text(
+        self,
+        format: str,
+        topic: str,
+        difficulty: str,
+        context_text: str,
+        provider: str,
+        model: str,
+        credentials: ProviderCredentials,
+    ) -> tuple[str, dict]:
+        """Generate text content with complete() for saving purposes."""
+        messages = self._build_prompt(format, topic, difficulty, context_text)
+        raw = await self._llm_svc.complete(
+            messages=messages,
+            provider=provider,
+            model=model,
+            credentials=credentials,
+            max_tokens=1024,
+            temperature=0.7,
+        )
+        return raw, {"text": raw}
+
+    # ==================================================================
+    # Quiz answer submission
+    # ==================================================================
+
+    async def submit_quiz_answer(
+        self,
+        session_id: str,
+        question_index: int,
+        answer: str,
+    ) -> dict:
+        """
+        Check a quiz answer, award XP, return result.
+
+        Returns dict matching QuizAnswerResponse schema.
+        """
+        session = await self.get_session(session_id)
+        if session.format != "quiz":
+            raise ValueError("Session is not a quiz")
+        if session.content is None:
+            raise ValueError("Quiz content not yet generated")
+
+        questions = session.content.get("questions", [])
+        if question_index >= len(questions):
+            raise ValueError(f"Question index {question_index} out of range")
+
+        q = questions[question_index]
+        correct_index = int(q.get("correct", 0))
+        options: list[str] = q.get("options", [])
+        correct_answer = options[correct_index] if options else str(correct_index)
+        is_correct = answer.strip().lower() == correct_answer.strip().lower()
+
+        xp_earned = XP_QUIZ_CORRECT if is_correct else 0
+
+        # Award XP
+        stats = await self._repo.get_user_stats()
+        stats.add_xp(xp_earned)
+        stats.record_activity()
+        new_badges: list[str] = []
+        if is_correct and stats.award_badge(_BADGE_QUIZ_MASTER):
+            new_badges.append(_BADGE_QUIZ_MASTER)
+        await self._repo.save_user_stats(stats)
+
+        score = sum(
+            1 for qi, qq in enumerate(questions)
+            if qi == question_index and is_correct
+        ) / len(questions)
+
+        return {
+            "correct": is_correct,
+            "correct_answer": correct_answer,
+            "explanation": q.get("explanation", ""),
+            "xp_earned": xp_earned,
+            "session_score": round(score * 100, 1),
+        }
+
+    # ==================================================================
+    # Flashcard review
+    # ==================================================================
+
+    async def review_flashcard(
+        self,
+        session_id: str,
+        card_index: int,
+        ease_rating: str,
+    ) -> dict:
+        """Rate a flashcard (again/hard/good/easy) for spaced repetition."""
+        from datetime import timedelta
+
+        session = await self.get_session(session_id)
+        if session.format != "flashcard":
+            raise ValueError("Session is not a flashcard deck")
+
+        # Spaced repetition intervals by ease
+        intervals = {"again": 1, "hard": 2, "good": 4, "easy": 7}
+        days = intervals.get(ease_rating, 3)
+        next_review = datetime.utcnow() + timedelta(days=days)
+
+        if ease_rating in ("good", "easy"):
+            stats = await self._repo.get_user_stats()
+            stats.add_xp(2)
+            stats.record_activity()
+            await self._repo.save_user_stats(stats)
+
+        return {
+            "card_index": card_index,
+            "ease_rating": ease_rating,
+            "next_review_at": next_review.isoformat(),
+        }
+
+    # ==================================================================
+    # XP / gamification helpers
+    # ==================================================================
+
+    async def _award_session_xp(self, session: LearnSession) -> tuple[int, list[str]]:
+        """Award XP for completing a session. Returns (xp_earned, new_badges)."""
+        stats = await self._repo.get_user_stats()
+        old_level = stats.level
+        new_badges: list[str] = []
+
+        # Base completion XP
+        xp = XP_SESSION_COMPLETE
+        if session.format == "flashcard":
+            xp += XP_FLASHCARD_DECK
+
+        # Streak bonus
+        stats.record_activity()
+        streak_bonus = min(stats.streak, 7) * XP_STREAK_BONUS
+        xp += streak_bonus
+
+        stats.add_xp(xp)
+
+        # First session badge
+        sessions = await self._repo.find_sessions(limit=2)
+        if len(sessions) == 1 and stats.award_badge(_BADGE_FIRST_STEP):
+            new_badges.append(_BADGE_FIRST_STEP)
+
+        # Level up badge
+        if stats.level >= 5 and stats.award_badge(_BADGE_LEVEL_5):
+            new_badges.append(_BADGE_LEVEL_5)
+
+        # Streak badge
+        if stats.streak >= 7 and stats.award_badge(_BADGE_STREAK_7):
+            new_badges.append(_BADGE_STREAK_7)
+
+        # Explorer badge — tried all 8 formats
+        all_sessions = await self._repo.find_sessions(limit=100)
+        used_formats = {s.format for s in all_sessions if s.status == "ready"}
+        if VALID_FORMATS.issubset(used_formats) and stats.award_badge(_BADGE_EXPLORER):
+            new_badges.append(_BADGE_EXPLORER)
+
+        await self._repo.save_user_stats(stats)
+        return xp, new_badges
+
+    # ==================================================================
+    # Prompt builders (OCP: new format = new method)
+    # ==================================================================
+
+    def _build_prompt(
+        self,
+        format: str,
+        topic: str,
+        difficulty: str,
+        context_text: str,
+    ) -> list[dict[str, str]]:
+        """Return messages list for the LLM call."""
+        system = _SYSTEM_PROMPTS[format].format(topic=topic, difficulty=difficulty)
+        user_parts = [f"Topic: {topic}"]
+        if context_text:
+            user_parts.append(f"\nContext from knowledge base:\n{context_text[:3000]}")
+        return [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": "\n".join(user_parts)},
+        ]
+
+
+# ---------------------------------------------------------------------------
+# System prompts (OCP: extend without changing LearnService code)
+# ---------------------------------------------------------------------------
+
+_SYSTEM_PROMPTS: dict[str, str] = {
+    "quiz": (
+        "You are an expert educator. Generate exactly 5 multiple-choice questions "
+        "about '{topic}' for a {difficulty} level learner.\n"
+        "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences, no explanation.\n"
+        'Format: {{"questions": [{{"q": "...", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "correct": 0, "explanation": "..."}}]}}\n'
+        "'correct' is the 0-based index of the right answer."
+    ),
+    "flashcard": (
+        "You are an expert educator. Generate exactly 8 flashcards about '{topic}' "
+        "for a {difficulty} level learner.\n"
+        "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences.\n"
+        'Format: {{"cards": [{{"front": "...", "back": "...", "hint": "..."}}]}}'
+    ),
+    "mindmap": (
+        "You are an expert educator. Create a mind map for '{topic}'.\n"
+        "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences.\n"
+        'Format: {{"root": "...", "branches": [{{"label": "...", "children": [{{"label": "...", "children": []}}]}}]}}\n'
+        "Maximum 4 main branches, up to 3 children per branch."
+    ),
+    "timeline": (
+        "You are an expert educator. Generate a chronological timeline for '{topic}' "
+        "with 6-10 key events.\n"
+        "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences.\n"
+        'Format: {{"events": [{{"year": "...", "title": "...", "description": "..."}}]}}'
+    ),
+    "story": (
+        "You are an expert storyteller-educator. Tell the story of '{topic}' in "
+        "an engaging, narrative style for a {difficulty} level learner. "
+        "Use analogies, real-world examples, and vivid descriptions. "
+        "Approximately 350-450 words. Use markdown headings and paragraphs."
+    ),
+    "eli5": (
+        "You are explaining '{topic}' to a curious, smart 8-year-old child. "
+        "Use simple everyday words, concrete real-world analogies, and a friendly tone. "
+        "Avoid jargon. Use short sentences. Approximately 150-200 words. "
+        "Start with an analogy they'd recognise."
+    ),
+    "speedlearn": (
+        "You are a study coach creating a rapid reference for '{topic}' at {difficulty} level. "
+        "Generate 10-15 key concepts as a scannable bullet list. "
+        "For each point: **Bold key term** — one-sentence explanation. "
+        "Start with the most important concept. Use markdown."
+    ),
+    "brainstorm": (
+        "You are a creative thinker exploring '{topic}'. "
+        "Generate creative connections, surprising facts, unexpected applications, "
+        "powerful analogies, and thought-provoking questions. "
+        "Present as a mix of bullet points, short paragraphs, and surprising 'Did you know?' facts. "
+        "Aim for 300-400 words. Be creative and thought-provoking. Use markdown."
+    ),
+}
+
+
+def _strip_code_fences(text: str) -> str:
+    """Remove ```json ... ``` or ``` ... ``` wrappers from LLM output."""
+    text = text.strip()
+    # Remove leading ```json or ``` fence
+    text = re.sub(r"^```(?:json)?\s*\n?", "", text)
+    # Remove trailing ``` fence
+    text = re.sub(r"\n?```\s*$", "", text)
+    return text.strip()

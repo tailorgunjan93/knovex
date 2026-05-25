@@ -9,18 +9,95 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-*Planned — Sprint 6+*
+*Planned — Sprint 7+*
 
-### Sprint 6 — Learn Mode
-- Full Settings page (LLM provider, model, key, theme, storage path)
-- Ollama auto-detect + connection test
-- PyInstaller backend bundling
-- electron-builder desktop packaging (Windows .exe / macOS .dmg / Linux .AppImage)
+---
 
-### Sprint 6 — Learn Mode
-- Quiz, flashcard, mind map, story, timeline, ELI5, speed-learn, brainstorm
-- Gamification: XP, streaks, badges
-- Web search enrichment for topics
+## [0.6.0] — 2026-05-25
+
+Sprint 6 — Learn Mode + Encryption Verification
+
+### Added
+
+#### Backend — Learn Mode domain + service
+- **`backend/core/domain/learn.py`** — pure domain entities
+  - `LearnSession` dataclass: id, topic, format, source_type, difficulty, status, content, created_at, completed_at
+  - `UserStats` dataclass with XP, level, streak, last_activity, badges
+  - `VALID_FORMATS = {"quiz","flashcard","mindmap","timeline","story","eli5","speedlearn","brainstorm"}`
+  - `VALID_DIFFICULTIES = {"beginner","intermediate","expert"}`
+  - `xp_to_level()` / `xp_for_next_level()` based on `_LEVEL_XP = [0,100,250,500,1000,2000,4000,7500,12500,20000]`
+  - XP constants: SESSION_COMPLETE=10, QUIZ_CORRECT=5, QUIZ_PERFECT=20, FLASHCARD_DECK=15, STREAK_BONUS=5
+- **`backend/storage/repositories/learn_repository.py`**
+  - `ILearnRepository(SQLiteRepository[LearnSession])` — abstract interface (DIP)
+  - `SQLiteLearnRepository` — UPSERT-based session persistence; `user_stats` singleton (id=1)
+  - `get_user_stats()`, `save_user_stats()`, `find_sessions(limit)` implementations
+- **`backend/core/learn_service.py`** — `LearnService` facade (SRP + Strategy pattern)
+  - `stream_session()` — SSE async generator for all 8 formats
+    - Text formats (story/eli5/speedlearn/brainstorm): real-time token streaming via `LLMService.stream()`
+    - JSON formats (quiz/flashcard/mindmap/timeline): `LLMService.complete()` → parse → stream as 40-char chunks
+  - `submit_quiz_answer()` — correctness check, XP award, quiz_master badge
+  - `review_flashcard()` — spaced repetition intervals `{again:1, hard:2, good:4, easy:7}` days
+  - `_award_session_xp()` — base XP + flashcard bonus + streak bonus + 10 badge checks
+  - `_SYSTEM_PROMPTS` dict with tailored prompts for all 8 formats (OCP: new format = add entry)
+  - `_strip_code_fences()` — strips ` ```json...``` ` wrappers from LLM JSON output
+
+#### Backend — API + wiring
+- **`backend/api/learn.py`** — Learn Mode API router
+  - `POST /api/learn/sessions/stream` — create session + SSE stream content
+  - `GET  /api/learn/sessions` — list 50 most recent sessions
+  - `GET  /api/learn/sessions/{id}` — get session by ID
+  - `DELETE /api/learn/sessions/{id}` — delete session
+  - `POST /api/learn/sessions/{id}/quiz/answer` — submit quiz answer (returns correctness, XP, explanation)
+  - `POST /api/learn/sessions/{id}/flashcard/review` — rate flashcard (returns next_review_at)
+  - `GET  /api/learn/stats` — get user gamification stats
+- **`backend/core/dependencies.py`** — added `get_learn_service()` factory + `LearnServiceDep` annotated type
+- **`backend/main.py`** — registered learn router under `/api` with `tags=["learn"]`
+
+#### Frontend — Learn Mode UI
+- **`frontend/src/api/learn.api.ts`** — fully typed Learn API client
+  - Typed interfaces for all 8 content shapes: `QuizContent`, `FlashcardContent`, `MindmapContent`, `TimelineContent`, `TextContent`
+  - `learnApi.streamSession()` — SSE stream via `fetch` + `ReadableStream`
+  - `learnApi.submitQuizAnswer()`, `reviewFlashcard()`, `getUserStats()`, CRUD operations
+- **`frontend/src/pages/Learn/index.tsx`** — full Learn Mode page (replaces placeholder)
+  - Left sidebar: `StatsBar` (XP progress, level, streak), badge chips, session history with format icons
+  - Header controls: topic input + 8-format Chip selector + difficulty Chip selector + Generate/Stop buttons
+  - **QuizView**: interactive MCQ with per-question answer checking, colour-coded options (green=correct, red=wrong), explanation reveal, +XP toast
+  - **FlashcardView**: flip animation, spaced-repetition rating buttons (again/hard/good/easy), progress dots, navigation
+  - **MindmapView**: collapsible hierarchical tree with depth-coloured nodes
+  - **TimelineView**: vertical spine with year badges and event descriptions
+  - **TextContentView**: streamed Markdown rendered with `react-markdown`; blinking cursor during stream
+  - XP + badge notification alert with auto-dismiss
+  - Session history load: click any past session to reload its content
+
+#### Frontend — Settings encryption indicator
+- **`frontend/src/pages/Settings/LLMSettings.tsx`** — added `LockIcon` encryption notice below action buttons
+  - Displays: "API keys are encrypted at rest using Fernet symmetric encryption. Key stored in `~/.config/Knovex/.knovex.key`, readable only by your OS user."
+
+#### Tests — Sprint 6
+- **`tests/test_encryption.py`** — 25 tests proving encryption works end-to-end
+  - `TestFernetEncryptor`: roundtrip, token uniqueness, empty-string handling, invalid token, key file creation, key persistence across "restarts", cross-key incompatibility
+  - `TestNullEncryptor`: passthrough behaviour
+  - `TestSettingsServiceEncryption`: `llm.api_key` stored as Fernet token in raw store, `search.api_key` encrypted, non-sensitive fields plaintext, get_masked() returns `****`, no double-encrypt, empty key → empty storage
+- **`tests/test_learn.py`** — 41 tests for LearnService
+  - `InMemoryLearnRepository` stub (no SQLite)
+  - Text format streaming: token events, done event, session saved as ready, content field
+  - JSON format streaming: tokens reassembled to valid JSON, session content saved, mindmap round-trip
+  - Validation: invalid format raises ValueError, invalid difficulty raises ValueError
+  - LLM error: yields SSE error event, saves session as error
+  - Quiz: correct/wrong answer, XP, explanation, out-of-range index, non-quiz session, missing session
+  - Flashcard: all 4 ease ratings + correct `next_review_at`, good/easy awards XP, again awards none
+  - Session CRUD: list empty, get not-found, session created during stream, delete
+  - Gamification: stats defaults, XP earned after session, XP in done event, first_step badge
+- **`tests/test_imports.py`** — 7 new Sprint 6 smoke tests (learn domain, service, repository, encryption, routes, schemas), version assertion updated to `0.6.0`
+
+### Changed
+- `backend/core/config.py` — `version = "0.6.0"`
+- `frontend/package.json` — `version = "0.6.0"`
+- `desktop/package.json` — `version = "0.6.0"`
+- `backend/main.py` — version comment updated to `0.6.0`
+
+### Test summary
+158 tests — 158 passed (includes all sprints 1–6)
 
 ---
 

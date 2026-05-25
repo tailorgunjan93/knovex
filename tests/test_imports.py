@@ -1,5 +1,5 @@
 """
-Import smoke tests — Sprint 1, 2, 3, 4
+Import smoke tests — Sprint 1–6
 
 Every module must import cleanly without network access, DB connections,
 or missing optional dependencies raising errors.
@@ -22,7 +22,7 @@ import pytest
 
 def test_config_imports():
     from backend.core.config import settings  # noqa: F401
-    assert settings.version == "0.5.0"
+    assert settings.version == "0.6.0"
     assert settings.backend_port == 8765
 
 
@@ -227,3 +227,86 @@ def test_search_routes_registered():
     app = create_app()
     paths = [r.path for r in app.routes]  # type: ignore[attr-defined]
     assert any("/search" in p for p in paths), "search route missing"
+
+
+# ---------------------------------------------------------------------------
+# Sprint 6 — Learn Mode
+# ---------------------------------------------------------------------------
+
+def test_learn_domain_imports():
+    """Learn domain entities must import and work correctly."""
+    from backend.core.domain.learn import (  # noqa: F401
+        LearnSession,
+        UserStats,
+        VALID_FORMATS,
+        VALID_DIFFICULTIES,
+        XP_SESSION_COMPLETE,
+        XP_QUIZ_CORRECT,
+        XP_FLASHCARD_DECK,
+        XP_STREAK_BONUS,
+        xp_to_level,
+        xp_for_next_level,
+    )
+    assert "quiz" in VALID_FORMATS
+    assert "flashcard" in VALID_FORMATS
+    assert "mindmap" in VALID_FORMATS
+    assert "timeline" in VALID_FORMATS
+    assert "story" in VALID_FORMATS
+    assert "eli5" in VALID_FORMATS
+    assert "speedlearn" in VALID_FORMATS
+    assert "brainstorm" in VALID_FORMATS
+    assert "beginner" in VALID_DIFFICULTIES
+    assert xp_to_level(0) == 1
+    assert xp_to_level(100) == 2
+
+
+def test_learn_service_imports():
+    """LearnService must import without errors."""
+    from backend.core.learn_service import LearnService  # noqa: F401
+
+
+def test_learn_repository_imports():
+    """Learn repository must import cleanly."""
+    from backend.storage.repositories.learn_repository import (  # noqa: F401
+        ILearnRepository,
+        SQLiteLearnRepository,
+    )
+
+
+def test_encryption_imports():
+    """Encryption module must expose FernetEncryptor and NullEncryptor."""
+    from backend.core.encryption import (  # noqa: F401
+        IEncryptor,
+        FernetEncryptor,
+        NullEncryptor,
+    )
+    enc = NullEncryptor()
+    assert enc.encrypt("test") == "test"
+    assert enc.decrypt("test") == "test"
+    assert enc.is_encrypted("test") is False
+
+
+def test_learn_routes_registered():
+    """Verify the learn router is wired up with all endpoints."""
+    from backend.main import create_app
+    app = create_app()
+    paths = [r.path for r in app.routes]  # type: ignore[attr-defined]
+    assert "/api/learn/sessions/stream" in paths, "learn stream route missing"
+    assert "/api/learn/sessions" in paths, "learn list sessions route missing"
+    assert "/api/learn/stats" in paths, "learn stats route missing"
+    assert any("/quiz/answer" in p for p in paths), "quiz answer route missing"
+    assert any("/flashcard/review" in p for p in paths), "flashcard review route missing"
+
+
+def test_learn_schemas_imports():
+    """Learn schemas must import cleanly and validate."""
+    from backend.models.schemas import (  # noqa: F401
+        LearnSessionCreate,
+        LearnSessionResponse,
+        QuizAnswerRequest,
+        QuizAnswerResponse,
+        UserStatsResponse,
+    )
+    req = LearnSessionCreate(topic="Black Holes", format="quiz", source_type="topic")
+    assert req.difficulty == "intermediate"
+    assert req.format == "quiz"

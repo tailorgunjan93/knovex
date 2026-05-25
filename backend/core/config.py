@@ -35,7 +35,7 @@ class AppConfig(BaseSettings):
     # -------------------------------------------------------------------------
     # Identity
     # -------------------------------------------------------------------------
-    version: str = "0.5.0"
+    version: str = "0.6.0"
     app_name: str = APP_NAME
     backend_port: int = 8765
 
