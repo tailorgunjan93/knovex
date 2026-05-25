@@ -11,6 +11,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.7.3] — 2026-05-25
+
+### Fixed
+
+- **Backend binary fails to start — `Could not import module "backend.main"`** (critical) —
+  `backend_entry.py` was passing the string `"backend.main:app"` to `uvicorn.run()`.
+  PyInstaller's static analyser follows Python `import` statements to discover which modules
+  to freeze into the PYZ archive; a bare string argument is **opaque** to the analyser, so
+  `backend.main` and all of its transitive dependencies were entirely absent from the frozen
+  binary.  At runtime uvicorn called `importlib.import_module("backend.main")`, found nothing
+  in the archive, and aborted with the error above.
+  Fixed by importing `app` directly in `backend_entry.py`
+  (`from backend.main import app`) and passing the live ASGI callable to uvicorn instead of
+  the string — uvicorn never needs to do a string-based import at runtime.
+  Also added `backend.main`, `backend.core.config`, `backend.core.dependencies`, and
+  `backend.storage.database` to `hiddenimports` in `knovex-backend.spec` as a belt-and-
+  suspenders safety net.
+
+---
+
 ## [0.7.2] — 2026-05-25
 
 ### Fixed
@@ -602,7 +622,8 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/tailorgunjan93/knovex/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/tailorgunjan93/knovex/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/tailorgunjan93/knovex/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/tailorgunjan93/knovex/compare/v0.6.9...v0.7.0

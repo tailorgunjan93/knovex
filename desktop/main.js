@@ -71,7 +71,12 @@ function getBackendExecutable() {
 
 function spawnBackend() {
   const { executable, args } = getBackendExecutable()
-  const cwd = IS_DEV ? path.join(__dirname, '..') : __dirname
+  // In production, __dirname resolves to inside app.asar — a virtual path the OS
+  // does not recognise as a real directory.  Passing it as `cwd` to spawn() causes
+  // Node to throw ENOENT even when the executable itself exists on disk.
+  // Use path.dirname(executable) instead — it is always a real filesystem path
+  // (derived from process.resourcesPath which is guaranteed real in a packaged app).
+  const cwd = IS_DEV ? path.join(__dirname, '..') : path.dirname(executable)
 
   // ── Pre-flight: verify the binary exists before trying to spawn ──────────────
   if (!IS_DEV && !fs.existsSync(executable)) {
@@ -97,9 +102,19 @@ function spawnBackend() {
   console.log('[backend] resourcesPath:', process.resourcesPath)
   console.log('[backend] spawning:', executable, args.join(' '))
 
+  // Build a clean environment for the PyInstaller-frozen backend.
+  // Do NOT forward PYTHONPATH / PYTHONHOME / PYTHONSTARTUP from the host
+  // system — they cause the frozen binary to look for modules in the wrong
+  // place, resulting in "Could not import module backend.main" at startup.
+  const backendEnv = { ...process.env, PYTHONUNBUFFERED: '1' }
+  for (const key of Object.keys(backendEnv)) {
+    if (/^PYTHON/i.test(key)) delete backendEnv[key]
+  }
+  backendEnv.PYTHONUNBUFFERED = '1'  // re-add the one we actually want
+
   backendProcess = spawn(executable, args, {
     cwd,
-    env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    env: backendEnv,
     stdio: ['ignore', 'pipe', 'pipe'],  // always pipe so we can log + diagnose
   })
 

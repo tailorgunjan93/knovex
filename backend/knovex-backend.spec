@@ -51,6 +51,16 @@ a = Analysis(
         "starlette.middleware.cors",
         # ── aiosqlite ─────────────────────────────────────────────────────
         "aiosqlite",
+        # ── Knovex backend top-level ─────────────────────────────────────
+        # backend.main is NOT imported directly in backend_entry.py at the
+        # module level in older builds — list it explicitly as a safety net.
+        # (In current builds the explicit `from backend.main import app` in
+        # backend_entry.py causes the analyser to trace it automatically, but
+        # belt-and-suspenders never hurts.)
+        "backend.main",
+        "backend.core.config",
+        "backend.core.dependencies",
+        "backend.storage.database",
         # ── Knovex backend packages ───────────────────────────────────────
         # All 7 providers must be explicit — they self-register via decorators
         "backend.core.providers",
