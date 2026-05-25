@@ -1,6 +1,6 @@
 name: Package
 
-# Triggered when a release tag is pushed (e.g. v0.6.0).
+# Triggered when a release tag is pushed (e.g. v0.7.1).
 # Builds distributable installers for Windows, macOS, and Linux
 # and uploads them as release assets.
 #
@@ -31,21 +31,25 @@ jobs:
             platform: win
             artifact_glob: "desktop/release/*.exe"
             artifact_name: knovex-windows-installer
+            backend_exe: backend/dist/knovex-backend/knovex-backend.exe
 
           - os: macos-latest
             platform: mac
             artifact_glob: "desktop/release/*.dmg"
             artifact_name: knovex-macos-dmg
+            backend_exe: backend/dist/knovex-backend/knovex-backend
 
           - os: ubuntu-latest
             platform: linux
             artifact_glob: "desktop/release/*.AppImage"
             artifact_name: knovex-linux-appimage
+            backend_exe: backend/dist/knovex-backend/knovex-backend
 
           - os: ubuntu-latest
             platform: linux-deb
             artifact_glob: "desktop/release/*.deb"
             artifact_name: knovex-linux-deb
+            backend_exe: backend/dist/knovex-backend/knovex-backend
 
     runs-on: ${{ matrix.os }}
     name: Package — ${{ matrix.platform }}
@@ -73,6 +77,21 @@ jobs:
             --noconfirm
         env:
           PYTHONUNBUFFERED: "1"
+
+      # ── CRITICAL: fail loudly if binary was not produced ──────────────────
+      - name: Verify backend binary exists
+        shell: bash
+        run: |
+          if [ ! -f "${{ matrix.backend_exe }}" ]; then
+            echo "ERROR: Backend binary not found at ${{ matrix.backend_exe }}"
+            echo "PyInstaller output directory contents:"
+            ls -la backend/dist/ 2>/dev/null || echo "(dist/ does not exist)"
+            exit 1
+          fi
+          echo "Backend binary OK: ${{ matrix.backend_exe }}"
+          ls -lh "${{ matrix.backend_exe }}"
+          echo "Full backend bundle:"
+          ls -la backend/dist/knovex-backend/
 
       # ── Frontend build ────────────────────────────────────────────────────
       - name: Set up Node.js 20
@@ -122,13 +141,28 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
+      # ── Verify installer was produced ─────────────────────────────────────
+      - name: Verify installer artifact exists
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=( ${{ matrix.artifact_glob }} )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "ERROR: No installer found matching ${{ matrix.artifact_glob }}"
+            echo "desktop/release/ contents:"
+            ls -la desktop/release/ 2>/dev/null || echo "(release/ does not exist)"
+            exit 1
+          fi
+          echo "Installer artifact OK: ${files[0]}"
+          ls -lh "${files[@]}"
+
       # ── Upload installer as artifact ──────────────────────────────────────
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_glob }}
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
 
   # ─── Attach artifacts to GitHub Release ─────────────────────────────────────

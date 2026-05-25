@@ -11,6 +11,27 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.7.1] — 2026-05-25
+
+### Fixed
+
+- **Backend binary missing from installer (root cause fix)** — `docnest-ai>=0.6.0` was listed
+  in `requirements.txt`, which transitively depends on `docling>=2.0`. `docling` pulls in
+  `torch`, `transformers`, `onnxruntime`, and other large ML packages (several GB combined),
+  causing the CI `pip install` step to time out before PyInstaller ever ran. When PyInstaller
+  does not run, `backend/dist/knovex-backend/` is never produced, `extraResources` has nothing
+  to copy, and the installer ships without any backend binary.
+  Removed `docnest-ai` from `requirements.txt` — it is imported lazily and both call sites
+  (`UDFParser.parse()` for `.udf` files and the `/health` version string) have graceful
+  fallbacks. All other formats (PDF, DOCX, TXT, MD, CSV) are unaffected.
+- **CI binary verification step** — `package.yml` now runs `Verify backend binary exists`
+  immediately after PyInstaller, explicitly failing the build if the binary is absent.
+  Also added `Verify installer artifact exists` before the upload step, and changed
+  `if-no-files-found` from `warn` to `error` so missing installers fail CI loudly
+  instead of silently producing a broken release.
+
+---
+
 ## [0.7.0] — 2026-05-25
 
 ### Changed
@@ -571,7 +592,8 @@ Sprint 1 — Foundation
 
 ## Links
 
-[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/tailorgunjan93/knovex/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/tailorgunjan93/knovex/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/tailorgunjan93/knovex/compare/v0.6.9...v0.7.0
 [0.6.9]: https://github.com/tailorgunjan93/knovex/compare/v0.6.8...v0.6.9
 [0.6.8]: https://github.com/tailorgunjan93/knovex/compare/v0.6.7...v0.6.8

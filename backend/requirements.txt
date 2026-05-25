@@ -20,8 +20,19 @@ platformdirs>=4.0           # OS-aware config/data/log paths
 # ─── Encryption ───────────────────────────────────────────────────────────────
 cryptography>=43.0          # Fernet symmetric encryption for API keys
 
-# ─── RAG engine ───────────────────────────────────────────────────────────────
-docnest-ai>=0.6.0           # Hybrid FTS5 + ANN + section graph retrieval
+# ─── RAG engine (OPTIONAL, NOT installed at build time) ──────────────────────
+# docnest-ai is intentionally excluded from this file.
+# It is only imported lazily inside UDFParser.parse() (for .udf files) and
+# in the /health endpoint for version reporting.  Both code paths have
+# graceful fallbacks (ZIP extraction and "not installed" respectively).
+#
+# Including docnest-ai here causes the PyInstaller CI build to time out or
+# fail because docnest-ai depends on `docling>=2.0`, which transitively pulls
+# in torch, transformers, onnxruntime and other large ML packages (several GB).
+#
+# Users who need docnest-ai for native .udf support can install it separately:
+#   pip install docnest-ai>=0.6.0
+# All other formats (PDF, DOCX, TXT, MD, CSV) work without it.
 
 # ─── LLM layer ────────────────────────────────────────────────────────────────
 litellm>=1.50               # Unified multi-provider LLM (OpenAI, Anthropic, Groq, Gemini, Bedrock, Ollama)
