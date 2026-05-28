@@ -69,7 +69,47 @@ function getBackendExecutable() {
   return { executable: backendBin, args: [] }
 }
 
+/**
+ * Kill any existing process holding BACKEND_PORT so the freshly-installed app
+ * doesn't collide with a leftover dev uvicorn or a previous Knovex instance.
+ * Runs synchronously (spawnSync) so the backend spawn never races the cleanup.
+ * Safe to call even when nothing is holding the port — exits silently.
+ */
+function clearBackendPort() {
+  try {
+    const { spawnSync } = require('child_process')
+    if (process.platform === 'win32') {
+      // netstat → find LISTENING PID → taskkill
+      const ns = spawnSync('netstat', ['-ano'], { encoding: 'utf8', timeout: 3000 })
+      const match = ns.stdout
+        .split('\n')
+        .find(l => l.includes(`:${BACKEND_PORT}`) && l.includes('LISTENING'))
+      if (match) {
+        const pid = match.trim().split(/\s+/).pop()
+        if (pid && /^\d+$/.test(pid) && pid !== '0') {
+          spawnSync('taskkill', ['/PID', pid, '/F'], { timeout: 3000 })
+          console.log(`[backend] cleared stale process on port ${BACKEND_PORT} (PID ${pid})`)
+        }
+      }
+    } else {
+      // macOS / Linux: lsof -ti :<port> | xargs kill -9
+      const lsof = spawnSync('lsof', ['-ti', `:${BACKEND_PORT}`], { encoding: 'utf8', timeout: 3000 })
+      const pids = lsof.stdout.trim().split('\n').filter(Boolean)
+      for (const pid of pids) {
+        spawnSync('kill', ['-9', pid], { timeout: 3000 })
+        console.log(`[backend] cleared stale process on port ${BACKEND_PORT} (PID ${pid})`)
+      }
+    }
+  } catch (e) {
+    // Non-fatal — best-effort cleanup only
+    console.warn('[backend] clearBackendPort warning:', e.message)
+  }
+}
+
 function spawnBackend() {
+  // Clear any stale process on the backend port before spawning our own
+  clearBackendPort()
+
   const { executable, args } = getBackendExecutable()
   // In production, __dirname resolves to inside app.asar — a virtual path the OS
   // does not recognise as a real directory.  Passing it as `cwd` to spawn() causes

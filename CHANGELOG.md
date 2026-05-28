@@ -11,6 +11,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.1] — 2026-05-29
+
+Hotfix — port conflict on app launch
+
+### Fixed
+
+- **`desktop/main.js`** — added `clearBackendPort()` called at the start of `spawnBackend()`
+  - On Windows: uses `netstat -ano` to find any PID listening on port 8765, then kills it with `taskkill /PID … /F`
+  - On macOS/Linux: uses `lsof -ti :8765` and `kill -9` for the same effect
+  - Prevents `[Errno 10048]` (Windows) / `[Errno 98]` (Linux) "address already in use" errors when the
+    previous backend process was not cleaned up (e.g. dev uvicorn left running after manual testing)
+  - Errors in the cleanup step are caught and logged as warnings so a stale-port failure never blocks launch
+
+### Changed
+
+- Version bumped to `0.8.1` in `backend/core/config.py`, `frontend/package.json`, `desktop/package.json`
+
+---
+
 ## [0.8.0] — 2026-05-28
 
 Sprint 8 — Progress Page · GuidedViewer · KB Browser Upload · E2E Test Suite
