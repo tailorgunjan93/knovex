@@ -78,9 +78,13 @@ class DuckDuckGoAdapter(IWebSearchAdapter):
         base_url: str = "",
     ) -> list[SearchResult]:
         try:
-            from duckduckgo_search import DDGS  # only import site
+            # Try new package name first (ddgs), fall back to old (duckduckgo_search)
+            try:
+                from ddgs import DDGS
+            except ImportError:
+                from duckduckgo_search import DDGS  # type: ignore[no-redef]
         except ImportError:
-            logger.warning("duckduckgo-search not installed — returning empty results")
+            logger.warning("ddgs / duckduckgo-search not installed — returning empty results")
             return []
 
         try:

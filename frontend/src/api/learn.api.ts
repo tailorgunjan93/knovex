@@ -1,7 +1,7 @@
 /**
  * Learn API — typed wrappers for all /api/learn/* endpoints
  *
- * Formats: quiz | flashcard | mindmap | timeline | story | eli5 | speedlearn | brainstorm
+ * Formats: quiz | flashcard | mindmap | timeline | story | eli5 | speedlearn | brainstorm | guided
  * SSE streaming is handled via native fetch + ReadableStream.
  */
 
@@ -18,10 +18,11 @@ export type LearnFormat =
   | 'eli5'
   | 'speedlearn'
   | 'brainstorm'
+  | 'guided'
 
 export type Difficulty = 'beginner' | 'intermediate' | 'expert'
 
-export type SourceType = 'topic' | 'kb_file' | 'url'
+export type SourceType = 'topic' | 'kb_file' | 'url' | 'upload'
 
 export interface LearnSession {
   id: string
@@ -30,7 +31,7 @@ export interface LearnSession {
   source_type: SourceType
   difficulty: Difficulty
   status: 'pending' | 'generating' | 'ready' | 'error'
-  content: QuizContent | FlashcardContent | MindmapContent | TimelineContent | TextContent | null
+  content: QuizContent | FlashcardContent | MindmapContent | TimelineContent | TextContent | GuidedContent | null
   created_at: string
   completed_at: string | null
 }
@@ -76,6 +77,33 @@ export interface TimelineContent {
 
 export interface TextContent {
   text: string
+}
+
+// ─── Guided learning (personal tutor step-by-step) ────────────────────────────
+
+export interface QuizCheck {
+  question:         string
+  options:          string[]
+  correct:          number   // 0-based index into options
+  feedback_correct: string
+  feedback_wrong:   string
+}
+
+export interface GuidedStep {
+  step:        number
+  title:       string
+  explanation: string
+  example:     string
+  analogy:     string | null
+  key_insight: string
+  check_in:    string
+  quiz_check:  QuizCheck | null
+}
+export interface GuidedContent {
+  topic:       string
+  intro:       string
+  total_steps: number
+  steps:       GuidedStep[]
 }
 
 // ─── SSE event types ──────────────────────────────────────────────────────────
@@ -165,11 +193,14 @@ export const learnApi = {
   /**
    * Create a learn session and stream generated content via SSE.
    *
-   * @param topic      The topic to learn about.
-   * @param format     One of the 8 learn formats.
-   * @param difficulty beginner | intermediate | expert
-   * @param onEvent    Called for each SSE event as it arrives.
-   * @param signal     Optional AbortSignal to cancel the stream.
+   * @param topic       The topic to learn about (required for all modes).
+   * @param format      One of the 8 learn formats.
+   * @param difficulty  beginner | intermediate | expert
+   * @param onEvent     Called for each SSE event as it arrives.
+   * @param signal      Optional AbortSignal to cancel the stream.
+   * @param sourceType  Where the learning content comes from (default: 'topic').
+   * @param sourceRef   For 'url': the URL; for 'kb_file': the file ID.
+   * @param contextText Pre-fetched source text (KB/upload); backend fetches URL automatically.
    */
   async streamSession(
     topic: string,
@@ -177,6 +208,9 @@ export const learnApi = {
     difficulty: Difficulty,
     onEvent: (event: LearnSSEEvent) => void,
     signal?: AbortSignal,
+    sourceType: SourceType = 'topic',
+    sourceRef?: string,
+    contextText?: string,
   ): Promise<void> {
     const response = await fetch(
       `${API_BASE}/api/learn/sessions/stream`,
@@ -187,7 +221,9 @@ export const learnApi = {
           topic,
           format,
           difficulty,
-          source_type: 'topic',
+          source_type: sourceType,
+          source_ref: sourceRef ?? null,
+          context_text: contextText ?? '',
         }),
         signal,
       },

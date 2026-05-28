@@ -32,12 +32,12 @@ interface Props {
 // ─── Presets ──────────────────────────────────────────────────────────────────
 
 const COLOR_PRESETS = [
+  { value: '#DDA76A', label: 'Amber'  },   // brand amber — default
+  { value: '#B5803E', label: 'Copper' },
+  { value: '#3A8D7A', label: 'Sage'   },
+  { value: '#2563EB', label: 'Blue'   },
   { value: '#7C3AED', label: 'Violet' },
-  { value: '#2563EB', label: 'Blue' },
-  { value: '#059669', label: 'Green' },
-  { value: '#DC2626', label: 'Red' },
-  { value: '#D97706', label: 'Amber' },
-  { value: '#DB2777', label: 'Pink' },
+  { value: '#DB2777', label: 'Pink'   },
 ]
 
 const ICON_PRESETS = ['📁', '📚', '🔬', '💡', '📊', '🎯', '🌐', '🧠', '📝', '🗂️']
@@ -46,13 +46,13 @@ const ICON_PRESETS = ['📁', '📚', '🔬', '💡', '📊', '🎯', '🌐', '�
 
 export default function CreateKBDialog({ open, onClose, onCreate, loading }: Props) {
   const [name, setName] = useState('')
-  const [color, setColor] = useState('#7C3AED')
+  const [color, setColor] = useState('#DDA76A')
   const [icon, setIcon] = useState('📁')
   const [error, setError] = useState('')
 
   const handleClose = () => {
     setName('')
-    setColor('#7C3AED')
+    setColor('#DDA76A')
     setIcon('📁')
     setError('')
     onClose()

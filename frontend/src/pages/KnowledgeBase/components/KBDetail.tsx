@@ -24,6 +24,8 @@ import {
   Stack,
   Tooltip,
   Typography,
+  useTheme,
+  alpha,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AddIcon from '@mui/icons-material/Add'
@@ -35,23 +37,29 @@ import FileRow from './FileRow'
 import ConfirmDialog from './ConfirmDialog'
 import UpdatePathDialog from './UpdatePathDialog'
 import FileViewer from '../../../components/FileViewer'
+import ScreenHeader from '@/components/Layout/ScreenHeader'
+
+const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Props {
   kbId: string
   onBack: () => void
+  initialFileId?: string   // deep-link from citation click: auto-open this file
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function KBDetail({ kbId, onBack }: Props) {
+export default function KBDetail({ kbId, onBack, initialFileId }: Props) {
   const queryClient = useQueryClient()
+  const theme = useTheme()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [updatePathFileId, setUpdatePathFileId] = useState<string | null>(null)
   const [viewingFile, setViewingFile] = useState<FileRecord | null>(null)
   const [addError, setAddError] = useState('')
   const pollIntervalRef = useRef<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── Queries ───────────────────────────────────────────────────────────────
   const { data: kb, isLoading: kbLoading } = useQuery({
@@ -63,6 +71,14 @@ export default function KBDetail({ kbId, onBack }: Props) {
     queryKey: ['kb', kbId, 'files'],
     queryFn: () => kbApi.listFiles(kbId),
   })
+
+  // Auto-open file when deep-linked from a chat citation
+  useEffect(() => {
+    if (initialFileId && files.length > 0 && !viewingFile) {
+      const target = files.find(f => f.id === initialFileId)
+      if (target) setViewingFile(target)
+    }
+  }, [initialFileId, files])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-refresh while any file is ingesting
   const hasActive = files.some(f => f.status === 'pending' || f.status === 'ingesting')
@@ -84,6 +100,16 @@ export default function KBDetail({ kbId, onBack }: Props) {
   // ── Mutations ─────────────────────────────────────────────────────────────
   const addFileMutation = useMutation({
     mutationFn: (path: string) => kbApi.addFile(kbId, path),
+    onSuccess: () => {
+      setAddError('')
+      queryClient.invalidateQueries({ queryKey: ['kb', kbId, 'files'] })
+      queryClient.invalidateQueries({ queryKey: ['kbs'] })
+    },
+    onError: (err: Error) => setAddError(err.message),
+  })
+
+  const uploadFileMutation = useMutation({
+    mutationFn: (file: File) => kbApi.uploadFile(kbId, file),
     onSuccess: () => {
       setAddError('')
       queryClient.invalidateQueries({ queryKey: ['kb', kbId, 'files'] })
@@ -126,26 +152,40 @@ export default function KBDetail({ kbId, onBack }: Props) {
 
   // ── File picker ───────────────────────────────────────────────────────────
   const handleAddFiles = async () => {
-    try {
-      let paths: string[] = []
-      if (window.knovex?.openFilePicker) {
+    if (window.knovex?.openFilePicker) {
+      // Electron desktop app — use native file picker, add by path
+      try {
         const result = await window.knovex.openFilePicker({
           filters: [
             { name: 'Supported files', extensions: ['pdf', 'docx', 'txt', 'md', 'csv', 'udf'] },
           ],
           properties: ['multiSelections'],
         })
-        if (result && !result.canceled) paths = result.filePaths
-      } else {
-        // Dev fallback: prompt
-        const path = window.prompt('Enter absolute file path:')
-        if (path) paths = [path]
+        if (result && !result.canceled) {
+          for (const p of result.filePaths) {
+            await addFileMutation.mutateAsync(p)
+          }
+        }
+      } catch (e: unknown) {
+        setAddError(e instanceof Error ? e.message : 'Failed to add file')
       }
-      for (const p of paths) {
-        await addFileMutation.mutateAsync(p)
+    } else {
+      // Browser — trigger hidden <input type="file"> picker
+      fileInputRef.current?.click()
+    }
+  }
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? [])
+    // Reset input so the same file can be re-selected after a removal
+    e.target.value = ''
+    if (selected.length === 0) return
+    for (const file of selected) {
+      try {
+        await uploadFileMutation.mutateAsync(file)
+      } catch {
+        // error already captured in mutation onError
       }
-    } catch (e: unknown) {
-      setAddError(e instanceof Error ? e.message : 'Failed to add file')
     }
   }
 
@@ -183,97 +223,84 @@ export default function KBDetail({ kbId, onBack }: Props) {
     )
   }
 
+  const accentColor = kb.color || theme.palette.primary.main
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        spacing={1.5}
-        sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}
-      >
-        <IconButton size="small" onClick={onBack}>
-          <ArrowBackIcon />
-        </IconButton>
+      {/* ── KnovexUI ScreenHeader ────────────────────────────────────────── */}
+      <ScreenHeader
+        eyebrow={`LIBRARY · ${kb.stats.file_count} FILE${kb.stats.file_count !== 1 ? 'S' : ''}`}
+        title={kb.name}
+        sub={
+          kb.stats.total_chunks > 0
+            ? `${kb.stats.total_chunks} chunks indexed${ingestingCount > 0 ? ` · ${ingestingCount} indexing…` : ''}`
+            : ingestingCount > 0
+              ? `${ingestingCount} file${ingestingCount !== 1 ? 's' : ''} indexing…`
+              : 'No files indexed yet — add files to get started'
+        }
+        actions={
+          <>
+            {/* Back */}
+            <Tooltip title="Back to all knowledge bases">
+              <IconButton
+                size="small"
+                onClick={onBack}
+                sx={{ width: 28, height: 28, border: `1px solid ${alpha(theme.palette.divider, 0.8)}`, borderRadius: 1 }}
+              >
+                <ArrowBackIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
 
-        {/* KB identity */}
-        <Box
-          sx={{
-            width: 36,
-            height: 36,
-            borderRadius: 1.5,
-            bgcolor: `${kb.color}22`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.2rem',
-            flexShrink: 0,
-          }}
-        >
-          {kb.icon}
-        </Box>
-
-        <Box flex={1}>
-          <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.2 }}>
-            {kb.name}
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="caption" color="text.secondary">
-              {kb.stats.file_count} file{kb.stats.file_count !== 1 ? 's' : ''}
-            </Typography>
-            {kb.stats.total_chunks > 0 && (
-              <>
-                <Typography variant="caption" color="text.secondary">·</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {kb.stats.total_chunks} chunks indexed
-                </Typography>
-              </>
-            )}
-            {ingestingCount > 0 && (
-              <>
-                <Typography variant="caption" color="text.secondary">·</Typography>
-                <Stack direction="row" alignItems="center" spacing={0.5}>
-                  <CircularProgress size={10} thickness={5} />
-                  <Typography variant="caption" color="info.main">
-                    {ingestingCount} indexing
-                  </Typography>
-                </Stack>
-              </>
-            )}
-          </Stack>
-        </Box>
-
-        {/* Actions */}
-        <Stack direction="row" spacing={0.5}>
-          <Tooltip title="Re-index all files">
-            <IconButton
-              size="small"
-              onClick={() => reindexKBMutation.mutate()}
-              disabled={reindexKBMutation.isPending || files.length === 0}
+            {/* KB glyph */}
+            <Box
+              sx={{
+                width: 28, height: 28,
+                borderRadius: 1,
+                bgcolor: alpha(accentColor, 0.15),
+                border: `1px solid ${alpha(accentColor, 0.3)}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1rem',
+                color: accentColor,
+              }}
             >
-              <RefreshIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Delete Knowledge Base">
-            <IconButton
+              {kb.icon}
+            </Box>
+
+            <Tooltip title="Re-index all files">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => reindexKBMutation.mutate()}
+                  disabled={reindexKBMutation.isPending || files.length === 0}
+                  sx={{ width: 28, height: 28, border: `1px solid ${alpha(theme.palette.divider, 0.8)}`, borderRadius: 1 }}
+                >
+                  <RefreshIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Delete Knowledge Base">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => setDeleteOpen(true)}
+                sx={{ width: 28, height: 28, border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`, borderRadius: 1 }}
+              >
+                <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Tooltip>
+            <Button
+              variant="contained"
               size="small"
-              color="error"
-              onClick={() => setDeleteOpen(true)}
+              startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+              onClick={handleAddFiles}
+              disabled={addFileMutation.isPending || uploadFileMutation.isPending}
+              sx={{ height: 32, fontSize: 12 }}
             >
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={handleAddFiles}
-            disabled={addFileMutation.isPending}
-          >
-            Add Files
-          </Button>
-        </Stack>
-      </Stack>
+              {uploadFileMutation.isPending ? 'Uploading…' : 'Add Files'}
+            </Button>
+          </>
+        }
+      />
 
       {/* ── Error banner ────────────────────────────────────────────────── */}
       {addError && (
@@ -350,6 +377,16 @@ export default function KBDetail({ kbId, onBack }: Props) {
             setUpdatePathFileId(null)
           }
         }}
+      />
+
+      {/* Hidden browser file picker — triggered by handleAddFiles in non-Electron env */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.docx,.txt,.md,.csv,.udf"
+        style={{ display: 'none' }}
+        onChange={handleFileInputChange}
       />
     </Box>
   )

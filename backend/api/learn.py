@@ -22,7 +22,9 @@ SSE event protocol:
 from __future__ import annotations
 
 import logging
+import re
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -102,6 +104,30 @@ async def stream_learn_session(
         aws_secret_access_key=llm.aws_secret_access_key,
     )
 
+    # ── Resolve context text ──────────────────────────────────────────────────
+    context_text = body.context_text or ""
+
+    # For URL source: fetch the page content server-side (avoids browser CORS)
+    if body.source_type == "url" and body.source_ref and not context_text:
+        try:
+            async with httpx.AsyncClient(
+                timeout=12,
+                follow_redirects=True,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; Knovex/1.0)"},
+            ) as client:
+                resp = await client.get(body.source_ref)
+                resp.raise_for_status()
+                # Strip HTML tags for a clean text context
+                raw_html = resp.text
+                no_script = re.sub(r"<(script|style)[^>]*>.*?</(script|style)>", " ", raw_html, flags=re.S | re.I)
+                plain = re.sub(r"<[^>]+>", " ", no_script)
+                plain = re.sub(r"&[a-z]+;", " ", plain)
+                context_text = re.sub(r"\s{2,}", " ", plain).strip()[:8000]
+                logger.info("Fetched URL %s — %d chars", body.source_ref, len(context_text))
+        except Exception as exc:
+            logger.warning("Failed to fetch URL %s: %s", body.source_ref, exc)
+            # Continue without context — LLM will use its training knowledge
+
     try:
         stream = learn_svc.stream_session(
             topic=body.topic,
@@ -112,6 +138,7 @@ async def stream_learn_session(
             provider=llm.provider,
             model=llm.model,
             credentials=credentials,
+            context_text=context_text,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

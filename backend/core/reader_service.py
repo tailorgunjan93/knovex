@@ -46,6 +46,11 @@ from backend.models.schemas import (
 from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.file_repository import IFileRepository
 
+# Optional import — SearchService may not be injected in all contexts
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from backend.core.search_service import SearchService
+
 logger = logging.getLogger("knovex.reader")
 
 # Max chunks used as context for inline Q&A
@@ -74,12 +79,14 @@ class ReaderService:
         llm_svc: LLMService,
         pdf_adapter: IPDFAdapter | None = None,
         para_adapter: IParagraphAdapter | None = None,
+        search_svc: "SearchService | None" = None,   # injected for web search support
     ) -> None:
         self._file_repo = file_repo
         self._backend = backend
         self._llm_svc = llm_svc
         self._pdf_adapter = pdf_adapter or PyMuPDFAdapter()
         self._para_adapter = para_adapter or PythonDocxAdapter()
+        self._search_svc = search_svc
 
     # ==================================================================
     # File content rendering
@@ -224,14 +231,21 @@ class ReaderService:
         return blocks
 
     def _render_pdf(self, path: Path) -> list[ContentBlock]:
-        """Render PDF — one ContentBlock of type 'page' per PDF page."""
+        """Render PDF — one ContentBlock of type 'page' per PDF page.
+
+        When PyMuPDFAdapter extracts HTML (is_html=True), the content field
+        contains HTML markup and the frontend renders it with dangerouslySetInnerHTML.
+        """
         pages = self._pdf_adapter.extract_pages(path)
         blocks: list[ContentBlock] = []
         for page in pages:
             blocks.append(ContentBlock(
                 type="page",
                 content=page.text,
-                metadata={"page_num": page.page_num},
+                metadata={
+                    "page_num": page.page_num,
+                    "is_html": page.is_html,
+                },
             ))
         return blocks or [ContentBlock(type="paragraph", content="(no text extracted)")]
 
@@ -266,9 +280,14 @@ class ReaderService:
         provider: str,
         model: str,
         credentials: ProviderCredentials,
+        search_engine: str = "duckduckgo",
+        search_api_key: str = "",
     ) -> AsyncGenerator[str, None]:
         """
         Stream an answer to *req.question* grounded in the file's chunks.
+
+        When *req.use_web_search* is True and a SearchService is available,
+        web results are appended as additional context.
 
         Yields SSE-formatted strings: ``data: {"token": "..."}\\n\\n``
         Ends with: ``data: [DONE]\\n\\n``
@@ -278,10 +297,39 @@ class ReaderService:
 
         context = await self._build_context(file_id, req.question)
 
+        # ── Optional web search context ──────────────────────────────────────
+        web_context = ""
+        if req.use_web_search and self._search_svc is not None:
+            try:
+                web_resp = await self._search_svc.search(
+                    query=req.question,
+                    engine=search_engine,
+                    api_key=search_api_key,
+                    num_results=5,
+                )
+                if web_resp.results:
+                    parts = []
+                    for r in web_resp.results:
+                        parts.append(f"**{r.title}** ({r.url})\n{r.snippet}")
+                    web_context = "\n\n".join(parts)
+                    logger.info(
+                        "Reader web search: %d results for %r",
+                        len(web_resp.results), req.question[:60],
+                    )
+            except Exception as exc:
+                logger.warning("Reader web search failed: %s", exc)
+
+        combined_context = context
+        if web_context:
+            combined_context = (
+                f"Document context:\n{context}\n\n"
+                f"Web search results:\n{web_context}"
+            )
+
         system_prompt = (
             f"You are a helpful assistant answering questions about the document "
             f'"{file.name}". '
-            "Use ONLY the provided context to answer. "
+            "Use the provided document context and any web search results to answer. "
             "If the answer is not in the context, say so clearly. "
             "Be concise and cite specific parts of the document when helpful."
         )
@@ -291,7 +339,7 @@ class ReaderService:
             {
                 "role": "user",
                 "content": (
-                    f"Context from '{file.name}':\n\n{context}\n\n"
+                    f"Context:\n\n{combined_context}\n\n"
                     f"Question: {req.question}"
                 ),
             },

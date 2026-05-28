@@ -49,17 +49,20 @@
 ║    POST   /kb/                        Create knowledge base     ║
 ║    GET    /kb/                        List all KBs              ║
 ║    DELETE /kb/{id}                    Delete KB                 ║
-║    POST   /kb/{id}/files              Add file to KB            ║
+║    POST   /kb/{id}/files              Add file to KB (path)     ║
+║    POST   /kb/{id}/upload             Upload file (multipart)   ║
 ║    DELETE /kb/{id}/files/{file_id}    Remove file               ║
 ║    POST   /kb/{id}/reindex            Re-index KB               ║
 ║    POST   /chat/                      Start chat (streaming)    ║
 ║    GET    /chat/{kb_id}/history       Chat history              ║
 ║    POST   /summarize/                 Summarize file or KB      ║
 ║    POST   /search/web                 Web search                ║
-║    POST   /learn/session              Generate learn session    ║
-║    GET    /learn/session/{id}         Get session content       ║
-║    POST   /learn/session/{id}/answer  Submit quiz answer        ║
-║    GET    /learn/progress             User XP + streaks         ║
+║    POST   /learn/sessions             Generate learn session    ║
+║    GET    /learn/sessions             List all sessions         ║
+║    GET    /learn/sessions/{id}        Get session content       ║
+║    DELETE /learn/sessions/{id}        Delete session            ║
+║    POST   /learn/sessions/{id}/answer Submit quiz answer        ║
+║    GET    /learn/stats                User XP + streaks         ║
 ║    GET    /settings/                  Get settings              ║
 ║    PUT    /settings/                  Update settings           ║
 ║    POST   /settings/test-llm          Test LLM connection       ║
@@ -116,8 +119,14 @@
 ║  │  ┌─────────┐  │     │  ┌───────┐  │   │  ┌───────────┐  │  ║
 ║  │  │  React  │  │     │  │ React │  │   │  │  RN UI    │  │  ║
 ║  │  │  + MUI  │  │     │  │ + MUI │  │   │  │           │  │  ║
-║  │  └────┬────┘  │     │  └───┬───┘  │   │  └─────┬─────┘  │  ║
-║  └───────│───────┘     └──────│──────┘   └────────│────────┘  ║
+║  │  │ Pages:  │  │     │  └───┬───┘  │   │  └─────┬─────┘  │  ║
+║  │  │ KB      │  │     │      │      │   │        │        │  ║
+║  │  │ Chat    │  │     └──────│──────┘   └────────│────────┘  ║
+║  │  │ Learn   │  │
+║  │  │ Progress│  │   ← new (v0.8.0)
+║  │  │ Settings│  │
+║  │  └────┬────┘  │
+║  └───────│───────┘
 ║          │ localhost           │ HTTPS             │ HTTPS      ║
 ║          └────────────────────┴───────────────────┘           ║
 ║                               │                               ║
@@ -596,7 +605,8 @@ React Interactive Components (Framer Motion + React Flow + Lottie)
 ├── <StoryMode chapters={chapters} />
 ├── <Timeline events={events} />
 ├── <BrainstormBoard concepts={concepts} />
-└── <AnimatedExplainer steps={steps} />
+├── <AnimatedExplainer steps={steps} />
+└── <GuidedViewer steps={steps} />   ← new (v0.8.0)
 
        ↓
 

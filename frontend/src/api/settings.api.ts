@@ -22,9 +22,25 @@ export interface SearchSettings {
 }
 
 export interface EmbeddingSettings {
+  enabled: boolean   // master switch — false = FTS5 only
   provider: string   // "local" | "openai"
   model: string      // openai model (ignored when provider = "local")
   api_key: string    // openai key — empty = use local model
+}
+
+export interface EmbeddingModelStatus {
+  ready: boolean
+  model_name: string
+  size_mb: number
+  model_dir: string
+}
+
+export interface DownloadProgress {
+  running: boolean
+  downloaded: number
+  total: number
+  error: string
+  ready: boolean
 }
 
 export interface AppSettings {
@@ -93,11 +109,30 @@ export const settingsApi = {
     return res.data
   },
 
-  /** Get available models for a provider. */
-  async getModels(provider: string): Promise<LLMModelsResult> {
+  /** Get available models for a provider.
+   *  Pass apiKey to fetch live models even before the key has been saved. */
+  async getModels(provider: string, apiKey?: string): Promise<LLMModelsResult> {
     const res = await apiClient.get<LLMModelsResult>('/settings/llm/models', {
-      params: { provider },
+      params: { provider, ...(apiKey ? { api_key: apiKey } : {}) },
     })
+    return res.data
+  },
+
+  /** Check if the local ONNX model is downloaded. */
+  async getEmbeddingModelStatus(): Promise<EmbeddingModelStatus> {
+    const res = await apiClient.get<EmbeddingModelStatus>('/settings/embedding/model-status')
+    return res.data
+  },
+
+  /** Trigger background download of the ONNX model (~45 MB). */
+  async downloadEmbeddingModel(): Promise<{ status: string }> {
+    const res = await apiClient.post<{ status: string }>('/settings/embedding/download-model')
+    return res.data
+  },
+
+  /** Poll download progress. */
+  async getDownloadProgress(): Promise<DownloadProgress> {
+    const res = await apiClient.get<DownloadProgress>('/settings/embedding/download-progress')
     return res.data
   },
 }

@@ -8,8 +8,8 @@
 
 | | |
 |---|---|
-| **Total Sprints** | 6 |
-| **Estimated Duration** | 14 weeks |
+| **Total Sprints** | 8 |
+| **Estimated Duration** | 18 weeks |
 | **Methodology** | Sprint-based, backend-first |
 | **Stack** | FastAPI + React + Electron |
 | **Target** | Cross-platform desktop app (.exe / .dmg / .deb) |
@@ -24,6 +24,8 @@
 | Sprint 4 | Chat + Summarizer + Web Search | Week 7–8 |
 | Sprint 5 | Settings + polish + packaging + deployment modes | Week 9–10 |
 | Sprint 6 | Learn Mode — interactive learning engine | Week 11–14 |
+| Sprint 7 | Semantic Search + Copper Theme + Auto-updater | Week 15–16 |
+| Sprint 8 | Progress Page + GuidedViewer + KB Browser Upload + E2E Tests | Week 17–18 |
 
 ---
 
@@ -521,13 +523,56 @@ electron-builder@^25
 | F6.19 | learn.api.ts | Typed API calls for all /learn/* endpoints | P0 |
 
 ### Milestone S6 — Learn Mode v1
-- [ ] All 8 formats generate correctly (quiz, flashcard, mind map, story, timeline, ELI5, speed learn, brainstorm)
-- [ ] Quiz scoring + XP award works
-- [ ] Flashcard spaced repetition tracks ease ratings
-- [ ] Mind map and brainstorm board interactive in React Flow
-- [ ] Progress dashboard shows XP, streak, badges
-- [ ] Web search enrichment works in session generator
-- [ ] "Add to KB" saves session content correctly
+- [x] All 8 formats generate correctly (quiz, flashcard, mind map, story, timeline, ELI5, speed learn, brainstorm)
+- [x] Quiz scoring + XP award works
+- [x] Flashcard spaced repetition tracks ease ratings
+- [x] Mind map and brainstorm board interactive in React Flow
+- [x] Progress dashboard shows XP, streak, badges
+- [x] Web search enrichment works in session generator
+- [ ] "Add to KB" saves session content correctly (deferred to Phase 2)
+
+---
+
+---
+
+## Sprint 8 — Progress Page, GuidedViewer, KB Browser Upload, E2E Tests
+
+**Goal:** Analytics dashboard, guided learning format, browser-native file upload, and full Playwright E2E coverage.
+
+### Frontend Tasks
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| F8.1 | Progress page | 4 stat cards (Streak, XP, Sessions, Active Days) + daily activity heatmap + velocity chart | P0 |
+| F8.2 | Heatmap component | SVG 26-week grid, colour-coded intensity, "N active day(s)" summary | P0 |
+| F8.3 | Velocity chart | Recharts ComposedChart — sessions/wk bars + active days/wk line | P0 |
+| F8.4 | Week-over-week trends | "N more/fewer than last week" logic on Sessions card | P0 |
+| F8.5 | Zero-state handling | All cards and charts render cleanly when API returns empty | P0 |
+| F8.6 | GuidedViewer | Step-by-step guided session viewer with "Got it →" navigation | P0 |
+| F8.7 | KB browser upload | Hidden `<input type="file">` + `kbApi.uploadFile()` multipart POST | P0 |
+| F8.8 | FormatCard data-testid | `data-testid="format-card-{id}"` on each format card Box | P1 |
+
+### Backend Tasks
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| B8.1 | KB multipart upload endpoint | `POST /kb/{id}/upload` — `UploadFile` → save → ingest pipeline | P0 |
+
+### Quality Tasks
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| Q8.1 | E2E test suite | `e2e/learn.spec.ts` — 27 Playwright tests (layout + functional flows) | P0 |
+| Q8.2 | E2E test suite | `e2e/progress.spec.ts` — 34 Playwright tests (layout + data accuracy) | P0 |
+| Q8.3 | Playwright config | `playwright.config.ts` — 60 s navigationTimeout, reuseExistingServer | P0 |
+
+### Milestone S8 — v0.8.0
+- [x] Progress page renders 4 stat cards with correct live data
+- [x] Heatmap shows 26-week grid, correct active-day counts, excludes sessions older than 26 weeks
+- [x] Velocity chart renders sessions/wk + active days/wk
+- [x] GuidedViewer renders steps and "Got it →" advances to next step
+- [x] KB browser file upload works without Electron file picker
+- [x] 61 E2E tests all green (learn.spec.ts: 27, progress.spec.ts: 34)
 
 ---
 

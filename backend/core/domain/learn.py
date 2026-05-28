@@ -22,7 +22,7 @@ from datetime import datetime
 
 VALID_FORMATS = frozenset({
     "quiz", "flashcard", "mindmap", "timeline",
-    "story", "eli5", "speedlearn", "brainstorm",
+    "story", "eli5", "speedlearn", "brainstorm", "guided",
 })
 
 VALID_DIFFICULTIES = frozenset({"beginner", "intermediate", "expert"})

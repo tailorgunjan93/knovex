@@ -11,6 +11,15 @@ export interface SourceCitation {
   file: string
   section: string
   page: number | null
+  file_id?: string
+  kb_id?: string
+}
+
+export interface AttachResult {
+  filename: string
+  text: string
+  char_count: number
+  truncated: boolean
 }
 
 export interface WebSource {
@@ -80,12 +89,28 @@ export const chatApi = {
   },
 
   /**
+   * Upload a file and extract its text for use as inline chat context.
+   */
+  async attachFile(file: File): Promise<AttachResult> {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await apiClient.post<AttachResult>('/chat/attach', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30_000,
+    })
+    return res.data
+  },
+
+  /**
    * Stream a chat response via SSE.
    *
-   * @param sessionId  The session to stream into.
-   * @param message    The user message.
-   * @param onEvent    Called for each SSE event as it arrives.
-   * @param signal     Optional AbortSignal to cancel the stream.
+   * @param sessionId       The session to stream into.
+   * @param message         The user message.
+   * @param onEvent         Called for each SSE event as it arrives.
+   * @param useWebSearch    Enable web search augmentation.
+   * @param signal          Optional AbortSignal to cancel the stream.
+   * @param kbIds           KB IDs to search for context.
+   * @param attachedContext Extracted text from attached file(s).
    */
   async streamMessage(
     sessionId: string,
@@ -93,13 +118,20 @@ export const chatApi = {
     onEvent: (event: SSEEvent) => void,
     useWebSearch = false,
     signal?: AbortSignal,
+    kbIds?: string[],
+    attachedContext?: string,
   ): Promise<void> {
     const response = await fetch(
       `${API_BASE}/api/chat/sessions/${sessionId}/stream`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, use_web_search: useWebSearch }),
+        body: JSON.stringify({
+          message,
+          use_web_search: useWebSearch,
+          kb_ids: kbIds && kbIds.length > 0 ? kbIds : null,
+          attached_context: attachedContext ?? null,
+        }),
         signal,
       },
     )

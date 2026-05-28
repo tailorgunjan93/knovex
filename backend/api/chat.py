@@ -18,8 +18,10 @@ SRP: routes only handle HTTP concerns; business logic in ChatService.
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from backend.core.dependencies import (
@@ -28,6 +30,7 @@ from backend.core.dependencies import (
 )
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
+    ChatAttachResponse,
     ChatMessageResponse,
     ChatMessagesResponse,
     ChatSessionCreate,
@@ -231,6 +234,8 @@ async def stream_chat(
             use_web_search=body.use_web_search,
             search_engine=search.engine,
             search_api_key=search.api_key,
+            kb_ids=body.kb_ids or None,
+            attached_context=body.attached_context or None,
         ),
         media_type="text/event-stream",
         headers={
@@ -257,3 +262,82 @@ async def export_session(
         return await chat_svc.export_session(session_id)
     except EntityNotFoundError as exc:
         raise _handle_not_found(exc) from exc
+
+
+# ---------------------------------------------------------------------------
+# File attachment — extract text for inline chat context
+# ---------------------------------------------------------------------------
+
+_MAX_ATTACH_CHARS = 30_000   # ≈ 7,500 tokens — keeps context window healthy
+
+
+def _extract_text_from_file(path: str, suffix: str) -> str:
+    """Extract plain text from a file.  Supports TXT, MD, CSV, PDF, DOCX."""
+    suffix = suffix.lower()
+
+    if suffix in (".txt", ".md", ".csv"):
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            return fh.read()
+
+    if suffix == ".pdf":
+        try:
+            import fitz  # PyMuPDF
+            doc = fitz.open(path)
+            return "\n\n".join(page.get_text() for page in doc).strip()
+        except ImportError:
+            return "[PDF parsing unavailable — install PyMuPDF: pip install pymupdf]"
+
+    if suffix == ".docx":
+        try:
+            from docx import Document
+            doc = Document(path)
+            return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        except ImportError:
+            return "[DOCX parsing unavailable — install python-docx: pip install python-docx]"
+
+    # Fallback: try reading as UTF-8 text
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as fh:
+            return fh.read()
+    except Exception:
+        return f"[Unsupported file type: {suffix}]"
+
+
+@router.post(
+    "/chat/attach",
+    response_model=ChatAttachResponse,
+    summary="Extract text from an uploaded file for use as chat context",
+)
+async def attach_file_for_chat(
+    file: UploadFile = File(...),
+) -> ChatAttachResponse:
+    """
+    Accept a multipart file upload, extract its text, and return it so the
+    frontend can include it as ``attached_context`` in the next stream request.
+
+    Supported: TXT, MD, CSV, PDF, DOCX.
+    Text is capped at 30,000 characters (~7,500 tokens).
+    """
+    suffix = os.path.splitext(file.filename or "file")[1] or ".txt"
+
+    # Write to a temp file so parsers can use the file path
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        contents = await file.read()
+        tmp.write(contents)
+        tmp_path = tmp.name
+
+    try:
+        text = _extract_text_from_file(tmp_path, suffix)
+    finally:
+        os.unlink(tmp_path)
+
+    truncated = len(text) > _MAX_ATTACH_CHARS
+    if truncated:
+        text = text[:_MAX_ATTACH_CHARS]
+
+    return ChatAttachResponse(
+        filename=file.filename or "attachment",
+        text=text,
+        char_count=len(text),
+        truncated=truncated,
+    )

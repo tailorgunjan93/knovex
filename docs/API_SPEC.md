@@ -198,6 +198,31 @@ Remove a file from a KB (removes from index too).
 
 ---
 
+### `POST /api/v1/kb/{kb_id}/upload`
+Upload a file to a KB via browser multipart form (no Electron file picker required).
+
+**Request** — `multipart/form-data`
+- `file`: the binary file content (`UploadFile`)
+
+Supports: `.pdf`, `.docx`, `.txt`, `.md`, `.csv`, `.udf`
+
+File is saved to `data_dir/kb_uploads/{kb_id}/{uuid}/{filename}` then ingested via the standard pipeline.
+
+**Response** `202 Accepted`
+```json
+{
+  "id": "uuid",
+  "kb_id": "uuid",
+  "name": "document.pdf",
+  "format": "pdf",
+  "size_bytes": 524288,
+  "status": "pending",
+  "added_at": "2026-05-28T12:00:00Z"
+}
+```
+
+---
+
 ### `GET /api/v1/kb/{kb_id}/files/{file_id}/content`
 Get rendered file content for the reader.
 
@@ -481,6 +506,100 @@ Get available models for a provider.
     { "id": "gpt-4o", "name": "GPT-4o", "context_window": 128000 },
     { "id": "gpt-4o-mini", "name": "GPT-4o Mini", "context_window": 128000 }
   ]
+}
+```
+
+---
+
+## Learn Mode
+
+### `POST /api/v1/learn/sessions`
+Generate a new learn session. Streams structured content via SSE.
+
+**Request**
+```json
+{
+  "topic": "Machine Learning",
+  "format": "story",
+  "difficulty": "beginner",
+  "source_type": "topic"
+}
+```
+
+Format values: `quiz` | `flashcard` | `mindmap` | `story` | `timeline` | `eli5` | `speedlearn` | `brainstorm` | `guided`
+Difficulty values: `beginner` | `intermediate` | `expert`
+Source type values: `topic` | `url` | `kb`
+
+**Response** — SSE stream
+```
+data: {"type": "token", "content": "Once upon a time "}
+data: {"type": "token", "content": "in the land of algorithms..."}
+data: {"type": "done", "session_id": "uuid", "xp_earned": 25}
+```
+
+JSON formats (`quiz`, `flashcard`, `mindmap`, `timeline`, `guided`) stream structured JSON tokens.
+Text formats (`story`, `eli5`, `speedlearn`, `brainstorm`) stream raw markdown tokens in real-time.
+
+---
+
+### `GET /api/v1/learn/sessions`
+List all learn sessions for the current user.
+
+**Response** `200 OK`
+```json
+{
+  "sessions": [
+    {
+      "id": "uuid",
+      "topic": "Machine Learning",
+      "format": "story",
+      "difficulty": "beginner",
+      "status": "ready",
+      "xp_earned": 25,
+      "created_at": "2026-05-28T12:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/learn/sessions/{session_id}`
+Get full session content.
+
+**Response** `200 OK`
+```json
+{
+  "id": "uuid",
+  "topic": "Machine Learning",
+  "format": "story",
+  "difficulty": "beginner",
+  "status": "ready",
+  "content": { ... },
+  "xp_earned": 25,
+  "created_at": "2026-05-28T12:00:00Z"
+}
+```
+
+---
+
+### `DELETE /api/v1/learn/sessions/{session_id}`
+Delete a learn session.
+
+**Response** `204 No Content`
+
+---
+
+### `GET /api/v1/learn/stats`
+Get user progress stats.
+
+**Response** `200 OK`
+```json
+{
+  "total_xp": 1250,
+  "level": 3,
+  "streak_days": 5,
+  "last_session": "2026-05-28"
 }
 ```
 

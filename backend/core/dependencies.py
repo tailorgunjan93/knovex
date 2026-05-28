@@ -147,7 +147,8 @@ def get_reader_service(
     backend=Depends(get_sqlite_backend),
 ):
     """
-    Provide ReaderService wired with file repository, SQLite backend, and LLMService.
+    Provide ReaderService wired with file repository, SQLite backend, LLMService,
+    and SearchService (for optional web search in inline Q&A).
 
     Not cached: ReaderService is stateless; the expensive singletons
     (LLMService, pdf/para adapters) are cheap to construct (no I/O).
@@ -163,17 +164,45 @@ def get_reader_service(
         file_repo=file_repo,
         backend=backend,
         llm_svc=get_llm_service(),
+        search_svc=get_search_service(),
     )
 
 
-def get_kb_service(
+async def get_embedder():
+    """
+    Provide the best available IEmbedder based on current settings.
+
+    Returns NullEmbedder when dense search is disabled or misconfigured.
+    Async so it can await the settings service read.
+    """
+    from backend.adapters.embedder import NullEmbedder, build_embedder
+
+    try:
+        svc = get_settings_service()
+        current = await svc.get()
+        emb = current.embedding
+
+        if not emb.enabled:
+            return NullEmbedder()
+
+        return build_embedder(
+            embedding_api_key=emb.api_key,
+            embedding_provider=emb.provider,
+            embedding_model=emb.model,
+        )
+    except Exception as exc:
+        logger = __import__("logging").getLogger("knovex.deps")
+        logger.warning("get_embedder failed, using NullEmbedder: %s", exc)
+        from backend.adapters.embedder import NullEmbedder
+        return NullEmbedder()
+
+
+async def get_kb_service(
     backend=Depends(get_sqlite_backend),
+    embedder=Depends(get_embedder),
 ):
     """
     Provide KBService wired with SQLite repositories + IngestionService + EventBus.
-
-    Not cached: KBService itself is stateless; the heavy singletons
-    (event bus, backend) are cached/shared.
 
     DIP: KBService receives IKBRepository + IFileRepository (interfaces),
          not the concrete SQLite classes.
@@ -190,6 +219,7 @@ def get_kb_service(
         file_repo=file_repo,
         backend=backend,
         event_bus=event_bus,
+        embedder=embedder,
     )
     return KBService(
         kb_repo=kb_repo,
@@ -211,12 +241,14 @@ def get_search_service():
     return SearchService()
 
 
-def get_chat_service(
+async def get_chat_service(
     backend=Depends(get_sqlite_backend),
+    embedder=Depends(get_embedder),
 ):
     """
     Provide ChatService wired with chat repository, file repository,
-    SQLiteBackend (for FTS5 queries), LLMService, and SearchService.
+    SQLiteBackend (for FTS5 + optional dense queries), LLMService, SearchService,
+    and IEmbedder (NullEmbedder when dense search is disabled).
     """
     from backend.core.chat_service import ChatService
     from backend.storage.repositories.chat_repository import SQLiteChatRepository
@@ -228,6 +260,7 @@ def get_chat_service(
         backend=backend,
         llm_svc=get_llm_service(),
         search_svc=get_search_service(),
+        embedder=embedder,
     )
 
 

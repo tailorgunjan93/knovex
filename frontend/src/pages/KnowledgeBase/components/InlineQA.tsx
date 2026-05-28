@@ -7,10 +7,13 @@
  *   - Streaming tokens are appended to `currentAnswer` in real time.
  *   - AbortController lets the user cancel mid-stream.
  *   - Conversation history is kept in local state (session-only; not persisted).
+ *   - Optional web search toggle (showWebSearch prop) — augments answers with
+ *     live web context when enabled.
  *
  * Props:
  *   kbId, fileId, fileName — target file
  *   onClose                — called when the user closes the sidebar
+ *   showWebSearch          — show the web search toggle (default: false)
  */
 
 import { KeyboardEvent, useEffect, useRef, useState } from 'react'
@@ -19,10 +22,12 @@ import {
   Box,
   CircularProgress,
   Divider,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   Paper,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -30,6 +35,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close'
 import SendIcon from '@mui/icons-material/Send'
 import StopIcon from '@mui/icons-material/Stop'
+import LanguageIcon from '@mui/icons-material/Language'
 import { readerApi } from '../../../api/reader.api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +44,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   isStreaming?: boolean
+  usedWebSearch?: boolean
 }
 
 interface Props {
@@ -45,15 +52,20 @@ interface Props {
   fileId: string
   fileName: string
   onClose: () => void
+  /** When true, a web search toggle is shown in the composer */
+  showWebSearch?: boolean
+  /** Pre-fills the question input (e.g. from text selection toolbar) */
+  initialQuestion?: string
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function InlineQA({ kbId, fileId, fileName, onClose }: Props) {
+export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearch = false, initialQuestion }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [useWebSearch, setUseWebSearch] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -68,6 +80,20 @@ export default function InlineQA({ kbId, fileId, fileName, onClose }: Props) {
     inputRef.current?.focus()
   }, [])
 
+  // Pre-fill input when initialQuestion changes (from selection toolbar)
+  useEffect(() => {
+    if (initialQuestion) {
+      setInput(initialQuestion)
+      setTimeout(() => {
+        const el = inputRef.current
+        if (el) {
+          el.focus()
+          el.setSelectionRange(el.value.length, el.value.length)
+        }
+      }, 60)
+    }
+  }, [initialQuestion])
+
   // ── Streaming logic ────────────────────────────────────────────────────────
 
   const handleSubmit = async () => {
@@ -77,18 +103,23 @@ export default function InlineQA({ kbId, fileId, fileName, onClose }: Props) {
     setInput('')
     setError(null)
 
+    const withWeb = showWebSearch && useWebSearch
+
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: question }])
 
     // Placeholder for streaming assistant message
-    setMessages(prev => [...prev, { role: 'assistant', content: '', isStreaming: true }])
+    setMessages(prev => [
+      ...prev,
+      { role: 'assistant', content: '', isStreaming: true, usedWebSearch: withWeb },
+    ])
 
     setIsStreaming(true)
     abortRef.current = new AbortController()
 
     try {
       let accumulated = ''
-      for await (const token of readerApi.askStream(kbId, fileId, question)) {
+      for await (const token of readerApi.askStream(kbId, fileId, question, withWeb)) {
         accumulated += token
         setMessages(prev => {
           const updated = [...prev]
@@ -96,6 +127,7 @@ export default function InlineQA({ kbId, fileId, fileName, onClose }: Props) {
             role: 'assistant',
             content: accumulated,
             isStreaming: true,
+            usedWebSearch: withWeb,
           }
           return updated
         })
@@ -107,18 +139,17 @@ export default function InlineQA({ kbId, fileId, fileName, onClose }: Props) {
           role: 'assistant',
           content: accumulated,
           isStreaming: false,
+          usedWebSearch: withWeb,
         }
         return updated
       })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Stream failed'
-      // Remove streaming placeholder and show error
       setMessages(prev => prev.filter(m => !m.isStreaming))
       setError(message)
     } finally {
       setIsStreaming(false)
       abortRef.current = null
-      // Re-focus input
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }
@@ -199,6 +230,52 @@ export default function InlineQA({ kbId, fileId, fileName, onClose }: Props) {
 
       <Divider />
 
+      {/* Web search toggle */}
+      {showWebSearch && (
+        <Box
+          sx={{
+            px: 2,
+            pt: 1,
+            pb: 0,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          <LanguageIcon
+            sx={{
+              fontSize: 13,
+              color: useWebSearch ? 'primary.main' : 'text.disabled',
+              transition: 'color 0.15s',
+            }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={useWebSearch}
+                onChange={e => setUseWebSearch(e.target.checked)}
+                sx={{ ml: 0.25 }}
+              />
+            }
+            label={
+              <Typography
+                variant="caption"
+                sx={{
+                  color: useWebSearch ? 'primary.main' : 'text.disabled',
+                  fontWeight: useWebSearch ? 600 : 400,
+                  transition: 'color 0.15s',
+                }}
+              >
+                Web search
+              </Typography>
+            }
+            sx={{ m: 0 }}
+          />
+        </Box>
+      )}
+
       {/* Input */}
       <Box sx={{ px: 2, py: 1.5, flexShrink: 0 }}>
         <TextField
@@ -241,7 +318,9 @@ export default function InlineQA({ kbId, fileId, fileName, onClose }: Props) {
           sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
         />
         <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: 'block' }}>
-          Answers are grounded in the indexed file content only.
+          {showWebSearch && useWebSearch
+            ? 'Answers are grounded in the file + live web search.'
+            : 'Answers are grounded in the indexed file content only.'}
         </Typography>
       </Box>
     </Box>
@@ -271,6 +350,15 @@ function MessageBubble({ message }: { message: Message }) {
           borderColor: isUser ? 'primary.main' : 'divider',
         }}
       >
+        {/* Web search indicator */}
+        {!isUser && message.usedWebSearch && !message.isStreaming && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <LanguageIcon sx={{ fontSize: 11, color: 'primary.main' }} />
+            <Typography variant="caption" sx={{ fontSize: 10, color: 'primary.main', fontWeight: 600 }}>
+              Web search used
+            </Typography>
+          </Box>
+        )}
         <Typography
           variant="body2"
           sx={{

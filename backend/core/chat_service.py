@@ -63,12 +63,14 @@ class ChatService:
         backend,              # SQLiteBackend — for FTS5 chunk queries
         llm_svc: LLMService,
         search_svc: SearchService,
+        embedder=None,        # IEmbedder | None — enables hybrid retrieval when set
     ) -> None:
         self._chat_repo  = chat_repo
         self._file_repo  = file_repo
         self._backend    = backend
         self._llm_svc    = llm_svc
         self._search_svc = search_svc
+        self._embedder   = embedder
 
     # ==================================================================
     # Session management
@@ -136,6 +138,8 @@ class ChatService:
         use_web_search: bool = False,
         search_engine: str = "duckduckgo",
         search_api_key: str = "",
+        kb_ids: list[str] | None = None,
+        attached_context: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """
         Accept *user_message*, retrieve context, stream an LLM reply.
@@ -159,9 +163,14 @@ class ChatService:
         # ── 2. KB retrieval (FTS5) ─────────────────────────────────────────
         kb_sources: list[dict] = []
         kb_context = ""
-        if session.kb_id:
+        # Use kb_ids from request if provided; otherwise fall back to session.kb_id
+        effective_kb_ids = (
+            kb_ids if kb_ids
+            else ([session.kb_id] if session.kb_id else [])
+        )
+        if effective_kb_ids:
             kb_context, kb_sources = await self._retrieve_kb_context(
-                kb_id=session.kb_id,
+                kb_ids=effective_kb_ids,
                 query=user_message,
             )
 
@@ -196,6 +205,8 @@ class ChatService:
             user_message=user_message,
             kb_context=kb_context,
             web_context=web_context,
+            kb_ids=effective_kb_ids,
+            attached_context=attached_context,
         )
 
         # ── 6. Stream LLM response ─────────────────────────────────────────
@@ -237,49 +248,24 @@ class ChatService:
     # ==================================================================
 
     async def _retrieve_kb_context(
-        self, kb_id: str, query: str
+        self, kb_ids: list[str], query: str
     ) -> tuple[str, list[dict]]:
         """
-        FTS5 keyword search over chunks in *kb_id*.
+        Retrieve KB context using FTS5 keyword search.
+        When an embedder is available, uses hybrid FTS5 + dense vector search
+        fused via Reciprocal Rank Fusion (RRF).
 
         Returns (context_string, sources_list).
         """
-        # Sanitise query for FTS5 (remove special chars that confuse the parser)
-        safe_query = " ".join(
-            w for w in query.split()
-            if len(w) > 2 and w.isalnum() or w.replace("'", "").isalnum()
-        ) or query[:50]
+        use_dense = (
+            self._embedder is not None
+            and getattr(self._embedder, "is_available", False)
+        )
 
-        try:
-            rows = await self._backend.fetchall(
-                """
-                SELECT c.content, c.section, c.page, c.file_id,
-                       f.name AS file_name
-                FROM   chunks_fts cf
-                JOIN   chunks     c  ON c.rowid = cf.rowid
-                JOIN   file_records f ON f.id = c.file_id
-                WHERE  chunks_fts MATCH ?
-                  AND  c.kb_id = ?
-                ORDER  BY rank
-                LIMIT  ?
-                """,
-                (safe_query, kb_id, _MAX_CONTEXT_CHUNKS),
-            )
-        except Exception as exc:
-            logger.warning("FTS5 search error (falling back to sequential): %s", exc)
-            # Fallback: grab most-recent chunks sequentially
-            rows = await self._backend.fetchall(
-                """
-                SELECT c.content, c.section, c.page, c.file_id,
-                       f.name AS file_name
-                FROM   chunks c
-                JOIN   file_records f ON f.id = c.file_id
-                WHERE  c.kb_id = ?
-                ORDER  BY c.chunk_index
-                LIMIT  ?
-                """,
-                (kb_id, _MAX_CONTEXT_CHUNKS),
-            )
+        if use_dense:
+            rows = await self._retrieve_hybrid(kb_ids, query)
+        else:
+            rows = await self._retrieve_fts5(kb_ids, query)
 
         if not rows:
             return "", []
@@ -303,12 +289,157 @@ class ChatService:
             if file_name not in seen_files:
                 seen_files.add(file_name)
                 sources.append({
-                    "file": file_name,
+                    "file":    file_name,
                     "section": section,
-                    "page": row.get("page"),
+                    "page":    row.get("page"),
+                    "file_id": row.get("file_id"),
+                    "kb_id":   row.get("kb_id"),
                 })
 
         return "\n".join(parts), sources
+
+    async def _retrieve_fts5(
+        self, kb_ids: list[str], query: str
+    ) -> list[dict]:
+        """Pure FTS5 keyword retrieval."""
+        # Build an OR query so ANY keyword match scores (AND is too strict for
+        # natural-language questions — most words won't appear in the chunk).
+        # Filter out short/non-alphanumeric tokens and common stop words.
+        _STOPS = {"the","and","for","are","but","not","you","all","can",
+                  "her","was","one","our","out","day","get","has","him",
+                  "his","how","man","new","now","old","see","two","way",
+                  "who","boy","did","its","let","put","say","she","too",
+                  "use","what","does","this","that","with","have","from",
+                  "they","will","been","were","said","each","which","their",
+                  "about","would","there","could","other","than","then","some"}
+        tokens = [
+            w for w in query.split()
+            if (len(w) > 2 and w.isalnum() or w.replace("'", "").isalnum())
+            and w.lower() not in _STOPS
+        ]
+        safe_query = " OR ".join(tokens) if tokens else query[:50]
+
+        placeholders = ",".join("?" * len(kb_ids))
+        try:
+            return await self._backend.fetchall(
+                f"""
+                SELECT c.content, c.section, c.page, c.file_id, c.kb_id,
+                       f.name AS file_name
+                FROM   chunks_fts cf
+                JOIN   chunks     c  ON c.rowid = cf.rowid
+                JOIN   file_records f ON f.id = c.file_id
+                WHERE  chunks_fts MATCH ?
+                  AND  c.kb_id IN ({placeholders})
+                ORDER  BY rank
+                LIMIT  ?
+                """,
+                (safe_query, *kb_ids, _MAX_CONTEXT_CHUNKS),
+            )
+        except Exception as exc:
+            logger.warning("FTS5 search error (falling back to sequential): %s", exc)
+            return await self._backend.fetchall(
+                f"""
+                SELECT c.content, c.section, c.page, c.file_id, c.kb_id,
+                       f.name AS file_name
+                FROM   chunks c
+                JOIN   file_records f ON f.id = c.file_id
+                WHERE  c.kb_id IN ({placeholders})
+                ORDER  BY c.chunk_index
+                LIMIT  ?
+                """,
+                (*kb_ids, _MAX_CONTEXT_CHUNKS),
+            )
+
+    async def _retrieve_hybrid(
+        self, kb_ids: list[str], query: str
+    ) -> list[dict]:
+        """
+        Hybrid retrieval: FTS5 keyword + FAISS ANN dense search, fused via RRF.
+
+        Dense path:
+          1. Embed the query in a thread-pool executor (CPU-bound).
+          2. For each KB, use the per-KB FAISS index (IVFFlat or Flat) to find
+             the top-k nearest neighbours in O(log n) time — no brute-force loop.
+          3. Fetch the matching chunk rows from SQLite by ID.
+
+        RRF score = 1/(k + rank_fts) + 1/(k + rank_dense),  k = 60.
+        Falls back to FTS5-only if dense search fails.
+        """
+        import asyncio as _asyncio
+        from backend.adapters.vector_index import kb_vector_index
+        from backend.core.config import settings as app_cfg
+
+        # ── FTS5 results (async) ────────────────────────────────────────────
+        fts_rows = await self._retrieve_fts5(kb_ids, query)
+
+        # ── Dense results via FAISS ANN ─────────────────────────────────────
+        try:
+            # 1. Embed the query (blocking CPU work → thread pool)
+            query_vec: list[float] = await _asyncio.get_event_loop().run_in_executor(
+                None, lambda: self._embedder.embed([query])[0]
+            )
+
+            # 2. ANN search per KB — also blocking → thread pool
+            dense_chunk_ids: list[str] = []
+
+            def _ann_search() -> list[str]:
+                ids: list[str] = []
+                for kb_id in kb_ids:
+                    kb_hits = kb_vector_index.search(
+                        kb_id=kb_id,
+                        query_vec=query_vec,
+                        k=_MAX_CONTEXT_CHUNKS * 2,
+                        db_path=app_cfg.db_path,
+                    )
+                    ids.extend(kb_hits)
+                return ids
+
+            dense_chunk_ids = await _asyncio.get_event_loop().run_in_executor(
+                None, _ann_search
+            )
+
+            # 3. Fetch full chunk rows for the ANN hits
+            dense_rows: list[dict] = []
+            if dense_chunk_ids:
+                placeholders = ",".join("?" * len(dense_chunk_ids))
+                dense_rows = await self._backend.fetchall(
+                    f"""
+                    SELECT c.id, c.content, c.section, c.page,
+                           c.file_id, c.kb_id, f.name AS file_name
+                    FROM   chunks c
+                    JOIN   file_records f ON f.id = c.file_id
+                    WHERE  c.id IN ({placeholders})
+                    """,
+                    tuple(dense_chunk_ids),
+                )
+                # Preserve ANN rank order (fetchall returns in arbitrary order)
+                id_rank = {cid: i for i, cid in enumerate(dense_chunk_ids)}
+                dense_rows.sort(key=lambda r: id_rank.get(r["id"], 999))
+
+        except Exception as exc:
+            logger.warning("Dense ANN search failed (using FTS5 only): %s", exc)
+            return fts_rows
+
+        # ── RRF fusion ──────────────────────────────────────────────────────
+        K = 60
+        scores: dict[str, float] = {}
+        row_by_id: dict[str, dict] = {}
+
+        def _rid(row: dict) -> str:
+            return row.get("id") or (row.get("file_name", "") + row["content"][:40])
+
+        for rank, row in enumerate(fts_rows):
+            rid = _rid(row)
+            scores[rid] = scores.get(rid, 0.0) + 1.0 / (K + rank + 1)
+            row_by_id[rid] = row
+
+        for rank, row in enumerate(dense_rows):
+            rid = _rid(row)
+            scores[rid] = scores.get(rid, 0.0) + 1.0 / (K + rank + 1)
+            row_by_id[rid] = row
+
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [row_by_id[rid] for rid, _ in ranked[:_MAX_CONTEXT_CHUNKS]]
 
     async def _build_history(self, session_id: str) -> list[dict[str, str]]:
         """Return the last N messages as LLM-format dicts, truncated to char limit."""
@@ -331,23 +462,102 @@ class ChatService:
         user_message: str,
         kb_context: str,
         web_context: str,
+        kb_ids: list[str] | None = None,
+        attached_context: str | None = None,
     ) -> list[dict[str, str]]:
         """Build the full messages list for the LLM call."""
-        # System prompt
-        kb_note = f" You are answering questions about the knowledge base '{session.kb_id}'." if session.kb_id else ""
-        system_content = (
-            "You are Knovex, a helpful AI assistant."
-            f"{kb_note} "
-            "Answer using the provided context when available. "
-            "If you use context, cite the source file name. "
-            "If context doesn't contain the answer, say so clearly. "
-            "Be concise and accurate."
+
+        kb_note = (
+            f"\nYou are answering questions grounded in {len(kb_ids)} knowledge base(s). "
+            "Always prioritise information from the provided context over general knowledge."
+            if kb_ids else ""
         )
+
+        system_content = f"""You are Knovex — an empathetic, intelligent AI assistant. \
+You don't just answer questions; you understand the human behind every message and respond \
+with genuine care, warmth, and precision.{kb_note}
+
+━━━ EMOTIONAL AWARENESS ━━━
+Read the emotional tone of every message and adapt your style accordingly:
+
+• 😤 Frustrated / stuck ("why won't this work", "I've tried everything", "nothing works"):
+  → Acknowledge the struggle first. Be patient and calm. Break solutions into clear steps.
+  → Open with empathy: "That sounds really frustrating — let's fix this together."
+
+• 😕 Confused / lost ("I don't understand", "what does this mean", "I'm lost"):
+  → Simplify. Use plain language and relatable analogies. Avoid jargon.
+  → Build understanding step-by-step, checking in as you go.
+
+• 😊 Excited / happy ("this is amazing!", "I love this", "great news"):
+  → Match their energy! Be enthusiastic and affirming.
+  → Celebrate with them, then add value with extra insight or next steps.
+
+• 😰 Overwhelmed / stressed ("too much", "I'm drowning in", "so complicated"):
+  → Be calm and reassuring. Prioritise the 1–2 most important things first.
+  → Use "Here's what matters most right now:" to ground them.
+
+• 🤔 Curious ("how does", "why does", "tell me about", "I wonder"):
+  → Go deep. Be thorough and intellectually engaged. Share interesting angles.
+  → Make learning feel like exploration, not a lecture.
+
+• ⚡ Urgent ("quick answer", "ASAP", "short version", "briefly"):
+  → Lead with the direct answer. No preamble. Expand only if truly needed.
+
+• 😢 Struggling / self-doubting ("I can't do this", "I keep failing", "this is too hard"):
+  → Be warm and encouraging. Remind them of their capability.
+  → Reframe challenges as growth: "This is tricky for everyone at first — here's the key insight."
+
+For neutral / conversational messages: be friendly, clear, and genuinely helpful.
+
+━━━ FORMATTING INTELLIGENCE ━━━
+Choose the richest format the content deserves — never default to plain prose when structure helps:
+
+📋 USE MARKDOWN TABLES for:
+  - Comparisons (A vs B vs C)
+  - Structured data with multiple attributes
+  - Any "show me X in tabular format" request
+  → Always output the table directly as Markdown (| col | col |). NEVER write code to display data.
+
+📝 USE BULLET LISTS ( - item ) for:
+  - Features, benefits, options, items without strict order
+
+🔢 USE NUMBERED LISTS for:
+  - Step-by-step instructions, ranked items, ordered processes
+
+## USE HEADERS for:
+  - Long responses with distinct sections
+  - Reports, summaries, or multi-topic answers
+
+> USE BLOCKQUOTES for:
+  - Key insights, important warnings, memorable takeaways
+
+`USE INLINE CODE` for: commands, file names, variable names, short snippets
+```lang
+USE FENCED CODE BLOCKS for: actual code only — always specify the language
+```
+
+**USE BOLD** for: key terms, important phrases, section highlights
+*USE ITALICS* for: definitions, subtle emphasis, document titles
+
+━━━ CARDINAL RULES ━━━
+1. NEVER output Python/JS/any code merely to display or format data — output the data itself as Markdown.
+2. If asked for a table: start with | immediately, no "Here is the table:" preamble.
+3. If asked for a list: use - or 1. immediately, no "Here are the items:" preamble.
+4. When context is available: weave source references naturally — "According to [filename]..."
+5. If context does not contain the answer: say so clearly and offer what you do know.
+6. End responses with either: a useful follow-up suggestion, an encouraging note, or a next action — never just stop cold.
+7. Keep emotional acknowledgements brief (1 sentence) — then move to genuinely helping."""
+
         messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
         messages.extend(history)
 
-        # User message with context
+        # User message with all available context injected
         user_content_parts = []
+        if attached_context:
+            user_content_parts.append(
+                f"📎 Attached File Content (analyze this to answer the question):\n\n"
+                f"{attached_context}"
+            )
         if kb_context:
             user_content_parts.append(f"Knowledge Base Context:\n\n{kb_context}")
         if web_context:

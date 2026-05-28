@@ -2,10 +2,15 @@
  * App Shell — overall layout wrapper
  *
  * Structure:
- *   [Update banner — shown only when update is downloaded]
- *   [Sidebar 64px] | [Main content area — fills remaining width]
+ *   ┌───────────────────────────────────────────┐  ← TopBar (52px)
+ *   ├──────────┬────────────────────────────────┤
+ *   │ Sidebar  │   Main content (Outlet)        │
+ *   │ (220px   │   fills remaining width        │
+ *   │  / 56px  │                                │
+ *   │  glass)  │                                │
+ *   └──────────┴────────────────────────────────┘
  *
- * Provides the CssBaseline and ThemeProvider at the root level.
+ * [Update banner — shown only when update is downloaded, above TopBar]
  */
 
 import { useMemo, useEffect, useState } from 'react'
@@ -19,46 +24,44 @@ import {
   IconButton,
   Collapse,
 } from '@mui/material'
-import CloseIcon from '@mui/icons-material/Close'
-import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt'
-import { useQuery } from '@tanstack/react-query'
-import Sidebar from './Sidebar'
-import { getTheme } from '@/theme'
+import CloseIcon              from '@mui/icons-material/Close'
+import SystemUpdateAltIcon    from '@mui/icons-material/SystemUpdateAlt'
+import { useQuery }           from '@tanstack/react-query'
+import Sidebar                from './Sidebar'
+import TopBar                 from './TopBar'
+import { getTheme }           from '@/theme'
 import { useSettingsStore, useThemeMode } from '@/store/settings.store'
-import { settingsApi } from '@/api/settings.api'
+import { settingsApi }        from '@/api/settings.api'
 
 interface UpdateInfo {
-  version: string
+  version:      string
   releaseNotes: string | null
 }
 
 export default function AppShell() {
   const { setSettings } = useSettingsStore()
-  const themeMode = useThemeMode()
-  const navigate = useNavigate()
+  const themeMode       = useThemeMode()
+  const navigate        = useNavigate()
 
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [updateInfo,    setUpdateInfo]    = useState<UpdateInfo | null>(null)
   const [bannerVisible, setBannerVisible] = useState(false)
 
-  // Load settings on mount
+  // ── Load settings on mount ─────────────────────────────────────────────────
   const { data } = useQuery({
     queryKey: ['settings'],
-    queryFn: settingsApi.get,
+    queryFn:  settingsApi.get,
     staleTime: 60_000,
   })
+  useEffect(() => { if (data) setSettings(data) }, [data, setSettings])
 
-  useEffect(() => {
-    if (data) setSettings(data)
-  }, [data, setSettings])
-
-  // Wire up tray-initiated navigation from Electron main process
+  // ── Wire Electron IPC navigation ──────────────────────────────────────────
   useEffect(() => {
     if (!window.knovex?.onNavigate) return
     const cleanup = window.knovex.onNavigate((route) => navigate(route))
     return cleanup
   }, [navigate])
 
-  // Listen for auto-update download completion
+  // ── Auto-update banner ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!window.knovex?.onUpdateDownloaded) return
     const cleanup = window.knovex.onUpdateDownloaded((info) => {
@@ -70,38 +73,30 @@ export default function AppShell() {
 
   const theme = useMemo(() => getTheme(themeMode), [themeMode])
 
-  const handleInstallUpdate = () => {
-    window.knovex?.installUpdate()
-  }
-
-  const handleDismissBanner = () => {
-    setBannerVisible(false)
-  }
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box
         sx={{
-          display: 'flex',
+          display:       'flex',
           flexDirection: 'column',
-          height: '100vh',
-          overflow: 'hidden',
-          bgcolor: 'background.default',
+          height:        '100vh',
+          overflow:      'hidden',
+          bgcolor:       'background.default',
         }}
       >
         {/* ── Update available banner ── */}
         <Collapse in={bannerVisible} unmountOnExit>
           <Box
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.5,
-              px: 2,
-              py: 0.75,
-              bgcolor: 'primary.main',
-              color: '#1A140C',
-              flexShrink: 0,
+              display:     'flex',
+              alignItems:  'center',
+              gap:          1.5,
+              px:           2,
+              py:           0.75,
+              bgcolor:     'primary.main',
+              color:       '#1A140C',
+              flexShrink:   0,
             }}
           >
             <SystemUpdateAltIcon sx={{ fontSize: 18 }} />
@@ -112,15 +107,15 @@ export default function AppShell() {
             <Button
               size="small"
               variant="contained"
-              onClick={handleInstallUpdate}
+              onClick={() => window.knovex?.installUpdate()}
               sx={{
-                bgcolor: '#1A140C',
-                color: 'primary.main',
-                fontWeight: 600,
-                fontSize: 12,
-                px: 1.5,
-                py: 0.4,
-                minWidth: 0,
+                bgcolor:    '#1A140C',
+                color:      'primary.main',
+                fontWeight:  600,
+                fontSize:    12,
+                px:          1.5,
+                py:          0.4,
+                minWidth:    0,
                 borderRadius: 1.5,
                 '&:hover': { bgcolor: '#2C2218' },
               }}
@@ -129,7 +124,7 @@ export default function AppShell() {
             </Button>
             <IconButton
               size="small"
-              onClick={handleDismissBanner}
+              onClick={() => setBannerVisible(false)}
               sx={{ color: '#1A140C', ml: 0.5 }}
               aria-label="Dismiss update banner"
             >
@@ -138,16 +133,20 @@ export default function AppShell() {
           </Box>
         </Collapse>
 
-        {/* ── Main chrome ── */}
+        {/* ── Top bar ── */}
+        <TopBar />
+
+        {/* ── Sidebar + main content ── */}
         <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           <Sidebar />
           <Box
             component="main"
             sx={{
-              flex: 1,
-              overflow: 'auto',
-              display: 'flex',
+              flex:      1,
+              overflow:  'auto',
+              display:   'flex',
               flexDirection: 'column',
+              bgcolor:   'background.default',
             }}
           >
             <Outlet />

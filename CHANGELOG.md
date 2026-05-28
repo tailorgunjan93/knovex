@@ -11,6 +11,65 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.0] — 2026-05-28
+
+Sprint 8 — Progress Page · GuidedViewer · KB Browser Upload · E2E Test Suite
+
+### Added
+
+#### Frontend — Progress Page (new)
+- **`frontend/src/pages/Progress/`** — fully standalone analytics dashboard
+  - **4 stat cards**: Streak (days, "🔥" trend, "start today" fallback), XP (level badge, comma-formatted large values),
+    Sessions (ready-only count, "N more/fewer than last week" week-over-week trend), Active Days (distinct session days)
+  - **Daily activity heatmap** (SVG, 26 weeks × 7 days) — colour-coded intensity cells;
+    "N active day(s)" summary; sessions outside the 26-week window excluded
+  - **Learning velocity chart** — dual-axis Recharts `ComposedChart` (sessions/wk bars + active days/wk line)
+  - **Date-range selector** ("Last 6 months" default) and Export button in page header
+  - Eyebrow label `PROGRESS · LAST 6 MONTHS` for at-a-glance context
+  - All data sourced from `/api/learn/sessions` + `/api/learn/stats` — zero hardcoded values
+  - Graceful zero-state: all cards and charts render correctly when API returns empty data
+
+#### Frontend — GuidedViewer (new)
+- **`frontend/src/pages/Learn/GuidedViewer.tsx`** — step-by-step guided learning viewer
+  - Renders multi-step guided sessions with step title, body text, and step counter (`Step N of M`)
+  - "Got it →" button advances through steps; progress preserved in session state
+  - Loaded from session history in the Learn Mode sidebar alongside all other formats
+
+#### Backend — KB browser upload endpoint (new)
+- **`POST /api/v1/kb/{kb_id}/upload`** — multipart/form-data file upload
+  - Accepts `UploadFile` field; saves to `data_dir/kb_uploads/{kb_id}/{uuid}/{filename}`
+  - Calls `svc.add_file(kb_id, FileAddRequest(file_path=...))` for standard ingestion pipeline
+  - Supports `.pdf`, `.docx`, `.txt`, `.md`, `.csv`, `.udf` uploads from the browser
+
+#### Frontend — KB browser file picker
+- **`KBDetail.tsx`** — replaced `window.prompt()`-based path entry with a hidden
+  `<input type="file" multiple accept="...">` element triggered via `fileInputRef.current.click()`
+- Added `uploadFileMutation` (TanStack Query) — `kbApi.uploadFile(kbId, file)` — multipart POST
+- `kbApi.uploadFile(kbId, file)` added to `frontend/src/api/kb.api.ts`
+
+#### Quality — E2E test suite (new)
+- **`e2e/learn.spec.ts`** — 27 Playwright tests for Learn Mode
+  - Visual & Layout: 13 tests (format card grid, difficulty pills, source mode pills, sidebar, stats bar, streak badge)
+  - Functional Flows: 14 tests (format selection, SSE streaming progress, streamed text content, XP alert,
+    session history, GuidedViewer step navigation, delete session, source mode switching, new session reset)
+- **`e2e/progress.spec.ts`** — 34 Playwright tests for Progress Page
+  - Visual & Layout: 12 tests (heading, stat cards, heatmap SVG, velocity chart, export button, date range, eyebrow label, active days badge)
+  - Data Accuracy: 22 tests (streak singular/plural, trend text, XP formatting, sessions week-over-week, active days
+    distinct-date counting, 26-week exclusion, heatmap cell counts, zero-state)
+- **`playwright.config.ts`** — Playwright configuration
+  - `navigationTimeout: 60_000` (generous for cold Vite dev-server under 9 parallel workers)
+  - `actionTimeout: 10_000`; `reuseExistingServer: true` (dev); `fullyParallel: true`
+
+### Changed
+- **`frontend/src/pages/Learn/index.tsx`** — added `data-testid="format-card-{id}"` to each
+  `FormatCard` Box element (quiz, flashcard, mindmap, story, timeline, eli5, speedlearn, brainstorm, guided)
+  to provide unambiguous locators for Playwright tests
+- `desktop/package.json` — version `0.8.0`
+- `frontend/package.json` — version `0.8.0`
+- `backend/core/config.py` — `version = "0.8.0"`
+
+---
+
 ## [0.7.3] — 2026-05-25
 
 ### Fixed

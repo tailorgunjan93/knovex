@@ -345,7 +345,7 @@ def compute_sha256(file_path: Path) -> str:
 
 class IngestionService:
     """
-    Orchestrates file parsing + chunk storage.
+    Orchestrates file parsing + chunk storage + optional dense embedding.
 
     SRP: only responsible for parsing → storing chunks → updating status.
     DIP: depends on IFileRepository (abstraction), not SQLiteFileRepository.
@@ -360,10 +360,12 @@ class IngestionService:
         file_repo: IFileRepository,
         backend,          # SQLiteBackend — for bulk chunk INSERT
         event_bus: EventBus,
+        embedder=None,    # IEmbedder | None — if provided, chunks get vector embeddings
     ) -> None:
         self._file_repo = file_repo
         self._backend = backend
         self._event_bus = event_bus
+        self._embedder = embedder
 
     async def ingest(
         self,
@@ -402,7 +404,7 @@ class IngestionService:
         # ── 3. Delete old chunks then insert new batch ─────────────────────
         try:
             await self._file_repo.delete_chunks(file_id)
-            await self._store_chunks(file_id, kb_id, chunks)
+            chunk_ids = await self._store_chunks(file_id, kb_id, chunks)
         except Exception as exc:
             logger.exception("Chunk storage failed for %s: %s", path.name, exc)
             await self._file_repo.update_status(
@@ -412,6 +414,21 @@ class IngestionService:
                 file_id=file_id, kb_id=kb_id, error=str(exc)
             ))
             return
+
+        # ── 3b. Dense embeddings (optional) ───────────────────────────────
+        if self._embedder and getattr(self._embedder, "is_available", False):
+            try:
+                await asyncio.get_event_loop().run_in_executor(
+                    None, self._embed_and_store_sync, chunk_ids, chunks
+                )
+                logger.info("Embedded %d chunks for file_id=%s", len(chunks), file_id)
+                # Invalidate the FAISS index for this KB so it rebuilds on
+                # the next query with the newly stored embedding vectors.
+                from backend.adapters.vector_index import kb_vector_index
+                kb_vector_index.invalidate(kb_id)
+            except Exception as exc:
+                # Non-fatal: log and continue — FTS5 still works
+                logger.warning("Embedding failed for %s (FTS5 still active): %s", path.name, exc)
 
         # ── 4. Mark as ready ───────────────────────────────────────────────
         await self._file_repo.update_status(
@@ -450,8 +467,8 @@ class IngestionService:
         file_id: str,
         kb_id: str,
         chunks: list[Chunk],
-    ) -> None:
-        """Bulk-insert all chunks in a single transaction."""
+    ) -> list[str]:
+        """Bulk-insert all chunks in a single transaction. Returns list of inserted IDs."""
         import json
 
         rows = [
@@ -477,3 +494,30 @@ class IngestionService:
                 """,
                 rows,
             )
+        return [r[0] for r in rows]
+
+    def _embed_and_store_sync(self, chunk_ids: list[str], chunks: list[Chunk]) -> None:
+        """
+        Compute embeddings synchronously (runs in thread-pool executor).
+        Updates the embedding BLOB column for each chunk row.
+        """
+        import asyncio
+        import sqlite3
+        import numpy as np
+        from backend.core.config import settings as app_cfg
+
+        texts = [c.content for c in chunks if c.content]
+        if not texts or not chunk_ids:
+            return
+
+        vectors = self._embedder.embed(texts)  # list[list[float]]
+
+        # Write directly with sync sqlite3 (we're in a thread, not async context)
+        conn = sqlite3.connect(str(app_cfg.db_path))
+        try:
+            for cid, vec in zip(chunk_ids, vectors):
+                blob = np.array(vec, dtype=np.float32).tobytes()
+                conn.execute("UPDATE chunks SET embedding = ? WHERE id = ?", (blob, cid))
+            conn.commit()
+        finally:
+            conn.close()

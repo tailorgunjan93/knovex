@@ -21,6 +21,8 @@ class SourceCitation(BaseModel):
     file: str
     section: str = ""
     page: int | None = None
+    file_id: str | None = None   # KB file record ID — needed for /kb navigation
+    kb_id: str | None = None     # KB ID — needed for SourceCard cursor:pointer + /kb navigation
 
 
 class WebSource(BaseModel):
@@ -55,12 +57,14 @@ class EmbeddingSettings(BaseModel):
     """
     Embedding / vector-search configuration.
 
-    Two modes:
-      provider = "local"  — first-launch ONNX download (all-MiniLM-L6-v2, ~45 MB).
-                            Falls back to FTS5-only when model not yet downloaded.
-      provider = "openai" — OpenAI Embeddings API (text-embedding-3-small).
-                            Requires an api_key.  No local disk footprint.
+    enabled = False → FTS5-only (default, no model needed)
+    enabled = True  → hybrid FTS5 + dense vector search via RRF
+
+    Two providers when enabled:
+      provider = "local"  — ONNX all-MiniLM-L6-v2 (~45 MB, downloaded on demand)
+      provider = "openai" — OpenAI text-embedding-3-small API (needs api_key)
     """
+    enabled: bool = False                       # master switch for dense search
     provider: str = "local"                     # "local" | "openai"
     model: str = "text-embedding-3-small"       # openai model (ignored for local)
     api_key: str = ""                           # openai key (empty = local fallback)
@@ -83,6 +87,14 @@ class AppSettingsUpdate(BaseModel):
     embedding: EmbeddingSettings | None = None
     theme: str | None = None
     kb_storage_path: str | None = None
+
+
+class EmbeddingModelStatus(BaseModel):
+    """Status of the local ONNX embedding model."""
+    ready: bool
+    model_name: str = "all-MiniLM-L6-v2"
+    size_mb: float = 45.0
+    model_dir: str = ""
 
 
 class TestLLMResponse(BaseModel):
@@ -256,6 +268,15 @@ class ChatMessagesResponse(BaseModel):
 class ChatStreamRequest(BaseModel):
     message: str = Field(..., min_length=1)
     use_web_search: bool = False
+    kb_ids: list[str] | None = None          # override session kb_id; search across multiple KBs
+    attached_context: str | None = None      # extracted text from file(s) attached by the user
+
+
+class ChatAttachResponse(BaseModel):
+    filename: str
+    text: str
+    char_count: int
+    truncated: bool
 
 
 # ---------------------------------------------------------------------------
@@ -301,10 +322,11 @@ class WebSearchResponse(BaseModel):
 class LearnSessionCreate(BaseModel):
     topic: str = Field(..., min_length=1)
     format: str                         # quiz | flashcard | mindmap | story | timeline | eli5 | speedlearn | brainstorm
-    source_type: str                    # pdf | url | topic
-    source_ref: str | None = None       # file_id for pdf, URL string for url
+    source_type: str                    # topic | kb_file | url | upload
+    source_ref: str | None = None       # file_id for kb_file, URL string for url
     difficulty: str = "intermediate"    # beginner | intermediate | expert
     use_web_search: bool = False
+    context_text: str = ""              # pre-fetched source text (KB/upload); backend fetches URL if empty + source_type=='url'
 
 
 class LearnSessionResponse(BaseModel):
@@ -352,6 +374,19 @@ class ToolInfo(BaseModel):
 
 class ToolsListResponse(BaseModel):
     tools: list[ToolInfo]
+
+
+# ---------------------------------------------------------------------------
+# Reader upload schema
+# ---------------------------------------------------------------------------
+
+class ReaderUploadResponse(BaseModel):
+    """Response from POST /api/reader/upload — file saved to Reader Inbox KB."""
+    kb_id: str
+    file_id: str
+    name: str
+    format: str
+    status: str   # pending | ingesting | ready | error
 
 
 # ---------------------------------------------------------------------------

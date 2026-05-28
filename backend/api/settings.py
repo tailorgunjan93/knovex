@@ -17,6 +17,7 @@ from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
     AppSettingsResponse,
     AppSettingsUpdate,
+    EmbeddingModelStatus,
     LLMModelsResponse,
     OllamaDetectResponse,
     TestLLMResponse,
@@ -64,9 +65,14 @@ async def update_settings(
     """
     patch: dict = {}
     if body.llm is not None:
-        patch["llm"] = body.llm.model_dump(exclude_none=True)
+        # exclude_unset=True: only include fields the caller explicitly provided.
+        # This prevents default empty strings from overwriting stored encrypted keys
+        # when the user saves settings without entering a new API key.
+        patch["llm"] = body.llm.model_dump(exclude_unset=True)
     if body.search is not None:
-        patch["search"] = body.search.model_dump(exclude_none=True)
+        patch["search"] = body.search.model_dump(exclude_unset=True)
+    if body.embedding is not None:
+        patch["embedding"] = body.embedding.model_dump(exclude_unset=True)
     if body.theme is not None:
         patch["theme"] = body.theme
     if body.kb_storage_path is not None:
@@ -170,11 +176,100 @@ async def get_llm_models(
         ...,
         description="openai | anthropic | groq | gemini | cerebras | bedrock | ollama",
     ),
+    api_key: str = Query(
+        default="",
+        description="Optional API key override — used by the UI refresh button "
+                    "to fetch live models before the key has been saved.",
+    ),
 ) -> LLMModelsResponse:
     """
     Return the model catalogue for *provider*.
     For Ollama, also probes localhost:11434 for installed models.
+    For Cerebras/Groq, fetches the live model list when an api_key is available.
     """
     current = await settings_svc.get()
     base_url = current.llm.base_url if provider.lower() == "ollama" else ""
-    return await llm_svc.get_models(provider, base_url=base_url)
+    # Prefer the caller-supplied key (form value before save) over the stored key
+    effective_key = api_key or current.llm.api_key
+    credentials = ProviderCredentials(
+        api_key=effective_key,
+        base_url=current.llm.base_url,
+        aws_region=current.llm.aws_region,
+        aws_access_key_id=current.llm.aws_access_key_id,
+        aws_secret_access_key=current.llm.aws_secret_access_key,
+    )
+    return await llm_svc.get_models(provider, base_url=base_url, credentials=credentials)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/settings/embedding/model-status
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/settings/embedding/model-status",
+    response_model=EmbeddingModelStatus,
+    summary="Check if the local ONNX embedding model is downloaded",
+)
+async def get_embedding_model_status() -> EmbeddingModelStatus:
+    """Return whether the local all-MiniLM-L6-v2 ONNX model is ready."""
+    from backend.adapters.embedder import model_files_ready, _model_dir
+    d = _model_dir()
+    return EmbeddingModelStatus(
+        ready=model_files_ready(),
+        model_dir=str(d),
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/settings/embedding/download-model
+# ---------------------------------------------------------------------------
+
+_download_progress: dict = {"running": False, "downloaded": 0, "total": 0, "error": ""}
+
+
+@router.post(
+    "/settings/embedding/download-model",
+    summary="Trigger download of the local ONNX embedding model",
+)
+async def download_embedding_model() -> dict:
+    """
+    Start a background download of all-MiniLM-L6-v2 (~45 MB from HuggingFace).
+    Returns immediately; poll /model-status to check readiness.
+    """
+    import asyncio
+    from backend.adapters.embedder import download_model, model_files_ready
+
+    if model_files_ready():
+        return {"status": "already_ready"}
+
+    if _download_progress["running"]:
+        return {"status": "already_downloading"}
+
+    async def _run():
+        _download_progress["running"] = True
+        _download_progress["error"] = ""
+        try:
+            loop = asyncio.get_event_loop()
+            def _progress(dl, total):
+                _download_progress["downloaded"] = dl
+                _download_progress["total"] = total
+            await loop.run_in_executor(None, lambda: download_model(progress_cb=_progress))
+            logger.info("ONNX model download complete")
+        except Exception as exc:
+            logger.error("ONNX model download failed: %s", exc)
+            _download_progress["error"] = str(exc)
+        finally:
+            _download_progress["running"] = False
+
+    asyncio.create_task(_run())
+    return {"status": "started"}
+
+
+@router.get(
+    "/settings/embedding/download-progress",
+    summary="Get ONNX model download progress",
+)
+async def get_download_progress() -> dict:
+    """Poll download progress: {running, downloaded, total, error}."""
+    from backend.adapters.embedder import model_files_ready
+    return {**_download_progress, "ready": model_files_ready()}

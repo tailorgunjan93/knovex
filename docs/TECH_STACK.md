@@ -237,6 +237,42 @@ Handles config/data directory resolution per OS:
 
 ---
 
+## E2E Testing — Playwright
+
+**Chosen:** Playwright (v1.x)
+
+### Why Playwright
+- **Auto-wait** — built-in smart waiting eliminates flaky `sleep` calls
+- **`page.route()`** — intercept and mock all `/api/*` calls without a live backend
+- **LIFO route stack** — most-recently-registered handler wins; test-body overrides can easily supersede `beforeEach` defaults
+- **Strict mode** — fails loudly on ambiguous locators, catching UI regressions immediately
+- **`data-testid` support** — `page.locator('[data-testid="..."]')` provides stable, semantic locators decoupled from rendered text
+- **HTML reporter + traces** — failing tests attach screenshots and `.zip` traces viewable via `npx playwright show-trace`
+
+### E2E Test Structure
+
+```
+e2e/
+├── learn.spec.ts    27 tests — UI/UX layout + functional flows (format cards, SSE streaming,
+│                               GuidedViewer, session history, delete, source modes)
+└── progress.spec.ts 34 tests — Visual layout + data accuracy (stat cards, heatmap,
+                                 velocity chart, week-over-week trends, zero-state)
+```
+
+Total: **61 tests**, all green, running against Chromium with `fullyParallel: true`.
+
+### Config Decisions
+
+| Setting | Value | Reason |
+|---------|-------|--------|
+| `navigationTimeout` | 60 s | Generous for cold Vite dev-server under 9 parallel workers |
+| `actionTimeout` | 10 s | Enough for SSE mocks to resolve |
+| `reuseExistingServer` | `true` (non-CI) | Avoids restarting Vite between local runs |
+| `fullyParallel` | `true` | All 61 tests run simultaneously across worker pool |
+| `workers` | undefined (non-CI) | Uses all CPU cores locally; 1 in CI for determinism |
+
+---
+
 ## Phase 2 Additions (not in Phase 1)
 
 | Component | Technology | Reason |

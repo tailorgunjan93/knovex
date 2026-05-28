@@ -9,7 +9,7 @@
  *   - OpenAI Embeddings API (optional key, skip local download)
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Box,
   Typography,
@@ -38,6 +38,7 @@ import RadarIcon from '@mui/icons-material/Radar'
 import LockIcon from '@mui/icons-material/Lock'
 import DownloadIcon from '@mui/icons-material/Download'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
+import SyncIcon from '@mui/icons-material/Sync'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, type AppSettings } from '@/api/settings.api'
 import { setupApi } from '@/api/setup.api'
@@ -56,21 +57,46 @@ interface LLMSettingsProps {
   settings: AppSettings
 }
 
+// ── localStorage helpers ──────────────────────────────────────────────────────
+// Persist non-sensitive form state across sessions.
+// API keys are intentionally NOT stored here; they live in the backend (encrypted).
+
+const LS_LLM = 'knovex_llm_draft'
+
+export function loadLLMDraft(): { provider?: string; model?: string; baseUrl?: string } {
+  try { return JSON.parse(localStorage.getItem(LS_LLM) ?? '{}') } catch { return {} }
+}
+export function saveLLMDraft(data: { provider: string; model: string; baseUrl: string }) {
+  try { localStorage.setItem(LS_LLM, JSON.stringify(data)) } catch { /* ignore */ }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
   const qc = useQueryClient()
 
   const currentLLM = settings.llm
   const currentEmb = settings.embedding ?? { provider: 'local', model: 'text-embedding-3-small', api_key: '' }
 
-  const [provider, setProvider] = useState(currentLLM.provider)
-  const [model, setModel] = useState(currentLLM.model)
-  const [apiKey, setApiKey] = useState('')          // always empty on load (masked)
-  const [baseUrl, setBaseUrl] = useState(currentLLM.base_url || 'http://localhost:11434')
+  // Initialise from localStorage draft first, then fall back to backend values.
+  // This makes the form "sticky" — navigating away and back preserves changes.
+  const draft = loadLLMDraft()
+
+  const [provider, setProvider] = useState(draft.provider ?? currentLLM.provider)
+  const [model, setModel] = useState(draft.model ?? currentLLM.model)
+  const [apiKey, setApiKey] = useState('')          // always empty — enter only to change
+  const [baseUrl, setBaseUrl] = useState(draft.baseUrl ?? (currentLLM.base_url || 'http://localhost:11434'))
   const [awsRegion, setAwsRegion] = useState(currentLLM.aws_region || 'us-east-1')
   const [awsKeyId, setAwsKeyId] = useState('')
   const [awsSecretKey, setAwsSecretKey] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null)
+  const [modelsRefreshed, setModelsRefreshed] = useState<number | null>(null) // count after last refresh
+
+  // Keep localStorage in sync whenever the user edits these fields
+  useEffect(() => {
+    saveLLMDraft({ provider, model, baseUrl })
+  }, [provider, model, baseUrl])
 
   // ── Embedding state ────────────────────────────────────────────────────────
   const [embProvider, setEmbProvider] = useState(currentEmb.provider)
@@ -141,7 +167,7 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
   })
 
   // Model catalogue for selected provider
-  const { data: modelsData } = useQuery({
+  const { data: modelsData, isFetching: modelsFetching, refetch: refetchModels } = useQuery({
     queryKey: ['llm-models', provider],
     queryFn: () => settingsApi.getModels(provider),
   })
@@ -152,6 +178,10 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
       settingsApi.update(patch),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings'] })
+      // After a successful save the draft is committed — clear it so localStorage
+      // stays in sync with the backend rather than preserving stale draft values.
+      try { localStorage.removeItem(LS_LLM) } catch { /* ignore */ }
+      setApiKey('')    // clear the key input (it's now saved on the backend)
     },
   })
 
@@ -205,6 +235,7 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
             setProvider(e.target.value)
             setModel('')
             setTestResult(null)
+            setModelsRefreshed(null)
           }}
         >
           {PROVIDERS.map((p) => (
@@ -213,50 +244,116 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
         </Select>
       </FormControl>
 
-      {/* Model */}
-      {modelsData?.models.length ? (
-        <FormControl fullWidth>
-          <InputLabel>Model</InputLabel>
-          <Select
-            label="Model"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-          >
-            {modelsData.models.map((m) => (
-              <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      ) : (
-        <TextField
-          label="Model"
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          placeholder="e.g. gpt-4o-mini"
-          fullWidth
-        />
-      )}
+      {/* Model — dropdown when catalogue available, free-text fallback */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          {modelsData?.models.length ? (
+            <FormControl fullWidth>
+              <InputLabel>Model</InputLabel>
+              <Select
+                label="Model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+              >
+                {modelsData.models.map((m) => (
+                  <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : (
+            <TextField
+              label="Model"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="e.g. gpt-4o-mini"
+              fullWidth
+            />
+          )}
+          <Tooltip title={apiKey ? 'Fetch live models using key above' : 'Refresh model list from provider'}>
+            <span>
+              <IconButton
+                size="small"
+                disabled={modelsFetching}
+                sx={{ mt: 1 }}
+                onClick={async () => {
+                  setModelsRefreshed(null)
+                  // Pass the form's api_key (even unsaved) so live fetch works
+                  const result = await qc.fetchQuery({
+                    queryKey: ['llm-models', provider],
+                    queryFn: () => settingsApi.getModels(provider, apiKey || undefined),
+                  })
+                  setModelsRefreshed(result.models.length)
+                  // Auto-select first model if current selection no longer exists
+                  if (result.models.length && !result.models.find(m => m.id === model)) {
+                    setModel(result.models[0].id)
+                  }
+                }}
+              >
+                <SyncIcon
+                  fontSize="small"
+                  sx={{
+                    '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
+                    animation: modelsFetching ? 'spin 0.7s linear infinite' : 'none',
+                  }}
+                />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+        {modelsRefreshed !== null && (
+          <Typography variant="caption" color="success.main" sx={{ pl: 0.5 }}>
+            ✓ {modelsRefreshed} model{modelsRefreshed !== 1 ? 's' : ''} loaded from API
+          </Typography>
+        )}
+      </Box>
 
       {/* API Key (non-Bedrock, non-Ollama) */}
       {providerInfo?.requiresKey && (
-        <TextField
-          label="API Key"
-          type={showKey ? 'text' : 'password'}
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={currentLLM.api_key ? 'sk-...****' : 'Enter API key'}
-          fullWidth
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setShowKey(!showKey)}>
-                  {showKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
-          helperText="Leave blank to keep existing key"
-        />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {/* "Key saved" chip — shown whenever the backend has a key for this provider */}
+          {currentLLM.api_key && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <CheckCircleOutlineIcon sx={{ fontSize: 14, color: 'success.main' }} />
+              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>
+                Key saved:
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontFamily: '"IBM Plex Mono", monospace',
+                  fontSize: '0.75rem',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {currentLLM.api_key}
+              </Typography>
+            </Box>
+          )}
+
+          <TextField
+            label={currentLLM.api_key ? 'Change API Key' : 'API Key'}
+            type={showKey ? 'text' : 'password'}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={currentLLM.api_key ? 'Enter new key to replace…' : 'Enter API key'}
+            fullWidth
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setShowKey(!showKey)}>
+                    {showKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+            helperText={
+              currentLLM.api_key
+                ? 'Leave blank to keep the existing key. Enter a new key only to change it.'
+                : 'Your key is encrypted on disk and never leaves this device.'
+            }
+          />
+        </Box>
       )}
 
       {/* Base URL (Ollama) + auto-detect button */}
@@ -430,24 +527,49 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
 
       {/* OpenAI embedding key */}
       {embProvider === 'openai' && (
-        <TextField
-          label="OpenAI Embedding API Key"
-          type={showEmbKey ? 'text' : 'password'}
-          value={embApiKey}
-          onChange={(e) => setEmbApiKey(e.target.value)}
-          placeholder={currentEmb.api_key ? 'sk-...****' : 'Enter OpenAI API key'}
-          fullWidth
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setShowEmbKey(!showEmbKey)}>
-                  {showEmbKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
-          helperText="Can be the same key as your LLM provider, or a separate restricted key"
-        />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {currentEmb.api_key && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <CheckCircleOutlineIcon sx={{ fontSize: 14, color: 'success.main' }} />
+              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>
+                Key saved:
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                  fontFamily: '"IBM Plex Mono", monospace',
+                  fontSize: '0.75rem',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {currentEmb.api_key}
+              </Typography>
+            </Box>
+          )}
+          <TextField
+            label={currentEmb.api_key ? 'Change Embedding API Key' : 'OpenAI Embedding API Key'}
+            type={showEmbKey ? 'text' : 'password'}
+            value={embApiKey}
+            onChange={(e) => setEmbApiKey(e.target.value)}
+            placeholder={currentEmb.api_key ? 'Enter new key to replace…' : 'Enter OpenAI API key'}
+            fullWidth
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => setShowEmbKey(!showEmbKey)}>
+                    {showEmbKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+            helperText={
+              currentEmb.api_key
+                ? 'Leave blank to keep the existing key. Enter a new key only to change it.'
+                : 'Can be the same key as your LLM provider, or a separate restricted key.'
+            }
+          />
+        </Box>
       )}
 
       {/* Local model download card */}

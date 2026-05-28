@@ -99,6 +99,19 @@ export const kbApi = {
     return res.data
   },
 
+  /**
+   * Upload a File object (from browser <input type="file">) to a KB.
+   * Uses multipart/form-data — the browser fallback for Electron's openFilePicker.
+   */
+  async uploadFile(kbId: string, file: File): Promise<FileRecord> {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await apiClient.post<FileRecord>(`/kb/${kbId}/upload`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return res.data
+  },
+
   /** Remove a file from a KB. */
   async removeFile(kbId: string, fileId: string): Promise<void> {
     await apiClient.delete(`/kb/${kbId}/files/${fileId}`)

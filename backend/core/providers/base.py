@@ -19,6 +19,7 @@ LSP: all providers are interchangeable — callers never care which one is live.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -169,26 +170,49 @@ class LLMProvider(ABC):
         ):
             yield token
 
+    async def fetch_live_models(
+        self, credentials: ProviderCredentials
+    ) -> list[LLMModelInfo] | None:
+        """
+        Optionally fetch the live model list from the provider's API.
+
+        Returns None  — provider does not support live discovery (use catalogue).
+        Returns list  — live models fetched; may be empty if the call failed.
+
+        Override in providers that expose a /v1/models (OpenAI-compatible) endpoint.
+        DIP: implementations must use IHttpClient, never import httpx directly.
+        """
+        return None
+
     async def test_connection(
         self,
         model: str,
         credentials: ProviderCredentials,
+        timeout: float = 12.0,
     ) -> TestLLMResponse:
         """
         Send a minimal one-token request and measure round-trip latency.
         Returns success=True + latency, or success=False + error message.
+        Hard-capped at `timeout` seconds so the UI never hangs.
         """
         start = time.monotonic()
         try:
-            await self.complete(
-                messages=[{"role": "user", "content": "Hi"}],
-                model=model,
-                credentials=credentials,
-                max_tokens=5,
-                temperature=0.0,
+            await asyncio.wait_for(
+                self.complete(
+                    messages=[{"role": "user", "content": "Hi"}],
+                    model=model,
+                    credentials=credentials,
+                    max_tokens=5,
+                    temperature=0.0,
+                ),
+                timeout=timeout,
             )
             latency_ms = round((time.monotonic() - start) * 1000, 1)
             return TestLLMResponse(success=True, latency_ms=latency_ms, model=model)
+        except asyncio.TimeoutError:
+            logger.warning("[%s] connection test timed out after %.0fs", self.provider_name, timeout)
+            return TestLLMResponse(success=False, model=model,
+                                   error=f"Connection timed out after {timeout:.0f}s")
         except Exception as exc:
             logger.warning("[%s] connection test failed: %s", self.provider_name, exc)
             return TestLLMResponse(success=False, model=model, error=str(exc))

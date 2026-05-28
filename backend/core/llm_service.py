@@ -117,17 +117,34 @@ class LLMService:
     # ------------------------------------------------------------------
 
     async def get_models(
-        self, provider: str, base_url: str = ""
+        self,
+        provider: str,
+        base_url: str = "",
+        credentials: ProviderCredentials | None = None,
     ) -> LLMModelsResponse:
         """
-        Return the model catalogue for *provider*.
+        Return the model list for *provider*.
 
-        For Ollama, also probes the running instance to get installed models.
+        Priority:
+          1. Live fetch via provider's fetch_live_models() — used when
+             credentials are supplied and the provider supports the
+             /v1/models endpoint (Cerebras, Groq).
+          2. Ollama: probe the running instance for installed models.
+          3. Static model_catalogue — fallback for all providers.
         """
         llm_provider = self._get_provider(provider)
-        models = llm_provider.model_catalogue
 
-        # Ollama: enrich with live-fetched installed models
+        # 1. Live API fetch (Cerebras, Groq, …)
+        if credentials is not None:
+            try:
+                live = await llm_provider.fetch_live_models(credentials)
+                if live is not None:          # None = not supported; [] = failed
+                    return LLMModelsResponse(provider=provider, models=live)
+            except Exception as exc:
+                logger.debug("Live model fetch failed for %s: %s", provider, exc)
+
+        # 2. Ollama: probe running instance
+        models = llm_provider.model_catalogue
         if provider.lower() == "ollama":
             from backend.core.providers.ollama import OllamaProvider
             if isinstance(llm_provider, OllamaProvider):
@@ -137,6 +154,7 @@ class LLMService:
                 if live:
                     models = live
 
+        # 3. Static catalogue fallback
         return LLMModelsResponse(provider=provider, models=models)
 
     # ------------------------------------------------------------------

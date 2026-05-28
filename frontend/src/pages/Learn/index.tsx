@@ -1,22 +1,14 @@
 /**
- * Learn Mode Page — Sprint 6
+ * Learn Mode Page — Sprint 6 (Redesigned)
  *
- * Layout:
- *   Left sidebar  — session history + user stats bar (XP, level, streak, badges)
- *   Right main    — topic input + format/difficulty controls → streamed content display
+ * Claude-inspired design: clean typography, generous whitespace,
+ * subtle borders, smooth animations.
  *
- * Supported formats:
- *   quiz        — interactive multiple-choice Q&A with per-question XP
- *   flashcard   — front/back cards with spaced-repetition rating buttons
- *   mindmap     — hierarchical branch diagram rendered as collapsible list
- *   timeline    — chronological events rendered as a vertical timeline
- *   story       — long-form narrative streamed as markdown
- *   eli5        — simple explanation streamed as markdown
- *   speedlearn  — rapid bullet-point summary streamed as markdown
- *   brainstorm  — creative connections streamed as markdown
+ * Formats: guided · quiz · flashcard · mindmap · timeline · story · eli5 · speedlearn · brainstorm
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Alert,
   Box,
@@ -28,6 +20,7 @@ import {
   FormControl,
   IconButton,
   InputLabel,
+  InputAdornment,
   LinearProgress,
   List,
   ListItemButton,
@@ -40,6 +33,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useTheme,
+  alpha,
 } from '@mui/material'
 import AutoStoriesIcon from '@mui/icons-material/AutoStories'
 import QuizIcon from '@mui/icons-material/Quiz'
@@ -50,6 +45,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook'
 import ChildCareIcon from '@mui/icons-material/ChildCare'
 import BoltIcon from '@mui/icons-material/Bolt'
 import EmojiObjectsIcon from '@mui/icons-material/EmojiObjects'
+import SchoolIcon from '@mui/icons-material/School'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import StopIcon from '@mui/icons-material/Stop'
 import StarIcon from '@mui/icons-material/Star'
@@ -57,43 +53,61 @@ import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment'
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CancelIcon from '@mui/icons-material/Cancel'
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
+import FlipIcon from '@mui/icons-material/Flip'
+import LanguageIcon from '@mui/icons-material/Language'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks'
+import SubjectIcon from '@mui/icons-material/Subject'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ReactMarkdown from 'react-markdown'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   learnApi,
   type FlashCard,
   type FlashcardContent,
+  type GuidedContent,
   type LearnFormat,
   type LearnSession,
   type MindmapContent,
   type MindmapNode,
   type QuizContent,
+  type SourceType,
   type TextContent,
   type TimelineContent,
   type UserStats,
   type Difficulty,
 } from '../../api/learn.api'
+import { kbApi } from '../../api/kb.api'
+import { readerApi } from '../../api/reader.api'
+import GuidedViewer from './GuidedViewer'
+
+const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
+const SERIF = '"Instrument Serif", Georgia, serif'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FORMATS: Array<{ id: LearnFormat; label: string; icon: React.ReactNode; desc: string }> = [
-  { id: 'quiz',       label: 'Quiz',        icon: <QuizIcon />,         desc: 'MCQ with XP' },
-  { id: 'flashcard',  label: 'Flashcards',  icon: <StyleIcon />,        desc: 'Spaced repetition' },
-  { id: 'mindmap',    label: 'Mind Map',    icon: <AccountTreeIcon />,  desc: 'Hierarchical tree' },
-  { id: 'timeline',   label: 'Timeline',    icon: <TimelineIcon />,     desc: 'Chronological events' },
-  { id: 'story',      label: 'Story',       icon: <MenuBookIcon />,     desc: 'Narrative explainer' },
-  { id: 'eli5',       label: 'ELI5',        icon: <ChildCareIcon />,    desc: 'Explain Like I\'m 5' },
-  { id: 'speedlearn', label: 'Speed Learn', icon: <BoltIcon />,         desc: 'Rapid bullet points' },
-  { id: 'brainstorm', label: 'Brainstorm',  icon: <EmojiObjectsIcon />, desc: 'Creative connections' },
+const FORMATS: Array<{ id: LearnFormat; label: string; icon: React.ReactNode; desc: string; color: string }> = [
+  { id: 'guided',     label: 'Guided',      icon: <SchoolIcon />,       desc: 'Personal tutor — learn step by step at your pace', color: '#6366F1' },
+  { id: 'quiz',       label: 'Quiz',        icon: <QuizIcon />,         desc: 'Test your knowledge with MCQ & earn XP',            color: '#7C3AED' },
+  { id: 'flashcard',  label: 'Flashcards',  icon: <StyleIcon />,        desc: 'Spaced repetition for long-term memory',            color: '#0EA5E9' },
+  { id: 'mindmap',    label: 'Mind Map',    icon: <AccountTreeIcon />,  desc: 'Visual hierarchy of connected concepts',            color: '#10B981' },
+  { id: 'timeline',   label: 'Timeline',    icon: <TimelineIcon />,     desc: 'Key events in chronological order',                 color: '#F59E0B' },
+  { id: 'story',      label: 'Story',       icon: <MenuBookIcon />,     desc: 'Engaging narrative explanation',                    color: '#EC4899' },
+  { id: 'eli5',       label: 'ELI5',        icon: <ChildCareIcon />,    desc: "Explain Like I'm 5 — simple & clear",               color: '#06B6D4' },
+  { id: 'speedlearn', label: 'Speed Learn', icon: <BoltIcon />,         desc: 'Rapid bullet-point key-concept reference',          color: '#F97316' },
+  { id: 'brainstorm', label: 'Brainstorm',  icon: <EmojiObjectsIcon />, desc: 'Creative connections & surprising facts',           color: '#8B5CF6' },
 ]
 
-const DIFFICULTIES: Array<{ id: Difficulty; label: string; color: string }> = [
-  { id: 'beginner',     label: 'Beginner',     color: '#4CAF50' },
-  { id: 'intermediate', label: 'Intermediate', color: '#FF9800' },
-  { id: 'expert',       label: 'Expert',       color: '#F44336' },
+const DIFFICULTIES: Array<{ id: Difficulty; label: string; color: string; bg: string }> = [
+  { id: 'beginner',     label: 'Beginner',     color: '#16A34A', bg: '#DCFCE7' },
+  { id: 'intermediate', label: 'Intermediate', color: '#D97706', bg: '#FEF3C7' },
+  { id: 'expert',       label: 'Expert',       color: '#DC2626', bg: '#FEE2E2' },
 ]
 
 const FORMAT_ICON_MAP: Record<LearnFormat, React.ReactNode> = {
+  guided:     <SchoolIcon fontSize="small" />,
   quiz:       <QuizIcon fontSize="small" />,
   flashcard:  <StyleIcon fontSize="small" />,
   mindmap:    <AccountTreeIcon fontSize="small" />,
@@ -104,46 +118,59 @@ const FORMAT_ICON_MAP: Record<LearnFormat, React.ReactNode> = {
   brainstorm: <EmojiObjectsIcon fontSize="small" />,
 }
 
+const QUIZ_LETTERS = ['A', 'B', 'C', 'D']
+
 const BADGE_LABELS: Record<string, string> = {
-  first_step:    '🏁 First Step',
-  quiz_master:   '🎓 Quiz Master',
-  perfect_quiz:  '💯 Perfect Quiz',
+  first_step:      '🏁 First Step',
+  quiz_master:     '🎓 Quiz Master',
+  perfect_quiz:    '💯 Perfect Quiz',
   flashcard_ninja: '🥷 Flashcard Ninja',
-  mind_mapper:   '🗺️ Mind Mapper',
-  storyteller:   '📖 Storyteller',
-  speed_learner: '⚡ Speed Learner',
-  '7_day_streak': '🔥 7-Day Streak',
-  level_5:       '⭐ Level 5',
-  explorer:      '🧭 Explorer',
+  mind_mapper:     '🗺️ Mind Mapper',
+  storyteller:     '📖 Storyteller',
+  speed_learner:   '⚡ Speed Learner',
+  '7_day_streak':  '🔥 7-Day Streak',
+  level_5:         '⭐ Level 5',
+  explorer:        '🧭 Explorer',
 }
+
+// ─── Source mode ──────────────────────────────────────────────────────────────
+
+type SourceMode = 'topic' | 'kb' | 'web' | 'upload'
+
+const SOURCE_MODES: Array<{ id: SourceMode; label: string; icon: React.ReactNode; tip: string }> = [
+  { id: 'topic',  label: 'Topic',   icon: <SubjectIcon fontSize="inherit" />,       tip: 'Learn about any topic using AI knowledge' },
+  { id: 'kb',     label: 'Library', icon: <LibraryBooksIcon fontSize="inherit" />,  tip: 'Learn from a file in your Knowledge Base' },
+  { id: 'web',    label: 'Web',     icon: <LanguageIcon fontSize="inherit" />,       tip: 'Learn from any web page by URL' },
+  { id: 'upload', label: 'Upload',  icon: <UploadFileIcon fontSize="inherit" />,     tip: 'Upload a text file (.txt, .md, .json, .csv)' },
+]
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** XP progress bar header strip */
+/** XP / level strip shown at the top of the sidebar */
 function StatsBar({ stats }: { stats: UserStats }) {
   const xpThresholds = [0, 100, 250, 500, 1000, 2000, 4000, 7500, 12500, 20000]
   const levelIdx = Math.min(stats.level - 1, xpThresholds.length - 2)
   const xpStart = xpThresholds[levelIdx] ?? 0
   const xpEnd   = xpThresholds[levelIdx + 1] ?? xpThresholds[xpThresholds.length - 1]
-  const progress = xpEnd > xpStart
-    ? ((stats.xp - xpStart) / (xpEnd - xpStart)) * 100
-    : 100
+  const progress = xpEnd > xpStart ? ((stats.xp - xpStart) / (xpEnd - xpStart)) * 100 : 100
 
   return (
     <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-        <StarIcon sx={{ fontSize: 16, color: 'warning.main' }} />
-        <Typography variant="caption" fontWeight={700}>
-          Level {stats.level}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <StarIcon sx={{ fontSize: 14, color: '#F59E0B' }} />
+          <Typography sx={{ fontSize: 12, fontWeight: 700, lineHeight: 1 }}>
+            Lv {stats.level}
+          </Typography>
+        </Box>
+        <Typography sx={{ fontSize: 11, color: 'text.secondary', ml: 0.75 }}>
           {stats.xp} XP
         </Typography>
         {stats.streak > 0 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <LocalFireDepartmentIcon sx={{ fontSize: 14, color: 'error.main' }} />
-            <Typography variant="caption" color="error.main" fontWeight={600}>
-              {stats.streak}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, ml: 'auto' }}>
+            <LocalFireDepartmentIcon sx={{ fontSize: 13, color: '#EF4444' }} />
+            <Typography sx={{ fontSize: 11, fontWeight: 700, color: '#EF4444' }}>
+              {stats.streak}d
             </Typography>
           </Box>
         )}
@@ -151,40 +178,88 @@ function StatsBar({ stats }: { stats: UserStats }) {
       <LinearProgress
         variant="determinate"
         value={Math.min(progress, 100)}
-        sx={{ height: 4, borderRadius: 2 }}
+        sx={{
+          height: 3,
+          borderRadius: 4,
+          bgcolor: 'action.hover',
+          '& .MuiLinearProgress-bar': { borderRadius: 4 },
+        }}
       />
+      <Typography sx={{ fontSize: 10, color: 'text.disabled', mt: 0.5 }}>
+        {Math.round(Math.min(progress, 100))}% to level {stats.level + 1}
+      </Typography>
     </Box>
   )
 }
 
-/** Render a mind-map node recursively */
+/** Render a mind-map node recursively with connecting lines */
 function MindmapNodeView({ node, depth = 0 }: { node: MindmapNode; depth?: number }) {
   const [open, setOpen] = useState(true)
+  const theme = useTheme()
+  const dotColors = ['#7C3AED', '#0EA5E9', '#10B981', '#F59E0B', '#EC4899']
+  const dotColor = dotColors[depth % dotColors.length]
+
   return (
-    <Box sx={{ ml: depth * 2 }}>
+    <Box sx={{ position: 'relative' }}>
+      {/* Vertical connector line from parent */}
+      {depth > 0 && (
+        <Box sx={{
+          position: 'absolute',
+          left: depth * 20 - 12,
+          top: 0,
+          bottom: 0,
+          width: 1,
+          bgcolor: 'divider',
+        }} />
+      )}
       <Box
         onClick={() => node.children.length > 0 && setOpen(!open)}
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 0.5,
-          py: 0.5,
+          gap: 1,
+          py: 0.6,
+          pl: depth > 0 ? `${depth * 20}px` : 0,
           cursor: node.children.length > 0 ? 'pointer' : 'default',
-          '&:hover': { color: 'primary.main' },
+          borderRadius: 1,
+          '&:hover': { bgcolor: 'action.hover' },
+          transition: 'background 0.15s',
+          position: 'relative',
         }}
       >
-        <Box
+        {/* Horizontal connector */}
+        {depth > 0 && (
+          <Box sx={{
+            position: 'absolute',
+            left: depth * 20 - 12,
+            top: '50%',
+            width: 10,
+            height: 1,
+            bgcolor: 'divider',
+          }} />
+        )}
+        <Box sx={{
+          width: depth === 0 ? 10 : 7,
+          height: depth === 0 ? 10 : 7,
+          borderRadius: '50%',
+          bgcolor: dotColor,
+          flexShrink: 0,
+          boxShadow: depth === 0 ? `0 0 0 3px ${alpha(dotColor, 0.2)}` : 'none',
+        }} />
+        <Typography
           sx={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            bgcolor: depth === 0 ? 'primary.main' : depth === 1 ? 'secondary.main' : 'text.secondary',
-            flexShrink: 0,
+            fontSize: depth === 0 ? 14 : 13,
+            fontWeight: depth === 0 ? 700 : depth === 1 ? 600 : 400,
+            color: depth === 0 ? 'text.primary' : 'text.secondary',
           }}
-        />
-        <Typography variant="body2" fontWeight={depth === 0 ? 700 : 400}>
+        >
           {node.label}
         </Typography>
+        {node.children.length > 0 && (
+          <Typography sx={{ fontSize: 10, color: 'text.disabled', ml: 'auto', mr: 1 }}>
+            {open ? '▲' : '▼'}
+          </Typography>
+        )}
       </Box>
       {node.children.length > 0 && (
         <Collapse in={open}>
@@ -197,7 +272,7 @@ function MindmapNodeView({ node, depth = 0 }: { node: MindmapNode; depth?: numbe
   )
 }
 
-/** Render quiz content with interactive answer checking */
+/** Quiz with A/B/C/D letter badges and clean feedback */
 function QuizView({
   content,
   sessionId,
@@ -207,8 +282,17 @@ function QuizView({
   sessionId: string
   onXPEarned: (xp: number) => void
 }) {
-  const [answers, setAnswers] = useState<Record<number, { selected: string; result: { correct: boolean; explanation: string; xp_earned: number } | null }>>({})
+  const [answers, setAnswers] = useState<Record<number, {
+    selected: string
+    result: { correct: boolean; explanation: string; xp_earned: number } | null
+  }>>({})
   const [loading, setLoading] = useState<number | null>(null)
+  const theme = useTheme()
+
+  const answered = Object.keys(answers).length
+  const total = content?.questions?.length ?? 0
+
+  if (!content?.questions) return null
 
   const handleAnswer = async (qi: number, option: string) => {
     if (answers[qi] || loading !== null) return
@@ -217,69 +301,147 @@ function QuizView({
       const result = await learnApi.submitQuizAnswer(sessionId, qi, option)
       setAnswers(prev => ({ ...prev, [qi]: { selected: option, result } }))
       if (result.xp_earned > 0) onXPEarned(result.xp_earned)
-    } catch {
-      // ignore
-    } finally {
-      setLoading(null)
-    }
+    } catch { /* ignore */ }
+    finally { setLoading(null) }
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Progress header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+          {answered} / {total} answered
+        </Typography>
+        <LinearProgress
+          variant="determinate"
+          value={(answered / total) * 100}
+          sx={{ flex: 1, height: 3, borderRadius: 4, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { borderRadius: 4 } }}
+        />
+      </Box>
+
       {content.questions.map((q, qi) => {
         const ans = answers[qi]
         return (
-          <Paper key={qi} variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
-              {qi + 1}. {q.q}
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Paper
+            key={qi}
+            variant="outlined"
+            sx={{
+              borderRadius: 2,
+              overflow: 'hidden',
+              borderColor: ans ? (ans.result?.correct ? '#16A34A' : '#DC2626') : 'divider',
+              transition: 'border-color 0.2s',
+            }}
+          >
+            {/* Question header */}
+            <Box sx={{
+              px: 2.5, py: 1.5,
+              bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+              borderBottom: 1,
+              borderColor: 'divider',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 1.5,
+            }}>
+              <Box sx={{
+                width: 22, height: 22, borderRadius: '50%',
+                bgcolor: 'action.selected',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, mt: 0.1,
+              }}>
+                <Typography sx={{ fontSize: 11, fontWeight: 700 }}>{qi + 1}</Typography>
+              </Box>
+              <Typography sx={{ fontSize: 14, fontWeight: 600, lineHeight: 1.5 }}>{q.q}</Typography>
+            </Box>
+
+            {/* Options */}
+            <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               {q.options.map((opt, oi) => {
+                const letter = QUIZ_LETTERS[oi] ?? String(oi)
                 const isSelected = ans?.selected === opt
                 const isCorrect  = oi === q.correct
-                let bgcolor = 'transparent'
+                const showResult = !!ans
+
                 let borderColor = 'divider'
-                if (ans) {
-                  if (isCorrect)       { bgcolor = 'success.main'; borderColor = 'success.main' }
-                  else if (isSelected) { bgcolor = 'error.main';   borderColor = 'error.main' }
+                let bgcolor     = 'transparent'
+                let letterBg    = 'action.selected'
+                let letterColor = 'text.secondary'
+
+                if (showResult) {
+                  if (isCorrect) {
+                    borderColor = '#16A34A'
+                    bgcolor     = alpha('#16A34A', 0.08)
+                    letterBg    = '#16A34A'
+                    letterColor = '#fff'
+                  } else if (isSelected && !isCorrect) {
+                    borderColor = '#DC2626'
+                    bgcolor     = alpha('#DC2626', 0.08)
+                    letterBg    = '#DC2626'
+                    letterColor = '#fff'
+                  }
                 }
+
                 return (
                   <Box
                     key={oi}
                     onClick={() => handleAnswer(qi, opt)}
                     sx={{
-                      px: 2, py: 1.2,
-                      border: 1, borderColor,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.25,
+                      px: 1.5, py: 1,
+                      border: `1px solid`,
+                      borderColor,
                       borderRadius: 1.5,
                       cursor: ans ? 'default' : 'pointer',
-                      bgcolor: ans ? `${bgcolor}14` : 'transparent',
-                      display: 'flex', alignItems: 'center', gap: 1,
-                      '&:hover': ans ? {} : { bgcolor: 'action.hover' },
+                      bgcolor,
                       transition: 'all 0.15s',
+                      '&:hover': showResult ? {} : {
+                        borderColor: 'primary.main',
+                        bgcolor: alpha('#7C3AED', 0.06),
+                      },
                     }}
                   >
-                    {loading === qi && isSelected ? (
-                      <CircularProgress size={14} />
-                    ) : ans && isCorrect ? (
-                      <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
-                    ) : ans && isSelected && !isCorrect ? (
-                      <CancelIcon sx={{ fontSize: 16, color: 'error.main' }} />
-                    ) : null}
-                    <Typography variant="body2">{opt}</Typography>
+                    <Box sx={{
+                      width: 24, height: 24,
+                      borderRadius: '50%',
+                      bgcolor: letterBg,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                      transition: 'all 0.15s',
+                    }}>
+                      {loading === qi && isSelected ? (
+                        <CircularProgress size={12} />
+                      ) : (
+                        <Typography sx={{ fontSize: 11, fontWeight: 700, color: letterColor, lineHeight: 1 }}>
+                          {letter}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Typography sx={{ fontSize: 13.5, flex: 1 }}>{opt}</Typography>
+                    {showResult && isCorrect && <CheckCircleIcon sx={{ fontSize: 15, color: '#16A34A' }} />}
+                    {showResult && isSelected && !isCorrect && <CancelIcon sx={{ fontSize: 15, color: '#DC2626' }} />}
                   </Box>
                 )
               })}
             </Box>
+
+            {/* Explanation */}
             {ans?.result && (
-              <Alert
-                severity={ans.result.correct ? 'success' : 'error'}
-                sx={{ mt: 1.5, py: 0.5 }}
-              >
-                <Typography variant="caption">
-                  {ans.result.correct ? `+${ans.result.xp_earned} XP — ` : ''}
+              <Box sx={{
+                mx: 1.5, mb: 1.5, px: 2, py: 1,
+                borderRadius: 1.5,
+                bgcolor: ans.result.correct ? alpha('#16A34A', 0.06) : alpha('#DC2626', 0.06),
+                border: `1px solid ${ans.result.correct ? alpha('#16A34A', 0.2) : alpha('#DC2626', 0.2)}`,
+              }}>
+                <Typography sx={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                  {ans.result.correct && (
+                    <Box component="span" sx={{ fontWeight: 700, color: '#16A34A', mr: 0.5 }}>
+                      +{ans.result.xp_earned} XP ·
+                    </Box>
+                  )}
                   {ans.result.explanation}
                 </Typography>
-              </Alert>
+              </Box>
             )}
           </Paper>
         )
@@ -288,7 +450,7 @@ function QuizView({
   )
 }
 
-/** Render flashcard deck with spaced repetition rating */
+/** Flashcard with CSS 3D perspective flip animation */
 function FlashcardView({
   content,
   sessionId,
@@ -299,11 +461,19 @@ function FlashcardView({
   const [cardIndex, setCardIndex] = useState(0)
   const [flipped, setFlipped] = useState(false)
   const [rated, setRated] = useState<Record<number, string>>({})
+  const theme = useTheme()
 
   const card = content.cards[cardIndex]
   const isRated = rated[cardIndex] !== undefined
   const total = content.cards.length
   const progress = Object.keys(rated).length
+
+  const easeConfig = [
+    { id: 'again', label: 'Again', color: '#DC2626', bg: alpha('#DC2626', 0.08) },
+    { id: 'hard',  label: 'Hard',  color: '#D97706', bg: alpha('#D97706', 0.08) },
+    { id: 'good',  label: 'Good',  color: '#2563EB', bg: alpha('#2563EB', 0.08) },
+    { id: 'easy',  label: 'Easy',  color: '#16A34A', bg: alpha('#16A34A', 0.08) },
+  ] as const
 
   const handleRate = async (ease: 'again' | 'hard' | 'good' | 'easy') => {
     try {
@@ -311,132 +481,251 @@ function FlashcardView({
       setRated(prev => ({ ...prev, [cardIndex]: ease }))
       setFlipped(false)
       if (cardIndex < total - 1) {
-        setTimeout(() => setCardIndex(i => i + 1), 300)
+        setTimeout(() => setCardIndex(i => i + 1), 350)
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }
 
+  const allDone = progress === total
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-      {/* Progress */}
-      <Box sx={{ width: '100%' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-          <Typography variant="caption" color="text.secondary">
-            Card {cardIndex + 1} of {total}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {progress} reviewed
-          </Typography>
-        </Box>
-        <LinearProgress variant="determinate" value={(progress / total) * 100} sx={{ borderRadius: 2 }} />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 600, mx: 'auto', width: '100%' }}>
+      {/* Progress bar */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Typography sx={{ fontSize: 12, color: 'text.secondary', whiteSpace: 'nowrap' }}>
+          {cardIndex + 1} / {total}
+        </Typography>
+        <LinearProgress
+          variant="determinate"
+          value={(progress / total) * 100}
+          sx={{
+            flex: 1, height: 4, borderRadius: 4,
+            bgcolor: 'action.hover',
+            '& .MuiLinearProgress-bar': { borderRadius: 4, bgcolor: '#10B981' },
+          }}
+        />
+        <Typography sx={{ fontSize: 12, color: '#10B981', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          {progress} done
+        </Typography>
       </Box>
 
-      {/* Card */}
-      <Paper
-        elevation={3}
-        onClick={() => setFlipped(!flipped)}
+      {/* 3D flip card */}
+      <Box
         sx={{
-          width: '100%',
-          minHeight: 180,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 3,
-          cursor: 'pointer',
-          borderRadius: 3,
-          textAlign: 'center',
-          transition: 'transform 0.15s',
-          '&:hover': { transform: 'scale(1.01)' },
+          perspective: '1000px',
+          height: 220,
+          cursor: allDone ? 'default' : 'pointer',
         }}
+        onClick={() => !allDone && setFlipped(f => !f)}
       >
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, textTransform: 'uppercase', letterSpacing: 1 }}>
-          {flipped ? 'Answer' : 'Question'}
-        </Typography>
-        <Typography variant="h6" fontWeight={flipped ? 400 : 600}>
-          {flipped ? card.back : card.front}
-        </Typography>
-        {!flipped && card.hint && (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-            Hint: {card.hint}
-          </Typography>
-        )}
-        {!flipped && (
-          <Typography variant="caption" color="primary.main" sx={{ mt: 1.5 }}>
-            Click to reveal answer
-          </Typography>
-        )}
-      </Paper>
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            transformStyle: 'preserve-3d',
+            transition: 'transform 0.5s cubic-bezier(0.4,0,0.2,1)',
+            transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          }}
+        >
+          {/* Front face */}
+          <Box sx={{
+            position: 'absolute',
+            inset: 0,
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 4,
+            bgcolor: 'background.paper',
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 4px 24px rgba(0,0,0,0.4)'
+              : '0 4px 24px rgba(0,0,0,0.08)',
+            textAlign: 'center',
+          }}>
+            <Typography sx={{
+              fontSize: 10,
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              color: 'text.disabled',
+              mb: 1.5,
+              fontFamily: MONO,
+            }}>
+              Question
+            </Typography>
+            <Typography sx={{ fontSize: 18, fontWeight: 600, lineHeight: 1.5 }}>
+              {card.front}
+            </Typography>
+            {card.hint && (
+              <Typography sx={{ fontSize: 12, color: 'text.disabled', mt: 1.5 }}>
+                💡 {card.hint}
+              </Typography>
+            )}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 2, color: 'text.disabled' }}>
+              <FlipIcon sx={{ fontSize: 14 }} />
+              <Typography sx={{ fontSize: 11 }}>Tap to flip</Typography>
+            </Box>
+          </Box>
 
-      {/* Rating buttons (only after flip) */}
-      {flipped && !isRated && (
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          {(['again', 'hard', 'good', 'easy'] as const).map((ease) => (
+          {/* Back face */}
+          <Box sx={{
+            position: 'absolute',
+            inset: 0,
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+            transform: 'rotateY(180deg)',
+            border: `1px solid`,
+            borderColor: theme.palette.mode === 'dark' ? alpha('#0EA5E9', 0.4) : alpha('#0EA5E9', 0.3),
+            borderRadius: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            p: 4,
+            bgcolor: theme.palette.mode === 'dark'
+              ? alpha('#0EA5E9', 0.06)
+              : alpha('#0EA5E9', 0.04),
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 4px 24px rgba(0,0,0,0.4)'
+              : '0 4px 24px rgba(14,165,233,0.12)',
+            textAlign: 'center',
+          }}>
+            <Typography sx={{
+              fontSize: 10,
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              color: '#0EA5E9',
+              mb: 1.5,
+              fontFamily: MONO,
+            }}>
+              Answer
+            </Typography>
+            <Typography sx={{ fontSize: 17, lineHeight: 1.6 }}>
+              {card.back}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Rating row — only visible after flip, before rating */}
+      <Box sx={{
+        opacity: flipped && !isRated && !allDone ? 1 : 0,
+        pointerEvents: flipped && !isRated && !allDone ? 'auto' : 'none',
+        transition: 'opacity 0.25s',
+      }}>
+        <Typography sx={{ fontSize: 11, color: 'text.secondary', textAlign: 'center', mb: 1 }}>
+          How well did you know this?
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+          {easeConfig.map(({ id, label, color, bg }) => (
             <Button
-              key={ease}
+              key={id}
               variant="outlined"
               size="small"
-              onClick={() => handleRate(ease)}
+              onClick={() => handleRate(id as 'again' | 'hard' | 'good' | 'easy')}
               sx={{
-                textTransform: 'capitalize',
-                borderColor: ease === 'easy' ? 'success.main' : ease === 'good' ? 'primary.main' : ease === 'hard' ? 'warning.main' : 'error.main',
-                color: ease === 'easy' ? 'success.main' : ease === 'good' ? 'primary.main' : ease === 'hard' ? 'warning.main' : 'error.main',
+                borderColor: color,
+                color,
+                bgcolor: bg,
+                fontSize: 12,
+                fontWeight: 600,
+                px: 1.5, py: 0.5,
+                textTransform: 'none',
+                '&:hover': { bgcolor: bg, borderColor: color, opacity: 0.85 },
               }}
             >
-              {ease}
+              {label}
             </Button>
           ))}
         </Box>
-      )}
+      </Box>
 
-      {/* Navigation dots */}
-      <Box sx={{ display: 'flex', gap: 0.5, mt: 1 }}>
+      {/* Nav dots */}
+      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center', flexWrap: 'wrap' }}>
         {content.cards.map((_, i) => (
           <Box
             key={i}
             onClick={() => { setCardIndex(i); setFlipped(false) }}
             sx={{
-              width: 8, height: 8, borderRadius: '50%', cursor: 'pointer',
-              bgcolor: i === cardIndex ? 'primary.main' : rated[i] ? 'success.main' : 'action.disabled',
-              transition: 'background-color 0.2s',
+              width: i === cardIndex ? 20 : 7,
+              height: 7,
+              borderRadius: 4,
+              cursor: 'pointer',
+              bgcolor: i === cardIndex
+                ? '#0EA5E9'
+                : rated[i]
+                ? '#10B981'
+                : 'action.disabled',
+              transition: 'all 0.25s cubic-bezier(0.4,0,0.2,1)',
             }}
           />
         ))}
       </Box>
+
+      {allDone && (
+        <Box sx={{
+          textAlign: 'center', py: 2,
+          bgcolor: alpha('#10B981', 0.08),
+          border: `1px solid ${alpha('#10B981', 0.2)}`,
+          borderRadius: 2,
+        }}>
+          <Typography sx={{ fontSize: 22, mb: 0.5 }}>🎉</Typography>
+          <Typography sx={{ fontWeight: 700, fontSize: 15, color: '#16A34A' }}>
+            Deck complete!
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.25 }}>
+            All {total} cards reviewed
+          </Typography>
+        </Box>
+      )}
     </Box>
   )
 }
 
-/** Render a vertical timeline */
+/** Vertical timeline with connecting spine */
 function TimelineView({ content }: { content: TimelineContent }) {
+  const theme = useTheme()
+  const colors = ['#7C3AED', '#0EA5E9', '#10B981', '#F59E0B', '#EC4899', '#06B6D4', '#F97316', '#8B5CF6', '#16A34A', '#DC2626']
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       {content.events.map((ev, i) => (
-        <Box key={i} sx={{ display: 'flex', gap: 2, pb: 2.5 }}>
-          {/* Spine */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+        <Box key={i} sx={{ display: 'flex', gap: 0 }}>
+          {/* Spine column */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 48, flexShrink: 0 }}>
             <Box sx={{
               width: 36, height: 36, borderRadius: '50%',
-              bgcolor: 'primary.main', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              bgcolor: colors[i % colors.length],
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, mt: 0.25,
+              boxShadow: `0 0 0 4px ${alpha(colors[i % colors.length], 0.15)}`,
             }}>
-              <Typography variant="caption" fontWeight={700} color="white" sx={{ fontSize: 10 }}>
-                {ev.year.slice(0, 4)}
+              <Typography sx={{ fontSize: 9, fontWeight: 800, color: '#fff', fontFamily: MONO }}>
+                {ev.year.replace(/[^0-9]/g, '').slice(0, 4) || i + 1}
               </Typography>
             </Box>
             {i < content.events.length - 1 && (
-              <Box sx={{ width: 2, flex: 1, bgcolor: 'divider', mt: 0.5 }} />
+              <Box sx={{ width: 2, flex: 1, minHeight: 20, bgcolor: 'divider', my: 0.5 }} />
             )}
           </Box>
-          {/* Content */}
-          <Box sx={{ pt: 0.5, pb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={700}>{ev.title}</Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+
+          {/* Event content */}
+          <Box sx={{ pb: i < content.events.length - 1 ? 3 : 0, pl: 1.5, pt: 0.5 }}>
+            <Typography sx={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3 }}>{ev.title}</Typography>
+            <Typography sx={{
+              fontSize: 11, fontWeight: 600,
+              color: colors[i % colors.length],
+              fontFamily: MONO, mb: 0.5,
+            }}>
               {ev.year}
             </Typography>
-            <Typography variant="body2" color="text.secondary">{ev.description}</Typography>
+            <Typography sx={{ fontSize: 13.5, color: 'text.secondary', lineHeight: 1.6 }}>
+              {ev.description}
+            </Typography>
           </Box>
         </Box>
       ))}
@@ -444,63 +733,191 @@ function TimelineView({ content }: { content: TimelineContent }) {
   )
 }
 
-/** Render markdown text formats (story / eli5 / speedlearn / brainstorm) */
+/** Markdown text renderer for story/eli5/speedlearn/brainstorm */
 function TextContentView({ text }: { text: string }) {
+  const theme = useTheme()
   return (
     <Box sx={{
-      '& h1,& h2,& h3': { fontWeight: 700, mt: 2, mb: 1 },
-      '& p': { mb: 1.5, lineHeight: 1.8 },
-      '& ul,& ol': { pl: 2.5, mb: 1.5 },
+      fontSize: 14.5,
+      lineHeight: 1.85,
+      '& h1': { fontSize: 22, fontWeight: 700, mt: 2.5, mb: 1, fontFamily: SERIF },
+      '& h2': { fontSize: 18, fontWeight: 700, mt: 2, mb: 0.75 },
+      '& h3': { fontSize: 15, fontWeight: 700, mt: 1.75, mb: 0.5 },
+      '& p': { mb: 1.25, color: 'text.primary' },
+      '& ul, & ol': { pl: 2.5, mb: 1.25 },
       '& li': { mb: 0.5 },
-      '& strong': { color: 'primary.main' },
-      '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 1, fontSize: '0.85em', fontFamily: 'monospace' },
+      '& strong': { fontWeight: 700, color: 'text.primary' },
+      '& em': { color: 'text.secondary' },
+      '& code': {
+        bgcolor: 'action.hover',
+        px: 0.75, py: 0.15,
+        borderRadius: 0.75,
+        fontSize: '0.85em',
+        fontFamily: MONO,
+      },
+      '& blockquote': {
+        borderLeft: `3px solid`,
+        borderColor: 'primary.main',
+        pl: 1.5, ml: 0, my: 1.5,
+        color: 'text.secondary',
+        fontStyle: 'italic',
+      },
     }}>
       <ReactMarkdown>{text}</ReactMarkdown>
     </Box>
   )
 }
 
+/** Format selector card used in the empty state grid */
+function FormatCard({
+  f,
+  selected,
+  onClick,
+}: {
+  f: typeof FORMATS[number]
+  selected: boolean
+  onClick: () => void
+}) {
+  const theme = useTheme()
+  return (
+    <Box
+      data-testid={`format-card-${f.id}`}
+      onClick={onClick}
+      sx={{
+        flex: '1 1 calc(25% - 12px)',
+        minWidth: 120,
+        maxWidth: 200,
+        border: `1.5px solid`,
+        borderColor: selected ? f.color : 'divider',
+        borderRadius: 2,
+        p: 1.75,
+        cursor: 'pointer',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.75,
+        transition: 'all 0.15s',
+        bgcolor: selected
+          ? alpha(f.color, theme.palette.mode === 'dark' ? 0.15 : 0.07)
+          : 'transparent',
+        '&:hover': {
+          borderColor: f.color,
+          bgcolor: alpha(f.color, theme.palette.mode === 'dark' ? 0.1 : 0.05),
+          transform: 'translateY(-1px)',
+          boxShadow: `0 4px 16px ${alpha(f.color, 0.15)}`,
+        },
+      }}
+    >
+      <Box sx={{ color: selected ? f.color : 'text.secondary', display: 'flex' }}>
+        {f.icon}
+      </Box>
+      <Typography sx={{ fontSize: 13, fontWeight: 700, color: selected ? f.color : 'text.primary' }}>
+        {f.label}
+      </Typography>
+      <Typography sx={{ fontSize: 11, color: 'text.disabled', lineHeight: 1.4 }}>
+        {f.desc}
+      </Typography>
+    </Box>
+  )
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Extract plain text from a KB file (reads up to 3 pages, max 8 000 chars). */
+async function fetchFileContext(kbId: string, fileId: string): Promise<string> {
+  const parts: string[] = []
+  let totalPages = 1
+  for (let p = 1; p <= Math.min(totalPages, 3); p++) {
+    const result = await readerApi.getContent(kbId, fileId, p)
+    if (p === 1) totalPages = result.total_pages ?? 1
+    const text = result.content.blocks
+      .map(b => (Array.isArray(b.content) ? (b.content as string[]).join(' ') : (b.content as string)))
+      .filter(Boolean)
+      .join('\n')
+    if (text) parts.push(text)
+  }
+  return parts.join('\n\n').slice(0, 8_000)
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LearnPage() {
   const qc = useQueryClient()
+  const theme = useTheme()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   // ── Form state ─────────────────────────────────────────────────────────────
-  const [topic, setTopic] = useState('')
-  const [format, setFormat] = useState<LearnFormat>('quiz')
+  const [topic, setTopic]         = useState(() => searchParams.get('topic') ?? '')
+  const [format, setFormat]       = useState<LearnFormat>('quiz')
   const [difficulty, setDifficulty] = useState<Difficulty>('intermediate')
 
-  // ── Session state ──────────────────────────────────────────────────────────
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const [streamingText, setStreamingText] = useState('')
-  const [streamingContent, setStreamingContent] = useState<unknown>(null)
-  const [isStreaming, setIsStreaming] = useState(false)
-  const [streamError, setStreamError] = useState<string | null>(null)
-  const [lastXP, setLastXP] = useState<number | null>(null)
-  const [newBadges, setNewBadges] = useState<string[]>([])
-  const [activeFormat, setActiveFormat] = useState<LearnFormat>('quiz')
+  // ── Consume ?topic= URL param (set by Chat "Turn into lesson") ─────────────
+  useEffect(() => {
+    if (searchParams.get('topic')) {
+      setSearchParams({}, { replace: true }) // clean URL after consuming
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const abortRef = useRef<AbortController | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  // ── Session / stream state ─────────────────────────────────────────────────
+  const [activeSessionId, setActiveSessionId]   = useState<string | null>(null)
+  const [streamingText, setStreamingText]         = useState('')
+  const [streamingContent, setStreamingContent]   = useState<unknown>(null)
+  const [isStreaming, setIsStreaming]             = useState(false)
+  const [streamError, setStreamError]             = useState<string | null>(null)
+  const [lastXP, setLastXP]                       = useState<number | null>(null)
+  const [newBadges, setNewBadges]                 = useState<string[]>([])
+  const [activeFormat, setActiveFormat]           = useState<LearnFormat>('quiz')
+
+  // ── Hover state for sidebar delete ─────────────────────────────────────────
+  const [hoveredSession, setHoveredSession] = useState<string | null>(null)
+
+  // ── Source mode state ─────────────────────────────────────────────────────
+  const [sourceMode, setSourceMode]               = useState<SourceMode>('topic')
+  const [webUrl, setWebUrl]                       = useState('')
+  const [uploadFile, setUploadFile]               = useState<File | null>(null)
+  const [uploadText, setUploadText]               = useState('')
+  const [selectedKbId, setSelectedKbId]           = useState('')
+  const [selectedFileId, setSelectedFileId]       = useState('')
+  const [isDragOver, setIsDragOver]               = useState(false)
+  const [sidebarOpen, setSidebarOpen]             = useState(true)
+
+  const abortRef    = useRef<AbortController | null>(null)
+  const bottomRef   = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // ── Queries ─────────────────────────────────────────────────────────────────
   const { data: sessions = [] } = useQuery({
     queryKey: ['learn-sessions'],
-    queryFn: () => learnApi.listSessions(),
+    queryFn:  () => learnApi.listSessions(),
   })
 
   const { data: userStats, refetch: refetchStats } = useQuery({
     queryKey: ['learn-stats'],
-    queryFn: () => learnApi.getUserStats(),
+    queryFn:  () => learnApi.getUserStats(),
   })
 
   const { data: activeSession } = useQuery({
     queryKey: ['learn-session', activeSessionId],
-    queryFn: () => learnApi.getSession(activeSessionId!),
-    enabled: !!activeSessionId && !isStreaming,
+    queryFn:  () => learnApi.getSession(activeSessionId!),
+    enabled:  !!activeSessionId && !isStreaming,
   })
 
-  // ── Delete mutation ─────────────────────────────────────────────────────────
+  // KB source — list all KBs when in 'kb' mode
+  const { data: kbList = [] } = useQuery({
+    queryKey: ['kb-list'],
+    queryFn:  () => kbApi.list(),
+    enabled:  sourceMode === 'kb',
+    staleTime: 60_000,
+  })
+
+  // KB source — list files once a KB is selected
+  const { data: kbFiles = [] } = useQuery({
+    queryKey: ['kb-files', selectedKbId],
+    queryFn:  () => kbApi.listFiles(selectedKbId),
+    enabled:  sourceMode === 'kb' && !!selectedKbId,
+    staleTime: 30_000,
+  })
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
   const deleteMutation = useMutation({
     mutationFn: (id: string) => learnApi.deleteSession(id),
     onSuccess: () => {
@@ -511,14 +928,83 @@ export default function LearnPage() {
     },
   })
 
-  // Auto-scroll during streaming
+  // Auto-scroll during text streaming
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [streamingText])
 
+  // ── File upload handler ──────────────────────────────────────────────────────
+  const handleFileRead = (file: File) => {
+    setUploadFile(file)
+    setUploadText('')
+    const isTextLike = /\.(txt|md|markdown|csv|json|html?)$/i.test(file.name)
+      || ['text/plain', 'text/markdown', 'text/csv', 'application/json', 'text/html'].includes(file.type)
+    if (isTextLike) {
+      const fr = new FileReader()
+      fr.onload = e => setUploadText((e.target?.result as string).slice(0, 10_000))
+      fr.readAsText(file)
+    } else {
+      setUploadText('__UNSUPPORTED__')
+    }
+    if (!topic) setTopic(file.name.replace(/\.[^/.]+$/, ''))
+  }
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFileRead(file)
+  }
+
   // ── Stream handler ──────────────────────────────────────────────────────────
   const handleGenerate = async () => {
-    if (!topic.trim() || isStreaming) return
+    if (isStreaming) return
+
+    // ── Resolve effective topic + source params ───────────────────────────────
+    let effectiveTopic = topic.trim()
+    let contextText    = ''
+    let sourceType: SourceType = 'topic'
+    let sourceRef: string | undefined
+
+    if (sourceMode === 'kb') {
+      if (!selectedKbId || !selectedFileId) return
+      sourceType = 'kb_file'
+      sourceRef  = selectedFileId
+      if (!effectiveTopic) {
+        const f = kbFiles.find(f => f.id === selectedFileId)
+        effectiveTopic = f?.name.replace(/\.[^/.]+$/, '') ?? 'Knowledge Base'
+      }
+      try {
+        contextText = await fetchFileContext(selectedKbId, selectedFileId)
+      } catch { /* proceed without context */ }
+
+    } else if (sourceMode === 'web') {
+      if (!webUrl.trim()) return
+      sourceType = 'url'
+      sourceRef  = webUrl.trim()
+      if (!effectiveTopic) {
+        try { effectiveTopic = new URL(webUrl.trim()).hostname }
+        catch { effectiveTopic = webUrl.trim() }
+      }
+      // context_text left empty — backend will fetch the URL
+
+    } else if (sourceMode === 'upload') {
+      if (!uploadText || uploadText === '__UNSUPPORTED__') return
+      sourceType  = 'upload'
+      contextText = uploadText
+      if (!effectiveTopic && uploadFile) {
+        effectiveTopic = uploadFile.name.replace(/\.[^/.]+$/, '')
+      }
+
+    } else {
+      // 'topic' mode
+      if (!effectiveTopic) return
+    }
+
+    if (!effectiveTopic) return
+
+    // Update topic in state so the header shows it
+    if (effectiveTopic !== topic) setTopic(effectiveTopic)
 
     setIsStreaming(true)
     setStreamError(null)
@@ -529,20 +1015,20 @@ export default function LearnPage() {
     setActiveSessionId(null)
     setActiveFormat(format)
 
-    const controller = new AbortController()
-    abortRef.current = controller
+    const controller  = new AbortController()
+    abortRef.current  = controller
     let accumulatedText = ''
     let accumulatedJson = ''
-    const isJsonFormat = ['quiz', 'flashcard', 'mindmap', 'timeline'].includes(format)
+    const isJson = ['quiz', 'flashcard', 'mindmap', 'timeline', 'guided'].includes(format)
 
     try {
       await learnApi.streamSession(
-        topic.trim(),
+        effectiveTopic,
         format,
         difficulty,
         (event) => {
           if (event.type === 'token') {
-            if (isJsonFormat) {
+            if (isJson) {
               accumulatedJson += event.content
             } else {
               accumulatedText += event.content
@@ -552,13 +1038,10 @@ export default function LearnPage() {
             setActiveSessionId(event.session_id)
             setLastXP(event.xp_earned)
             setNewBadges(event.new_badges)
-            if (isJsonFormat && accumulatedJson) {
-              try {
-                setStreamingContent(JSON.parse(accumulatedJson))
-              } catch {
-                setStreamError('Failed to parse generated content.')
-              }
-            } else if (!isJsonFormat) {
+            if (isJson && accumulatedJson) {
+              try { setStreamingContent(JSON.parse(accumulatedJson)) }
+              catch { setStreamError('Failed to parse generated content.') }
+            } else if (!isJson) {
               setStreamingContent({ text: accumulatedText })
             }
             qc.invalidateQueries({ queryKey: ['learn-sessions'] })
@@ -568,6 +1051,9 @@ export default function LearnPage() {
           }
         },
         controller.signal,
+        sourceType,
+        sourceRef,
+        contextText,
       )
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== 'AbortError') {
@@ -579,7 +1065,6 @@ export default function LearnPage() {
     }
   }
 
-  // Load a past session
   const handleLoadSession = (session: LearnSession) => {
     setActiveSessionId(session.id)
     setActiveFormat(session.format)
@@ -594,39 +1079,105 @@ export default function LearnPage() {
     setIsStreaming(false)
   }
 
-  // Determine what content to display
-  const displayContent = streamingContent ?? activeSession?.content
-  const displayFormat  = activeSessionId ? activeFormat : format
-  const displayText    = streamingText || (displayContent as TextContent)?.text || ''
-  const isJsonFormat   = ['quiz', 'flashcard', 'mindmap', 'timeline'].includes(displayFormat)
-  const selectedFormatInfo = FORMATS.find(f => f.id === format)
-
   const handleXPEarned = (xp: number) => {
     refetchStats()
     setLastXP(prev => (prev ?? 0) + xp)
   }
 
+  const handleNew = () => {
+    setActiveSessionId(null)
+    setStreamingText('')
+    setStreamingContent(null)
+    setStreamError(null)
+    setLastXP(null)
+    setNewBadges([])
+    setTopic('')
+    setWebUrl('')
+    setUploadFile(null)
+    setUploadText('')
+    setSelectedKbId('')
+    setSelectedFileId('')
+  }
+
+  // Derived display state
+  const displayContent = streamingContent ?? activeSession?.content
+  const displayFormat  = activeSessionId ? activeFormat : format
+  const displayText    = streamingText || (displayContent as TextContent)?.text || ''
+  const isJsonFormat   = ['quiz', 'flashcard', 'mindmap', 'timeline', 'guided'].includes(displayFormat)
+  const hasContent     = !!(displayContent || streamingText)
+  const selectedDiff   = DIFFICULTIES.find(d => d.id === difficulty)!
+
+  const isGenerateEnabled = !isStreaming && (() => {
+    switch (sourceMode) {
+      case 'topic':  return !!topic.trim()
+      case 'web':    return !!webUrl.trim()
+      case 'kb':     return !!selectedKbId && !!selectedFileId
+      case 'upload': return !!uploadText && uploadText !== '__UNSUPPORTED__'
+      default:       return false
+    }
+  })()
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
 
-      {/* ── Left sidebar ─────────────────────────────────────────────────────── */}
+      {/* ═══════════════════ LEFT SIDEBAR ═══════════════════ */}
       <Box sx={{
-        width: 240, flexShrink: 0, borderRight: 1, borderColor: 'divider',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        width: sidebarOpen ? 240 : 0,
+        flexShrink: 0,
+        borderRight: sidebarOpen ? `1px solid ${theme.palette.divider}` : 'none',
+        transition: 'width 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        bgcolor: theme.palette.mode === 'dark'
+          ? 'rgba(14,13,20,0.6)'
+          : 'rgba(249,248,245,0.8)',
       }}>
+        {/* Sidebar header: label + collapse button */}
+        <Box sx={{ px: 2, pt: 1.5, pb: 0.75, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 240 }}>
+          <Typography sx={{
+            fontFamily: MONO,
+            fontSize: 9.5,
+            textTransform: 'uppercase',
+            letterSpacing: '0.13em',
+            color: 'text.disabled',
+            fontWeight: 500,
+          }}>
+            Learn
+          </Typography>
+          <Tooltip title="Collapse sidebar" placement="right">
+            <IconButton
+              size="small"
+              onClick={() => setSidebarOpen(false)}
+              sx={{ p: 0.3, color: 'text.disabled', '&:hover': { color: 'text.primary', bgcolor: 'action.hover' } }}
+            >
+              <ChevronLeftIcon sx={{ fontSize: 15 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
         {/* Stats */}
         {userStats && <StatsBar stats={userStats} />}
 
-        {/* Badges */}
+        {/* Badges strip */}
         {userStats && userStats.badges.length > 0 && (
-          <Box sx={{ px: 1.5, py: 1, borderBottom: 1, borderColor: 'divider' }}>
-            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+          <Box sx={{ px: 1.75, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+            <Typography sx={{ fontSize: 10.5, color: 'text.disabled', fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.1em', mb: 0.75 }}>
               Badges
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
               {userStats.badges.map(b => (
-                <Tooltip key={b} title={BADGE_LABELS[b] ?? b}>
-                  <Chip label={BADGE_LABELS[b]?.split(' ')[0] ?? '🏅'} size="small" sx={{ fontSize: 12 }} />
+                <Tooltip key={b} title={BADGE_LABELS[b] ?? b} placement="right">
+                  <Box
+                    sx={{
+                      fontSize: 16, cursor: 'default', lineHeight: 1,
+                      transition: 'transform 0.15s',
+                      '&:hover': { transform: 'scale(1.25)' },
+                    }}
+                  >
+                    {BADGE_LABELS[b]?.split(' ')[0] ?? '🏅'}
+                  </Box>
                 </Tooltip>
               ))}
             </Box>
@@ -634,14 +1185,24 @@ export default function LearnPage() {
         )}
 
         {/* Session history */}
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ px: 2, py: 1, display: 'block' }}>
-            History
-          </Typography>
-          {sessions.length === 0 ? (
-            <Typography variant="caption" color="text.disabled" sx={{ px: 2 }}>
-              No sessions yet
+        <Box sx={{ flex: 1, overflowY: 'auto' }}>
+          <Box sx={{ px: 2, pt: 1.25, pb: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography sx={{ fontSize: 10.5, color: 'text.disabled', fontFamily: MONO, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              History
             </Typography>
+            {sessions.length > 0 && (
+              <Typography sx={{ fontSize: 10, color: 'text.disabled' }}>
+                {sessions.length}
+              </Typography>
+            )}
+          </Box>
+
+          {sessions.length === 0 ? (
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography sx={{ fontSize: 12, color: 'text.disabled', lineHeight: 1.5 }}>
+                Your sessions will appear here
+              </Typography>
+            </Box>
           ) : (
             <List dense disablePadding>
               {sessions.map(s => (
@@ -649,21 +1210,35 @@ export default function LearnPage() {
                   key={s.id}
                   selected={s.id === activeSessionId}
                   onClick={() => handleLoadSession(s)}
-                  sx={{ py: 0.75, px: 1.5 }}
+                  onMouseEnter={() => setHoveredSession(s.id)}
+                  onMouseLeave={() => setHoveredSession(null)}
+                  sx={{
+                    py: 0.85, px: 1.75, pr: 1,
+                    '&.Mui-selected': {
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                    },
+                  }}
                 >
-                  <ListItemIcon sx={{ minWidth: 28 }}>
+                  <ListItemIcon sx={{ minWidth: 26, color: 'text.disabled' }}>
                     {FORMAT_ICON_MAP[s.format]}
                   </ListItemIcon>
                   <ListItemText
                     primary={s.topic}
-                    secondary={s.format}
-                    primaryTypographyProps={{ variant: 'caption', noWrap: true, fontWeight: 600 }}
-                    secondaryTypographyProps={{ variant: 'caption', noWrap: true }}
+                    secondary={`${s.format} · ${s.difficulty}`}
+                    primaryTypographyProps={{ sx: { fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }}
+                    secondaryTypographyProps={{ sx: { fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }}
                   />
                   <IconButton
                     size="small"
+                    aria-label="Delete session"
                     onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(s.id) }}
-                    sx={{ opacity: 0, '.MuiListItemButton-root:hover &': { opacity: 1 } }}
+                    sx={{
+                      opacity: hoveredSession === s.id ? 1 : 0,
+                      transition: 'opacity 0.15s',
+                      color: 'text.disabled',
+                      p: 0.25,
+                      '&:hover': { color: 'error.main', bgcolor: 'transparent' },
+                    }}
                   >
                     <DeleteOutlineIcon sx={{ fontSize: 14 }} />
                   </IconButton>
@@ -674,168 +1249,590 @@ export default function LearnPage() {
         </Box>
       </Box>
 
-      {/* ── Main area ────────────────────────────────────────────────────────── */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* ═══════════════════ MAIN AREA ═══════════════════ */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
 
-        {/* Controls header */}
-        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', flexShrink: 0 }}>
-          {/* Topic input */}
-          <Box sx={{ display: 'flex', gap: 1, mb: 1.5, alignItems: 'flex-end' }}>
-            <TextField
-              label="Topic"
-              placeholder="e.g. Quantum entanglement, The French Revolution…"
-              value={topic}
-              onChange={e => setTopic(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleGenerate()}
-              fullWidth
+        {/* Expand sidebar button — shown only when sidebar is closed */}
+        {!sidebarOpen && (
+          <Tooltip title="Expand sidebar" placement="right" arrow>
+            <IconButton
               size="small"
-              disabled={isStreaming}
-            />
-            {isStreaming ? (
-              <Button
-                variant="outlined"
-                color="error"
-                size="small"
-                startIcon={<StopIcon />}
-                onClick={() => abortRef.current?.abort()}
-                sx={{ flexShrink: 0 }}
-              >
-                Stop
-              </Button>
+              onClick={() => setSidebarOpen(true)}
+              sx={{
+                position: 'absolute',
+                top: 14,
+                left: 0,
+                zIndex: 10,
+                p: 0.4,
+                borderRadius: '0 6px 6px 0',
+                border: `1px solid ${theme.palette.divider}`,
+                borderLeft: 'none',
+                bgcolor: theme.palette.mode === 'dark' ? 'rgba(14,13,20,0.85)' : 'rgba(249,248,245,0.95)',
+                color: 'text.disabled',
+                boxShadow: '2px 0 8px rgba(0,0,0,0.08)',
+                transition: 'all 0.15s',
+                '&:hover': {
+                  color: 'text.primary',
+                  bgcolor: 'action.hover',
+                  boxShadow: '2px 0 12px rgba(0,0,0,0.14)',
+                },
+              }}
+            >
+              <ChevronRightIcon sx={{ fontSize: 15 }} />
+            </IconButton>
+          </Tooltip>
+        )}
+
+        {/* ─── Header ─────────────────────────────────────────────────────────── */}
+        <Box sx={{
+          flexShrink: 0,
+          px: 2.5,
+          pt: hasContent && !isStreaming ? 1.25 : 2,
+          pb: hasContent && !isStreaming ? 0.75 : 1.5,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+        }}>
+          {/* Eyebrow — hidden when content is active to save vertical space */}
+          {!(hasContent && !isStreaming) && (
+            <Typography sx={{
+              fontFamily: MONO,
+              fontSize: 10,
+              color: 'text.disabled',
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+              mb: 0.75,
+            }}>
+              — LEARN · GROW · RETAIN
+            </Typography>
+          )}
+
+          {/* Title row */}
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: hasContent && !isStreaming ? 0 : 1, flexWrap: 'wrap' }}>
+            {hasContent ? (
+              <Box>
+                <Typography component="h1" sx={{
+                  fontFamily: SERIF,
+                  fontWeight: 400,
+                  fontSize: hasContent && !isStreaming ? 22 : 28,
+                  letterSpacing: '-0.01em',
+                  lineHeight: 1.15,
+                }}>
+                  {topic || 'Learning session'}
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
+                  <Box sx={{ color: 'text.disabled', display: 'flex', fontSize: 14 }}>
+                    {FORMAT_ICON_MAP[displayFormat]}
+                  </Box>
+                  <Typography sx={{ fontSize: 12.5, color: 'text.secondary', textTransform: 'capitalize' }}>
+                    {displayFormat}
+                  </Typography>
+                  <Box sx={{
+                    px: 0.75, py: 0.1,
+                    borderRadius: 0.75,
+                    bgcolor: selectedDiff.bg,
+                    border: `1px solid ${alpha(selectedDiff.color, 0.3)}`,
+                  }}>
+                    <Typography sx={{ fontSize: 10.5, fontWeight: 600, color: selectedDiff.color }}>
+                      {difficulty}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
             ) : (
+              <Typography component="h1" sx={{
+                fontFamily: SERIF,
+                fontWeight: 400,
+                fontSize: { xs: 24, sm: 28, md: 32 },
+                letterSpacing: '-0.01em',
+                lineHeight: 1.05,
+              }}>
+                Start{' '}
+                <Box component="em" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
+                  learning
+                </Box>
+              </Typography>
+            )}
+            {hasContent && !isStreaming && (
               <Button
-                variant="contained"
+                variant="text"
                 size="small"
-                disabled={!topic.trim()}
-                onClick={handleGenerate}
-                startIcon={selectedFormatInfo?.icon}
-                sx={{ flexShrink: 0, minWidth: 100 }}
+                onClick={handleNew}
+                sx={{ ml: 'auto', color: 'text.secondary', fontSize: 12, height: 32, alignSelf: 'flex-start' }}
               >
-                Generate
+                New session
               </Button>
             )}
           </Box>
 
-          {/* Format selector */}
-          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-            {FORMATS.map(f => (
-              <Tooltip key={f.id} title={f.desc}>
-                <Chip
-                  icon={f.icon as React.ReactElement}
-                  label={f.label}
-                  size="small"
-                  variant={format === f.id ? 'filled' : 'outlined'}
-                  color={format === f.id ? 'primary' : 'default'}
+          {/* ── Source mode selector + input ──────────────────────────────────── */}
+          {/* Hidden when content is showing — frees vertical space for the learning panel */}
+          {!(hasContent && !isStreaming) && <Box sx={{ mb: 1.25 }}>
+            {/* Source mode pills */}
+            <Box sx={{ display: 'flex', gap: 0.5, mb: 0.75, flexWrap: 'wrap' }}>
+              {SOURCE_MODES.map(sm => {
+                const active = sourceMode === sm.id
+                return (
+                  <Tooltip key={sm.id} title={sm.tip} placement="top" arrow>
+                    <Box
+                      onClick={() => !isStreaming && setSourceMode(sm.id)}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 0.5,
+                        px: 1.1, py: 0.35,
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: active ? 'primary.main' : 'divider',
+                        bgcolor: active ? alpha('#7C3AED', theme.palette.mode === 'dark' ? 0.18 : 0.08) : 'transparent',
+                        cursor: isStreaming ? 'default' : 'pointer',
+                        transition: 'all 0.15s',
+                        fontSize: 13,
+                        '&:hover': isStreaming ? {} : {
+                          borderColor: 'primary.main',
+                          bgcolor: alpha('#7C3AED', theme.palette.mode === 'dark' ? 0.12 : 0.05),
+                        },
+                      }}
+                    >
+                      <Box sx={{ fontSize: 13, color: active ? 'primary.main' : 'text.disabled', display: 'flex', lineHeight: 1 }}>
+                        {sm.icon}
+                      </Box>
+                      <Typography sx={{ fontSize: 11.5, fontWeight: active ? 600 : 400, color: active ? 'primary.main' : 'text.secondary', lineHeight: 1 }}>
+                        {sm.label}
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                )
+              })}
+            </Box>
+
+            {/* Source input + action button */}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+
+              {/* ── Input area (changes per source mode) ── */}
+              <Box sx={{ flex: 1, minWidth: 200 }}>
+
+                {/* TOPIC mode */}
+                {sourceMode === 'topic' && (
+                  <TextField
+                    placeholder="What do you want to learn?"
+                    value={topic}
+                    onChange={e => setTopic(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && isGenerateEnabled && handleGenerate()}
+                    size="small"
+                    disabled={isStreaming}
+                    fullWidth
+                    sx={{ '& .MuiOutlinedInput-root': { fontSize: 13 } }}
+                  />
+                )}
+
+                {/* WEB mode */}
+                {sourceMode === 'web' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
+                    <TextField
+                      placeholder="https://example.com/article"
+                      value={webUrl}
+                      onChange={e => setWebUrl(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && isGenerateEnabled && handleGenerate()}
+                      size="small"
+                      disabled={isStreaming}
+                      fullWidth
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <LanguageIcon sx={{ fontSize: 15, color: 'text.disabled' }} />
+                          </InputAdornment>
+                        ),
+                      }}
+                      sx={{ '& .MuiOutlinedInput-root': { fontSize: 13 } }}
+                    />
+                    <TextField
+                      placeholder="What to focus on (optional — leave blank to learn the full page)"
+                      value={topic}
+                      onChange={e => setTopic(e.target.value)}
+                      size="small"
+                      disabled={isStreaming}
+                      fullWidth
+                      sx={{ '& .MuiOutlinedInput-root': { fontSize: 12 } }}
+                    />
+                  </Box>
+                )}
+
+                {/* LIBRARY (KB) mode */}
+                {sourceMode === 'kb' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
+                    <Box sx={{ display: 'flex', gap: 0.75 }}>
+                      <FormControl size="small" sx={{ flex: 1 }} disabled={isStreaming}>
+                        <InputLabel sx={{ fontSize: 12 }}>Knowledge Base</InputLabel>
+                        <Select
+                          label="Knowledge Base"
+                          value={selectedKbId}
+                          onChange={e => { setSelectedKbId(e.target.value as string); setSelectedFileId('') }}
+                          sx={{ fontSize: 13 }}
+                        >
+                          {kbList.length === 0 && (
+                            <MenuItem value="" disabled sx={{ fontSize: 12, color: 'text.disabled' }}>
+                              No knowledge bases yet
+                            </MenuItem>
+                          )}
+                          {kbList.map(kb => (
+                            <MenuItem key={kb.id} value={kb.id} sx={{ fontSize: 13 }}>
+                              {kb.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <FormControl size="small" sx={{ flex: 1 }} disabled={!selectedKbId || isStreaming}>
+                        <InputLabel sx={{ fontSize: 12 }}>File</InputLabel>
+                        <Select
+                          label="File"
+                          value={selectedFileId}
+                          onChange={e => {
+                            const fid = e.target.value as string
+                            setSelectedFileId(fid)
+                            const f = kbFiles.find(f => f.id === fid)
+                            if (f && !topic) setTopic(f.name.replace(/\.[^/.]+$/, ''))
+                          }}
+                          sx={{ fontSize: 13 }}
+                        >
+                          {kbFiles.filter(f => f.status === 'ready').length === 0 && (
+                            <MenuItem value="" disabled sx={{ fontSize: 12, color: 'text.disabled' }}>
+                              {selectedKbId ? 'No ready files' : 'Pick a KB first'}
+                            </MenuItem>
+                          )}
+                          {kbFiles.filter(f => f.status === 'ready').map(f => (
+                            <MenuItem key={f.id} value={f.id} sx={{ fontSize: 13 }}>
+                              {f.name}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Box>
+                    <TextField
+                      placeholder="What to focus on (optional — leave blank to learn about the whole file)"
+                      value={topic}
+                      onChange={e => setTopic(e.target.value)}
+                      size="small"
+                      disabled={isStreaming}
+                      fullWidth
+                      sx={{ '& .MuiOutlinedInput-root': { fontSize: 12 } }}
+                    />
+                  </Box>
+                )}
+
+                {/* UPLOAD mode */}
+                {sourceMode === 'upload' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
+                    {/* Hidden file input */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      hidden
+                      accept=".txt,.md,.markdown,.csv,.json,.html,.htm"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleFileRead(f) }}
+                    />
+                    {/* Drop zone */}
+                    <Box
+                      onDragOver={e => { e.preventDefault(); setIsDragOver(true) }}
+                      onDragLeave={() => setIsDragOver(false)}
+                      onDrop={handleFileDrop}
+                      onClick={() => !isStreaming && fileInputRef.current?.click()}
+                      sx={{
+                        border: '1.5px dashed',
+                        borderColor: isDragOver ? 'primary.main' : uploadFile ? alpha('#10B981', 0.6) : 'divider',
+                        borderRadius: 1.5,
+                        py: 1.25, px: 1.5,
+                        textAlign: 'center',
+                        cursor: isStreaming ? 'default' : 'pointer',
+                        transition: 'all 0.15s',
+                        bgcolor: isDragOver
+                          ? alpha('#7C3AED', 0.06)
+                          : uploadFile
+                          ? alpha('#10B981', 0.05)
+                          : 'transparent',
+                        '&:hover': isStreaming ? {} : {
+                          borderColor: 'primary.main',
+                          bgcolor: alpha('#7C3AED', 0.04),
+                        },
+                      }}
+                    >
+                      {uploadFile ? (
+                        <Box>
+                          <Typography sx={{ fontSize: 12.5, color: '#10B981', fontWeight: 600 }}>
+                            📎 {uploadFile.name}
+                          </Typography>
+                          <Typography sx={{ fontSize: 11, color: 'text.disabled', mt: 0.25 }}>
+                            {uploadText === '__UNSUPPORTED__'
+                              ? 'Unsupported format — use .txt, .md, .json, or .csv'
+                              : `${uploadText.length.toLocaleString()} characters extracted`}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Box>
+                          <UploadFileIcon sx={{ fontSize: 20, color: 'text.disabled', mb: 0.25 }} />
+                          <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                            Drop a file here or click to upload
+                          </Typography>
+                          <Typography sx={{ fontSize: 11, color: 'text.disabled', mt: 0.25 }}>
+                            .txt · .md · .json · .csv · .html
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                    {uploadText === '__UNSUPPORTED__' && (
+                      <Alert severity="warning" sx={{ py: 0.25, fontSize: 12, borderRadius: 1.5 }}>
+                        File format not supported for direct upload. Add the file to a Knowledge Base instead and use Library mode.
+                      </Alert>
+                    )}
+                    <TextField
+                      placeholder="What to focus on (optional — leave blank to learn about the whole document)"
+                      value={topic}
+                      onChange={e => setTopic(e.target.value)}
+                      size="small"
+                      disabled={isStreaming}
+                      fullWidth
+                      sx={{ '& .MuiOutlinedInput-root': { fontSize: 12 } }}
+                    />
+                  </Box>
+                )}
+              </Box>
+
+              {/* ── Generate / Stop button ── */}
+              <Box sx={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                {isStreaming ? (
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    startIcon={<StopIcon sx={{ fontSize: 14 }} />}
+                    onClick={() => abortRef.current?.abort()}
+                    sx={{ height: 36, fontSize: 12 }}
+                  >
+                    Stop
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={!isGenerateEnabled}
+                    onClick={handleGenerate}
+                    endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
+                    sx={{ height: 36, fontSize: 12, px: 1.75 }}
+                  >
+                    Generate
+                  </Button>
+                )}
+              </Box>
+
+            </Box>
+          </Box>}
+
+          {/* Format selector row — hidden when content is showing */}
+          {!(hasContent && !isStreaming) && <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+            {FORMATS.map(f => {
+              const active = format === f.id
+              return (
+                <Box
+                  key={f.id}
                   onClick={() => !isStreaming && setFormat(f.id)}
-                  clickable={!isStreaming}
-                  sx={{ fontWeight: format === f.id ? 700 : 400 }}
-                />
-              </Tooltip>
-            ))}
-            <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-            {DIFFICULTIES.map(d => (
-              <Chip
-                key={d.id}
-                label={d.label}
-                size="small"
-                variant={difficulty === d.id ? 'filled' : 'outlined'}
-                onClick={() => !isStreaming && setDifficulty(d.id)}
-                clickable={!isStreaming}
-                sx={{
-                  fontWeight: difficulty === d.id ? 700 : 400,
-                  ...(difficulty === d.id ? { bgcolor: d.color, color: 'white', '&:hover': { bgcolor: d.color } } : {}),
-                }}
-              />
-            ))}
-          </Box>
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 0.6,
+                    px: 1.1, py: 0.5,
+                    borderRadius: 1.25,
+                    border: `1px solid`,
+                    borderColor: active ? f.color : 'transparent',
+                    bgcolor: active ? alpha(f.color, 0.1) : 'transparent',
+                    cursor: isStreaming ? 'default' : 'pointer',
+                    transition: 'all 0.15s',
+                    '&:hover': isStreaming ? {} : {
+                      borderColor: f.color,
+                      bgcolor: alpha(f.color, 0.06),
+                    },
+                  }}
+                >
+                  <Box sx={{ fontSize: 14, color: active ? f.color : 'text.disabled', display: 'flex' }}>
+                    {f.icon}
+                  </Box>
+                  <Typography sx={{
+                    fontSize: 12,
+                    fontWeight: active ? 700 : 400,
+                    color: active ? f.color : 'text.secondary',
+                  }}>
+                    {f.label}
+                  </Typography>
+                </Box>
+              )
+            })}
+
+            <Box sx={{ width: 1, height: 20, bgcolor: 'divider', mx: 0.5 }} />
+
+            {/* Difficulty */}
+            {DIFFICULTIES.map(d => {
+              const active = difficulty === d.id
+              return (
+                <Box
+                  key={d.id}
+                  onClick={() => !isStreaming && setDifficulty(d.id)}
+                  sx={{
+                    px: 1.1, py: 0.5,
+                    borderRadius: 1.25,
+                    border: `1px solid`,
+                    borderColor: active ? d.color : 'transparent',
+                    bgcolor: active ? d.bg : 'transparent',
+                    cursor: isStreaming ? 'default' : 'pointer',
+                    transition: 'all 0.15s',
+                    '&:hover': isStreaming ? {} : { borderColor: d.color },
+                  }}
+                >
+                  <Typography sx={{
+                    fontSize: 12,
+                    fontWeight: active ? 700 : 400,
+                    color: active ? d.color : 'text.secondary',
+                  }}>
+                    {d.label}
+                  </Typography>
+                </Box>
+              )
+            })}
+          </Box>}
         </Box>
 
-        {/* Content area */}
-        <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
+        {/* ─── Content area ───────────────────────────────────────────────────── */}
+        <Box sx={{ flex: 1, overflowY: 'auto', p: hasContent && !isStreaming ? 2 : 3 }}>
 
-          {/* Streaming progress */}
+          {/* Streaming indicator */}
           {isStreaming && (
-            <Box sx={{ mb: 2 }}>
-              <LinearProgress sx={{ mb: 1, borderRadius: 2 }} />
-              <Typography variant="caption" color="text.secondary">
-                Generating {format} on "{topic}"…
+            <Box sx={{ mb: 2.5 }}>
+              <LinearProgress sx={{ mb: 1, borderRadius: 4, height: 2 }} />
+              <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+                Generating <strong>{format}</strong> on "{topic}"…
               </Typography>
             </Box>
           )}
 
           {/* Error */}
           {streamError && (
-            <Alert severity="error" sx={{ mb: 2 }}>{streamError}</Alert>
+            <Alert
+              severity="error"
+              sx={{ mb: 2.5, borderRadius: 2 }}
+              onClose={() => setStreamError(null)}
+            >
+              {streamError}
+            </Alert>
           )}
 
-          {/* XP / badge notification */}
+          {/* XP / badge celebration */}
           {lastXP !== null && lastXP > 0 && (
             <Alert
               severity="success"
               icon={<EmojiEventsIcon />}
-              sx={{ mb: 2 }}
+              sx={{ mb: 2.5, borderRadius: 2 }}
               onClose={() => { setLastXP(null); setNewBadges([]) }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography variant="body2" fontWeight={600}>+{lastXP} XP earned!</Typography>
+                <Typography sx={{ fontSize: 13.5, fontWeight: 700 }}>+{lastXP} XP earned!</Typography>
                 {newBadges.map(b => (
-                  <Chip key={b} label={BADGE_LABELS[b] ?? b} size="small" color="warning" />
+                  <Chip
+                    key={b}
+                    label={BADGE_LABELS[b] ?? b}
+                    size="small"
+                    sx={{ bgcolor: '#F59E0B', color: '#fff', fontSize: 11, height: 22 }}
+                  />
                 ))}
               </Box>
             </Alert>
           )}
 
-          {/* Empty state */}
-          {!isStreaming && !displayContent && !streamingText && !streamError && (
+          {/* ── EMPTY STATE ─────────────────────────────────────────────────── */}
+          {!isStreaming && !hasContent && !streamError && (
             <Box sx={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', height: '60%', gap: 2, color: 'text.secondary',
+              justifyContent: 'center', minHeight: '60%', gap: 3,
             }}>
-              <AutoStoriesIcon sx={{ fontSize: 64, opacity: 0.2 }} />
-              <Typography variant="h6" fontWeight={600} color="text.primary">
-                Ready to learn?
-              </Typography>
-              <Typography variant="body2" sx={{ maxWidth: 420, textAlign: 'center' }}>
-                Enter a topic, pick a format and difficulty, then hit Generate.
-                Earn XP, unlock badges, and track streaks as you learn.
-              </Typography>
-              {/* Format overview grid */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1, justifyContent: 'center', maxWidth: 420 }}>
+              <Box sx={{ textAlign: 'center' }}>
+                <AutoStoriesIcon sx={{ fontSize: 52, color: 'text.disabled', mb: 1 }} />
+                <Typography sx={{ fontSize: 18, fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
+                  What do you want to learn today?
+                </Typography>
+                <Typography sx={{ fontSize: 13.5, color: 'text.secondary', maxWidth: 500, lineHeight: 1.7 }}>
+                  Type a topic, pick a file from your Library, paste a URL, or upload a document.
+                  Choose a format and difficulty above, then hit Generate.
+                  Earn XP and unlock badges as you go.
+                </Typography>
+                {/* Source mode quick-select chips in empty state */}
+                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', mt: 1.5, flexWrap: 'wrap' }}>
+                  {SOURCE_MODES.map(sm => (
+                    <Chip
+                      key={sm.id}
+                      icon={<Box sx={{ fontSize: 14, display: 'flex', lineHeight: 1 }}>{sm.icon}</Box>}
+                      label={sm.label}
+                      size="small"
+                      variant={sourceMode === sm.id ? 'filled' : 'outlined'}
+                      onClick={() => setSourceMode(sm.id)}
+                      color={sourceMode === sm.id ? 'primary' : 'default'}
+                      sx={{ fontSize: 12, cursor: 'pointer' }}
+                    />
+                  ))}
+                </Box>
+              </Box>
+
+              {/* Format card grid */}
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'center', maxWidth: 720 }}>
                 {FORMATS.map(f => (
-                  <Chip
+                  <FormatCard
                     key={f.id}
-                    icon={f.icon as React.ReactElement}
-                    label={f.label}
-                    size="small"
-                    variant="outlined"
+                    f={f}
+                    selected={format === f.id}
                     onClick={() => setFormat(f.id)}
-                    clickable
                   />
+                ))}
+              </Box>
+
+              {/* Difficulty row */}
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {DIFFICULTIES.map(d => (
+                  <Box
+                    key={d.id}
+                    onClick={() => setDifficulty(d.id)}
+                    sx={{
+                      px: 1.5, py: 0.6,
+                      borderRadius: 1.5,
+                      border: `1.5px solid`,
+                      borderColor: difficulty === d.id ? d.color : 'divider',
+                      bgcolor: difficulty === d.id ? d.bg : 'transparent',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      '&:hover': { borderColor: d.color },
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: difficulty === d.id ? d.color : 'text.secondary' }}>
+                      {d.label}
+                    </Typography>
+                  </Box>
                 ))}
               </Box>
             </Box>
           )}
 
-          {/* Text formats (streaming or loaded) */}
+          {/* ── TEXT FORMATS (streaming or loaded) ─────────────────────────── */}
           {!isJsonFormat && (displayText || isStreaming) && (
-            <Paper variant="outlined" sx={{ p: 3, borderRadius: 2, maxWidth: 760 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                {FORMAT_ICON_MAP[displayFormat]}
-                <Typography variant="subtitle2" fontWeight={700} sx={{ textTransform: 'capitalize' }}>
-                  {displayFormat} · {difficulty}
-                </Typography>
-                {isStreaming && <CircularProgress size={14} sx={{ ml: 'auto' }} />}
-              </Box>
+            <Paper
+              variant="outlined"
+              sx={{ p: 3.5, borderRadius: 2.5, maxWidth: 760, borderColor: 'divider' }}
+            >
               <TextContentView text={displayText} />
               {isStreaming && (
-                <Box sx={{ display: 'inline-block', width: 8, height: 16, bgcolor: 'primary.main', ml: 0.5, animation: 'blink 1s step-end infinite', '@keyframes blink': { '50%': { opacity: 0 } } }} />
+                <Box sx={{
+                  display: 'inline-block',
+                  width: 2, height: 18,
+                  bgcolor: 'primary.main',
+                  ml: 0.5, mb: '-3px',
+                  '@keyframes blink': { '0%,100%': { opacity: 1 }, '50%': { opacity: 0 } },
+                  animation: 'blink 1s step-end infinite',
+                }} />
               )}
             </Paper>
           )}
 
-          {/* JSON formats (shown after streaming completes) */}
+          {/* ── JSON FORMATS — shown after stream done ─────────────────────── */}
           {isJsonFormat && displayContent && (
-            <Box sx={{ maxWidth: 760 }}>
+            <Box sx={{ maxWidth: displayFormat === 'guided' ? 'none' : 760 }}>
               {displayFormat === 'quiz' && activeSessionId && (
                 <QuizView
                   content={displayContent as QuizContent}
@@ -850,27 +1847,42 @@ export default function LearnPage() {
                 />
               )}
               {displayFormat === 'mindmap' && (
-                <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
-                  <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+                <Paper variant="outlined" sx={{ p: 3, borderRadius: 2.5 }}>
+                  <Typography sx={{ fontSize: 20, fontWeight: 700, fontFamily: SERIF, mb: 2 }}>
                     {(displayContent as MindmapContent).root}
                   </Typography>
-                  {(displayContent as MindmapContent).branches.map((branch, i) => (
-                    <MindmapNodeView key={i} node={branch} depth={1} />
-                  ))}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                    {(displayContent as MindmapContent).branches.map((branch, i) => (
+                      <MindmapNodeView key={i} node={branch} depth={1} />
+                    ))}
+                  </Box>
                 </Paper>
               )}
               {displayFormat === 'timeline' && (
-                <TimelineView content={displayContent as TimelineContent} />
+                <Paper variant="outlined" sx={{ p: 3, borderRadius: 2.5 }}>
+                  <Typography sx={{ fontSize: 20, fontWeight: 700, fontFamily: SERIF, mb: 2.5 }}>
+                    Timeline
+                  </Typography>
+                  <TimelineView content={displayContent as TimelineContent} />
+                </Paper>
+              )}
+              {displayFormat === 'guided' && (
+                <Paper variant="outlined" sx={{ borderRadius: 2.5, overflow: 'hidden' }}>
+                  <GuidedViewer content={displayContent as GuidedContent} />
+                </Paper>
               )}
             </Box>
           )}
 
-          {/* JSON formats still streaming — show raw progress */}
+          {/* ── JSON streaming indicator ────────────────────────────────────── */}
           {isJsonFormat && isStreaming && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, color: 'text.secondary' }}>
-              <CircularProgress size={20} />
-              <Typography variant="body2">
-                Building {displayFormat}…
+            <Box sx={{
+              display: 'flex', alignItems: 'center', gap: 1.5,
+              color: 'text.secondary', py: 2,
+            }}>
+              <CircularProgress size={18} thickness={3} />
+              <Typography sx={{ fontSize: 13.5 }}>
+                Building your {displayFormat}…
               </Typography>
             </Box>
           )}

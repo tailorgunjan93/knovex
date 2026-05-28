@@ -140,25 +140,27 @@ class LearnService:
 
         try:
             if format in _TEXT_FORMATS:
-                content_str, new_content = await self._generate_text(
-                    format, topic, difficulty, context_text,
-                    provider, model, credentials,
-                )
-                # For text, stream the already-accumulated string as chunks
-                async for event in self._stream_text_gen(
-                    format, topic, difficulty, context_text,
-                    provider, model, credentials,
-                ):
-                    yield event
-                    # Accumulate text for saving
-                    if '"type": "token"' in event:
-                        try:
-                            data = json.loads(event[len("data: "):])
-                            new_content["text"] = new_content.get("text", "") + data["content"]
-                        except Exception:
-                            pass
+                # Stream tokens in real-time AND accumulate for saving — one LLM call.
+                accumulated = ""
+                messages = self._build_prompt(format, topic, difficulty, context_text)
+                try:
+                    async for token in self._llm_svc.stream(
+                        messages=messages,
+                        provider=provider,
+                        model=model,
+                        credentials=credentials,
+                        max_tokens=1024,
+                        temperature=0.7,
+                    ):
+                        accumulated += token
+                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                except Exception as exc:
+                    raise RuntimeError(f"LLM streaming failed: {exc}") from exc
+                new_content: dict = {"text": accumulated}
             else:
                 # JSON format: generate with complete(), stream as tokens
+                # Guided lessons need more tokens for rich multi-step content
+                json_max_tokens = 4096 if format == "guided" else 2048
                 messages = self._build_prompt(format, topic, difficulty, context_text)
                 try:
                     raw = await self._llm_svc.complete(
@@ -166,7 +168,7 @@ class LearnService:
                         provider=provider,
                         model=model,
                         credentials=credentials,
-                        max_tokens=2048,
+                        max_tokens=json_max_tokens,
                         temperature=0.7,
                     )
                 except Exception as exc:
@@ -199,50 +201,6 @@ class LearnService:
 
         xp_earned, new_badges = await self._award_session_xp(session)
         yield f"data: {json.dumps({'type': 'done', 'session_id': session.id, 'xp_earned': xp_earned, 'new_badges': new_badges})}\n\n"
-
-    async def _stream_text_gen(
-        self,
-        format: str,
-        topic: str,
-        difficulty: str,
-        context_text: str,
-        provider: str,
-        model: str,
-        credentials: ProviderCredentials,
-    ) -> AsyncGenerator[str, None]:
-        """Async generator that actually streams tokens for text formats."""
-        messages = self._build_prompt(format, topic, difficulty, context_text)
-        async for token in self._llm_svc.stream(
-            messages=messages,
-            provider=provider,
-            model=model,
-            credentials=credentials,
-            max_tokens=1024,
-            temperature=0.7,
-        ):
-            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-
-    async def _generate_text(
-        self,
-        format: str,
-        topic: str,
-        difficulty: str,
-        context_text: str,
-        provider: str,
-        model: str,
-        credentials: ProviderCredentials,
-    ) -> tuple[str, dict]:
-        """Generate text content with complete() for saving purposes."""
-        messages = self._build_prompt(format, topic, difficulty, context_text)
-        raw = await self._llm_svc.complete(
-            messages=messages,
-            provider=provider,
-            model=model,
-            credentials=credentials,
-            max_tokens=1024,
-            temperature=0.7,
-        )
-        return raw, {"text": raw}
 
     # ==================================================================
     # Quiz answer submission
@@ -452,6 +410,34 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "powerful analogies, and thought-provoking questions. "
         "Present as a mix of bullet points, short paragraphs, and surprising 'Did you know?' facts. "
         "Aim for 300-400 words. Be creative and thought-provoking. Use markdown."
+    ),
+    "guided": (
+        "You are a world-class personal tutor creating an interactive step-by-step guided lesson "
+        "on '{topic}' for a {difficulty} level learner. "
+        "Teach like a patient, engaging human teacher — one concept at a time, building understanding incrementally.\n"
+        "Generate 5-7 clear lesson steps. Each step covers ONE idea.\n"
+        "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences.\n"
+        "Format:\n"
+        '{{"topic": "...", '
+        '"intro": "one engaging hook sentence about why this topic is fascinating or important", '
+        '"total_steps": N, '
+        '"steps": ['
+        '{{"step": 1, '
+        '"title": "short step title (max 8 words)", '
+        '"explanation": "clear 2-3 paragraph explanation in plain language — define any jargon", '
+        '"example": "a concrete, specific real-world example that makes the concept tangible", '
+        '"analogy": "a memorable analogy or comparison (or null if not applicable)", '
+        '"key_insight": "the single most important takeaway in one sentence", '
+        '"check_in": "a reflective self-check question the learner can ask themselves", '
+        '"quiz_check": {{'
+        '"question": "A short comprehension question to check understanding (max 15 words)?", '
+        '"options": ["plausible option A (max 8 words)", "plausible option B (max 8 words)", "plausible option C (max 8 words)"], '
+        '"correct": 0, '
+        '"feedback_correct": "Exactly right! One reinforcing sentence.", '
+        '"feedback_wrong": "Not quite. One clear corrective sentence explaining the right answer."'
+        '}}'
+        '}}'
+        ']}}'
     ),
 }
 

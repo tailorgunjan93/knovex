@@ -6,7 +6,7 @@
 
 *Secure · Fast · Reliable · Cost-Effective*
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)](CHANGELOG.md)
 [![CI](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml/badge.svg)](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](#)
@@ -32,6 +32,8 @@ Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid 
 | 4 | Chat + Summariser + Web Search | ✅ v0.4.0 |
 | 5 | Settings UI + Desktop Packaging | ✅ v0.5.0 |
 | 6 | Learn Mode + Encryption Verification | ✅ v0.6.0 |
+| 7 | Semantic Search (ONNX/OpenAI embeddings) + Copper Theme + Auto-updater | ✅ v0.6.6 |
+| 8 | Progress Page + GuidedViewer + KB Browser Upload + E2E Test Suite (61 tests) | ✅ v0.8.0 |
 
 ---
 
@@ -70,13 +72,19 @@ Knovex runs completely **offline and local** — your files never leave your mac
 - Summariser: brief (~150 words) or detailed (~600 words) of a file or entire KB
 - Blinking cursor animation, AbortController stop mid-stream
 
-### ✨ Learn Mode *(v0.6.0)*
-- **8 formats**: Quiz (interactive MCQ), Flashcards (spaced repetition), Mind Map (collapsible tree), Timeline (chronological events), Story (narrative markdown), ELI5, Speed Learn (bullet summary), Brainstorm (creative connections)
+### ✨ Learn Mode *(v0.6.0 – v0.8.0)*
+- **9 formats**: Quiz (interactive MCQ), Flashcards (spaced repetition), Mind Map (collapsible tree), Timeline (chronological events), Story (narrative markdown), ELI5, Speed Learn (bullet summary), Brainstorm (creative connections), **Guided** (step-by-step walkthrough via GuidedViewer)
 - **Gamification**: XP points, level progression (10 tiers), daily streaks, 10 achievement badges
 - All formats stream via SSE — JSON formats via LLM + parse + re-stream, text formats real-time
 - Per-question XP rewards in quiz mode; spaced-repetition interval scheduling for flashcards
 - **Session history sidebar** — reload any past session and interact with it
 - **Encrypted keys**: Fernet AES-128 symmetric encryption; key at `~/.config/Knovex/.knovex.key`; proven by 25 dedicated encryption tests
+
+### 📊 Progress Page *(v0.8.0)*
+- **4 stat cards**: Streak (fire trend, singular/plural days), XP (level badge, comma-formatted), Sessions (week-over-week delta), Active Days
+- **Daily activity heatmap** — 26 weeks of session activity, colour-coded by intensity
+- **Learning velocity chart** — sessions/week + active days/week dual-axis Recharts graph
+- All data from live API; zero-state renders cleanly when no sessions exist yet
 
 ### ⚙️ Settings + Packaging *(v0.5.0)*
 - LLM: OpenAI, Anthropic (Claude), Groq, Gemini, Cerebras, AWS Bedrock, Ollama
@@ -180,6 +188,7 @@ Knovex uses a **fully decoupled** frontend/backend architecture with SOLID compl
 | Web Search | duckduckgo-search / Serper / Brave | Live web results |
 | Encryption | cryptography (Fernet) | API key encryption at rest |
 | Packaging | PyInstaller + electron-builder | Distributable app |
+| E2E Testing | Playwright | Browser-driven end-to-end tests (61 tests) |
 
 ---
 
@@ -190,6 +199,11 @@ knovex/
 ├── README.md
 ├── CHANGELOG.md
 ├── .gitignore
+│
+├── playwright.config.ts            Playwright E2E config (Vite dev server + Chromium)
+├── e2e/
+│   ├── learn.spec.ts               27 tests — Learn Mode visual + functional flows
+│   └── progress.spec.ts            34 tests — Progress Page layout + data accuracy
 │
 ├── .github/
 │   └── workflows/
@@ -277,8 +291,9 @@ knovex/
 │       └── pages/
 │           ├── KnowledgeBase/          KB list + detail + file viewer + inline Q&A
 │           ├── Chat/                   Session sidebar + streaming message thread
-│           ├── Learn/                  (Sprint 6)
-│           └── Settings/              LLM + Search + App tabs (full UI)
+│           ├── Learn/                  9 formats + GuidedViewer + session history
+│           ├── Progress/               Stats cards + heatmap + velocity chart
+│           └── Settings/              LLM + Search + App + Embedding tabs
 │
 ├── desktop/                            Electron — thin shell only
 │   ├── main.js
@@ -350,6 +365,25 @@ pytest tests/ -v
 pytest tests/ --cov=backend --cov-report=term-missing
 ```
 
+### Run E2E Tests
+
+```bash
+# Install Playwright browsers (first time only)
+npx playwright install chromium
+
+# Run all 61 E2E tests (auto-starts Vite dev server)
+npx playwright test
+
+# Interactive UI mode
+npx playwright test --ui
+
+# Run a single spec
+npx playwright test e2e/learn.spec.ts
+```
+
+E2E tests mock all `/api/*` calls via `page.route()` — no backend required.
+Results in `playwright-report/`. Failures attach screenshot + trace.
+
 ### Lint
 
 ```bash
@@ -400,7 +434,9 @@ git push origin v0.4.0
 - [x] Sprint 3 — File Reader + Inline Q&A — `v0.3.0`
 - [x] Sprint 4 — Chat + Summariser + Web Search — `v0.4.0`
 - [x] Sprint 5 — Settings UI + Desktop Packaging — `v0.5.0`
-- [ ] Sprint 6 — Learn Mode — `v0.6.0`
+- [x] Sprint 6 — Learn Mode + Encryption Verification — `v0.6.0`
+- [x] Sprint 7 — Semantic Search (ONNX/OpenAI) + Copper Theme + Auto-updater — `v0.6.6`
+- [x] Sprint 8 — Progress Page + GuidedViewer + KB Browser Upload + E2E Test Suite (61 tests) — `v0.8.0`
 
 ### Phase 2 — Cloud + Organisation + Agentic *(future)*
 

@@ -173,7 +173,7 @@ VALUES (1, 0, 1, 0, NULL, '[]');
 
 async def init_db() -> None:
     """
-    Create all tables and apply performance pragmas.
+    Create all tables, apply performance pragmas, and run migrations.
     Called once from FastAPI lifespan on startup.
     """
     db_path = settings.db_path
@@ -185,7 +185,25 @@ async def init_db() -> None:
         await db.commit()
 
     await backend.executescript(SCHEMA_SQL)
+
+    # ── Migrations (idempotent ALTER TABLE statements) ─────────────────────
+    await _run_migrations(db_path)
+
     logger.info("SQLite schema initialised at %s", db_path)
+
+
+async def _run_migrations(db_path) -> None:
+    """
+    Apply schema migrations that cannot be expressed in CREATE TABLE IF NOT EXISTS.
+    All migrations are idempotent (safe to run on every startup).
+    """
+    async with aiosqlite.connect(str(db_path)) as db:
+        # Sprint 7 — dense vector embeddings stored alongside chunks
+        cols = [row[1] for row in await (await db.execute("PRAGMA table_info(chunks)")).fetchall()]
+        if "embedding" not in cols:
+            await db.execute("ALTER TABLE chunks ADD COLUMN embedding BLOB DEFAULT NULL")
+            await db.commit()
+            logger.info("Migration: added chunks.embedding column")
 
 
 # ---------------------------------------------------------------------------

@@ -1,14 +1,12 @@
 /**
  * Knovex MUI v6 Theme Definitions
  *
- * Three themes: light | medium | dark
- * All share the same component overrides — only the palette differs.
+ * Three themes: dark | medium | light
+ * Palette values synced exactly with KnovexUI styles.css CSS variables.
  *
- * Design language: warm dark palette matching the Knovex download page.
- *   Dark bg  : #0B0B0C  (near-black, warm)
- *   Light bg : #F5F1EA  (warm parchment)
- *   Accent   : #C8924A  (copper — oklch(0.78 0.13 60) approximation)
- *   Font     : Geist (same as website)
+ * Dark  — near-black obsidian  (--bg: #0B0B0C, --surface: #111114)
+ * Mid   — charcoal warm dark   (--bg: #1C1B1F, --surface: #23222A) ← also dark mode
+ * Light — warm parchment paper (--bg: #F5F1EA, --surface: #FFFBF3)
  */
 
 import { createTheme, type Theme, alpha } from '@mui/material/styles'
@@ -16,10 +14,10 @@ import { createTheme, type Theme, alpha } from '@mui/material/styles'
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
 
 const BRAND = {
-  // Copper accent — matches oklch(0.78 0.13 60) from the download page
-  copper:      '#C8924A',
-  copperDark:  '#A06B2A',
-  copperLight: '#E8BC7A',
+  // Amber accent — matches oklch(0.78 0.13 60) / KnovexUI #dda76a
+  copper:      '#DDA76A',
+  copperDark:  '#B5803E',
+  copperLight: '#EABC8A',
 
   error:   '#EF4444',
   warning: '#F59E0B',
@@ -30,6 +28,7 @@ const BRAND = {
 // ─── Font stack ───────────────────────────────────────────────────────────────
 
 const fontStack = [
+  '"IBM Plex Sans"',
   '"Geist"',
   '-apple-system',
   'BlinkMacSystemFont',
@@ -39,6 +38,7 @@ const fontStack = [
 ].join(',')
 
 const monoStack = [
+  '"IBM Plex Mono"',
   '"Geist Mono"',
   '"Fira Code"',
   '"Cascadia Code"',
@@ -110,7 +110,8 @@ const sharedTypography = {
   body2: { letterSpacing: '0.01em' },
 }
 
-// ─── Dark theme (default) — warm near-black + copper ─────────────────────────
+// ─── Dark theme — deep obsidian + amber ──────────────────────────────────────
+// Matches: --bg:#0B0B0C  --surface:#111114  --surface-2:#16161A  --surface-3:#1D1D22
 
 export const darkTheme = createTheme({
   palette: {
@@ -120,22 +121,20 @@ export const darkTheme = createTheme({
       dark:  BRAND.copperDark,
       light: BRAND.copperLight,
     },
-    secondary: {
-      main: BRAND.success,
-    },
+    secondary: { main: BRAND.success },
     error:   { main: BRAND.error },
     warning: { main: BRAND.warning },
     info:    { main: BRAND.info },
     background: {
-      default: '#0B0B0C',
-      paper:   '#111114',
+      default: '#0B0B0C',   // --bg
+      paper:   '#111114',   // --surface
     },
     text: {
-      primary:   '#F5F1EA',
-      secondary: 'rgba(245,241,234,0.65)',
-      disabled:  'rgba(245,241,234,0.32)',
+      primary:   '#F5F1EA',                    // --text
+      secondary: 'rgba(245,241,234,0.62)',     // --text-2 approx
+      disabled:  'rgba(245,241,234,0.30)',     // --text-3 approx
     },
-    divider: 'rgba(245,241,234,0.08)',
+    divider: '#26252B',   // --border
     action: {
       hover:    alpha(BRAND.copper, 0.10),
       selected: alpha(BRAND.copper, 0.16),
@@ -149,14 +148,11 @@ export const darkTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          border: '1px solid rgba(245,241,234,0.07)',
+          border: '1px solid #26252B',
         },
-        elevation1: {
-          backgroundColor: '#111114',
-        },
-        elevation2: {
-          backgroundColor: '#16161A',
-        },
+        elevation1: { backgroundColor: '#111114' },
+        elevation2: { backgroundColor: '#16161A' },
+        elevation3: { backgroundColor: '#1D1D22' },
       },
     },
     MuiButton: {
@@ -175,7 +171,70 @@ export const darkTheme = createTheme({
   },
 })
 
-// ─── Light theme — warm parchment + copper ────────────────────────────────────
+// ─── Medium theme — charcoal warm dark + amber ────────────────────────────────
+// Matches: --bg:#1C1B1F  --surface:#23222A  --surface-2:#2A2932  --surface-3:#34323C
+// NOTE: This is ALSO a dark-mode theme (dark text on dark bg, white text)
+
+export const mediumTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: {
+      main:  BRAND.copper,
+      dark:  BRAND.copperDark,
+      light: BRAND.copperLight,
+    },
+    secondary: { main: BRAND.success },
+    error:   { main: BRAND.error },
+    warning: { main: BRAND.warning },
+    info:    { main: BRAND.info },
+    background: {
+      default: '#1C1B1F',   // --bg (mid)
+      paper:   '#23222A',   // --surface (mid)
+    },
+    text: {
+      primary:   '#F5F1EA',                    // --text (same as dark)
+      secondary: 'rgba(245,241,234,0.62)',
+      disabled:  'rgba(245,241,234,0.32)',
+    },
+    divider: '#3A3842',   // --border (mid)
+    action: {
+      hover:    alpha(BRAND.copper, 0.10),
+      selected: alpha(BRAND.copper, 0.16),
+      focus:    alpha(BRAND.copper, 0.12),
+    },
+  },
+  typography: sharedTypography,
+  components: {
+    ...sharedComponents,
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+          border: '1px solid #3A3842',
+        },
+        elevation1: { backgroundColor: '#23222A' },
+        elevation2: { backgroundColor: '#2A2932' },
+        elevation3: { backgroundColor: '#34323C' },
+      },
+    },
+    MuiButton: {
+      ...sharedComponents.MuiButton,
+      styleOverrides: {
+        ...sharedComponents.MuiButton?.styleOverrides,
+        outlined: {
+          borderColor: 'rgba(245,241,234,0.18)',
+          '&:hover': {
+            borderColor: BRAND.copper,
+            backgroundColor: alpha(BRAND.copper, 0.08),
+          },
+        },
+      },
+    },
+  },
+})
+
+// ─── Light theme — warm parchment paper + amber ───────────────────────────────
+// Matches: --bg:#F5F1EA  --surface:#FFFBF3  --surface-2:#EFEAE0  --surface-3:#E7E1D5
 
 export const lightTheme = createTheme({
   palette: {
@@ -185,22 +244,20 @@ export const lightTheme = createTheme({
       dark:  BRAND.copperDark,
       light: BRAND.copperLight,
     },
-    secondary: {
-      main: BRAND.success,
-    },
+    secondary: { main: BRAND.success },
     error:   { main: BRAND.error },
     warning: { main: BRAND.warning },
     info:    { main: BRAND.info },
     background: {
-      default: '#F5F1EA',
-      paper:   '#EFEAE0',
+      default: '#F5F1EA',   // --bg (light)
+      paper:   '#FFFBF3',   // --surface (light)
     },
     text: {
-      primary:   '#14120E',
-      secondary: 'rgba(20,18,14,0.65)',
-      disabled:  'rgba(20,18,14,0.32)',
+      primary:   '#14120E',                  // --text (light)
+      secondary: 'rgba(20,18,14,0.65)',      // --text-2
+      disabled:  'rgba(20,18,14,0.38)',      // --text-3
     },
-    divider: 'rgba(20,18,14,0.08)',
+    divider: '#DDD6C8',   // --border (light)
     action: {
       hover:    alpha(BRAND.copper, 0.08),
       selected: alpha(BRAND.copper, 0.14),
@@ -214,53 +271,23 @@ export const lightTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          border: '1px solid rgba(20,18,14,0.08)',
+          border: '1px solid #DDD6C8',
         },
+        elevation1: { backgroundColor: '#FFFBF3' },
+        elevation2: { backgroundColor: '#EFEAE0' },
+        elevation3: { backgroundColor: '#E7E1D5' },
       },
     },
-  },
-})
-
-// ─── Medium theme — mid-grey warm + copper ────────────────────────────────────
-
-export const mediumTheme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main:  BRAND.copper,
-      dark:  BRAND.copperDark,
-      light: BRAND.copperLight,
-    },
-    secondary: {
-      main: BRAND.success,
-    },
-    error:   { main: BRAND.error },
-    warning: { main: BRAND.warning },
-    info:    { main: BRAND.info },
-    background: {
-      default: '#E7E1D5',
-      paper:   '#DDD7CB',
-    },
-    text: {
-      primary:   '#14120E',
-      secondary: 'rgba(20,18,14,0.65)',
-      disabled:  'rgba(20,18,14,0.32)',
-    },
-    divider: 'rgba(20,18,14,0.10)',
-    action: {
-      hover:    alpha(BRAND.copper, 0.08),
-      selected: alpha(BRAND.copper, 0.14),
-      focus:    alpha(BRAND.copper, 0.10),
-    },
-  },
-  typography: sharedTypography,
-  components: {
-    ...sharedComponents,
-    MuiPaper: {
+    MuiButton: {
+      ...sharedComponents.MuiButton,
       styleOverrides: {
-        root: {
-          backgroundImage: 'none',
-          border: '1px solid rgba(20,18,14,0.10)',
+        ...sharedComponents.MuiButton?.styleOverrides,
+        outlined: {
+          borderColor: '#DDD6C8',
+          '&:hover': {
+            borderColor: BRAND.copper,
+            backgroundColor: alpha(BRAND.copper, 0.07),
+          },
         },
       },
     },
@@ -272,9 +299,9 @@ export const mediumTheme = createTheme({
 export type ThemeMode = 'light' | 'medium' | 'dark'
 
 export const themeMap: Record<ThemeMode, Theme> = {
-  light:  lightTheme,
-  medium: mediumTheme,
   dark:   darkTheme,
+  medium: mediumTheme,
+  light:  lightTheme,
 }
 
 export function getTheme(mode: string): Theme {

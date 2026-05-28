@@ -1,9 +1,10 @@
 /**
- * Reader API — file content rendering + inline Q&A
+ * Reader API — file content rendering + inline Q&A + direct upload
  *
  * Wraps:
  *   GET  /api/kb/:kbId/files/:fileId/content?page=N
- *   POST /api/kb/:kbId/files/:fileId/ask        (SSE stream)
+ *   POST /api/kb/:kbId/files/:fileId/ask        (SSE stream, optional web search)
+ *   POST /api/reader/upload                      (multipart upload → Reader Inbox KB)
  */
 
 import apiClient, { API_BASE } from './client'
@@ -30,6 +31,14 @@ export interface FileContentResponse {
   }
 }
 
+export interface ReaderUploadResponse {
+  kb_id: string
+  file_id: string
+  name: string
+  format: string
+  status: string   // pending | ingesting | ready | error
+}
+
 // ─── API module ───────────────────────────────────────────────────────────────
 
 export const readerApi = {
@@ -43,24 +52,39 @@ export const readerApi = {
   },
 
   /**
-   * Open an SSE connection for inline Q&A.
+   * Upload a file directly to the "Reader Inbox" KB.
    *
-   * Returns the raw EventSource URL — callers create the EventSource themselves
-   * so they retain full control over lifecycle (open / close / error).
+   * Returns upload metadata including kb_id + file_id.
+   * Poll /api/kb/{kbId}/files/{fileId}/status until status === "ready".
+   */
+  async upload(file: File): Promise<ReaderUploadResponse> {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await apiClient.post<ReaderUploadResponse>('/reader/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return res.data
+  },
+
+  /**
+   * Open an SSE connection for inline Q&A about a specific file.
    *
    * NOTE: POST-based SSE requires fetch() + ReadableStream, not EventSource.
    * This helper initiates the fetch and returns an async generator of tokens.
+   *
+   * @param useWebSearch  When true, the backend also queries the web for context.
    */
   async *askStream(
     kbId: string,
     fileId: string,
     question: string,
+    useWebSearch = false,
   ): AsyncGenerator<string, void, unknown> {
     const url = `${API_BASE}/api/kb/${kbId}/files/${fileId}/ask`
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, use_web_search: false }),
+      body: JSON.stringify({ question, use_web_search: useWebSearch }),
     })
 
     if (!res.ok) {

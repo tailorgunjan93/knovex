@@ -24,10 +24,12 @@ Pattern: Adapter (GoF) + Value Object
 
 from __future__ import annotations
 
+import base64
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from html import escape as html_escape
 
 logger = logging.getLogger("knovex.adapters.docs")
 
@@ -41,6 +43,7 @@ class PageContent:
     """Content extracted from a single PDF page."""
     page_num: int       # 1-based
     text: str
+    is_html: bool = False   # True when text contains HTML markup (e.g. from get_text("html"))
 
 
 @dataclass(frozen=True)
@@ -97,11 +100,88 @@ class IParagraphAdapter(ABC):
 
 class PyMuPDFAdapter(IPDFAdapter):
     """
-    Extract text from PDFs using PyMuPDF (fitz).
+    Extract text + images from PDFs using PyMuPDF (fitz).
 
     Requires ``pymupdf`` (pip install pymupdf).
-    Raises ``ImportError`` with an actionable message if not installed.
+
+    Extraction strategy
+    -------------------
+    Uses ``page.get_text("dict")`` which gives us structured block data
+    (position, font size, bold/italic flags, colour) rather than raw HTML
+    with absolute positioning.  We then:
+
+    1.  Detect two-column layouts and sort blocks in reading order
+        (left column top→bottom, then right column).
+    2.  Map font sizes to semantic heading levels relative to the page's
+        median body-text size, so headings get <h1>–<h4> tags.
+    3.  Preserve bold / italic as <strong> / <em>.
+    4.  Keep only *accent* colours (luminance 0.25–0.85) — dark colours
+        are invisible in dark mode, near-white colours invisible in light mode.
+        Body text inherits the UI theme colour automatically.
+    5.  Render image blocks as base64 <img> tags.
+    6.  Fall back to plain ``get_text("text")`` if dict extraction fails.
     """
+
+    # ── PyMuPDF font-flag bitmask constants ───────────────────────────────────
+    _FLAG_ITALIC = 1 << 1   # 2
+    _FLAG_BOLD   = 1 << 4   # 16
+
+    # ── Heading detection: (size_ratio_vs_body, html_heading_level) ───────────
+    # Tuned for typical document base sizes (10–12 pt body text).
+    # e.g. base=11pt → h4≥12.3pt, h3≥14.3pt, h2≥17pt, h1≥20.4pt
+    _HEADING_THRESHOLDS: list[tuple[float, int]] = [
+        (1.85, 1),
+        (1.55, 2),
+        (1.30, 3),
+        (1.12, 4),
+    ]
+
+    # ── Colour range for accent preservation ─────────────────────────────────
+    # Luminance outside [_LO, _HI] is stripped so text adapts to the UI theme.
+    # _LUM_LO raised to 0.40: colours with lum 0.25–0.40 (dark greys / dark blues)
+    # look fine on cream paper but become near-invisible on dark backgrounds.
+    # The frontend also strips all inline colours in dark-mode as a second layer.
+    _LUM_LO = 0.40   # below → too dark for dark-mode readability
+    _LUM_HI = 0.85   # above → near-white (invisible in light mode)
+
+    # ── Decorative / structural Unicode characters to strip from span text ────
+    # PDFs exported from Word/Google Docs often use box characters (□ U+25A1) as
+    # checkbox-style list bullets.  They render as floating squares between
+    # paragraphs and add spurious visual noise.
+    _DECO_CHARS: frozenset[str] = frozenset(
+        '□'   # □  WHITE SQUARE  — checkbox bullet (most common)
+        '■'   # ■  BLACK SQUARE
+        '▪'   # ▪  BLACK SMALL SQUARE
+        '▫'   # ▫  WHITE SMALL SQUARE
+        '☐'   # ☐  BALLOT BOX
+        '☑'   # ☑  BALLOT BOX WITH CHECK
+        '☒'   # ☒  BALLOT BOX WITH X
+    )
+
+    # ── Wingdings / Symbol private-use-area (PUA) bullet codepoints ──────────
+    # Word-exported PDFs often use non-Unicode font glyph IDs stored in the
+    # PUA block (U+F000–U+FFFF) to represent bullet characters.  Browsers have
+    # no Wingdings/Symbol font loaded, so these render as blank rectangles.
+    #
+    # Rather than strip them we use them as LIST STRUCTURE MARKERS:
+    # _span_html returns _BULLET_SENTINEL for PUA-bullet-only spans, and
+    # _text_block_html detects that sentinel to emit proper <ul><li> HTML.
+    _PUA_BULLETS: frozenset[str] = frozenset(
+        ''  # Wingdings  ●  (filled circle — most common bullet)
+        ''  # Wingdings  ■  (filled square)
+        ''  # Wingdings  ◆  (filled diamond)
+        ''  # Wingdings  ➤  (right arrow bullet)
+        ''  # Wingdings  ✓  (checkmark bullet)
+    )
+
+    # Internal sentinel returned by _span_html for PUA-bullet-only spans.
+    # Must not appear in normal document text; used only within a single call
+    # to _text_block_html and never written to the final HTML output.
+    _BULLET_SENTINEL: str = "\x00BUL\x00"
+
+    # ==================================================================
+    # Public interface
+    # ==================================================================
 
     def extract_pages(self, file_path: Path) -> list[PageContent]:
         try:
@@ -116,20 +196,353 @@ class PyMuPDFAdapter(IPDFAdapter):
         doc = fitz.open(str(file_path))
         try:
             for page_num, page in enumerate(doc, start=1):
-                try:
-                    text = page.get_text("text")
-                except Exception as exc:
-                    logger.warning(
-                        "PyMuPDF: failed to extract page %d of %s: %s",
-                        page_num, file_path.name, exc,
-                    )
+                html_body = self._page_to_html(page, page_num, file_path.name)
+
+                if html_body:
+                    pages.append(PageContent(page_num=page_num, text=html_body, is_html=True))
                     continue
-                if text.strip():
-                    pages.append(PageContent(page_num=page_num, text=text))
+
+                # Fallback: plain text (e.g. scanned PDFs with no text layer)
+                try:
+                    plain = page.get_text("text").strip()
+                except Exception:
+                    continue
+                if plain:
+                    pages.append(PageContent(page_num=page_num, text=plain, is_html=False))
         finally:
             doc.close()
 
         return pages
+
+    # ==================================================================
+    # Private: page → HTML
+    # ==================================================================
+
+    def _page_to_html(self, page, page_num: int, filename: str) -> str:
+        """Convert one PDF page to clean semantic HTML."""
+        try:
+            data = page.get_text("dict")
+        except Exception as exc:
+            logger.warning(
+                "PyMuPDF: dict extraction failed for page %d of %s: %s",
+                page_num, filename, exc,
+            )
+            return ""
+
+        blocks     = data.get("blocks", [])
+        page_width = float(data.get("width", 595))
+
+        if not blocks:
+            return ""
+
+        base_size     = self._median_font_size(blocks)
+        sorted_blocks = self._reading_order(blocks, page_width)
+
+        parts: list[str] = []
+        for block in sorted_blocks:
+            btype = block.get("type", 0)
+            if btype == 1:   # image
+                html = self._image_block_html(block, page_num, filename)
+            else:             # text (type 0)
+                html = self._text_block_html(block, base_size)
+            if html:
+                parts.append(html)
+
+        return "\n".join(parts)
+
+    # ==================================================================
+    # Private: reading-order sort
+    # ==================================================================
+
+    def _is_two_column(self, blocks: list, page_width: float) -> bool:
+        """
+        Heuristic: True when most text blocks fit into two horizontal columns.
+
+        A block is "clearly left" when its right edge < mid+margin.
+        A block is "clearly right" when its left edge > mid-margin.
+        A block is "full-width" when it spans across the midpoint.
+
+        Two-column is detected when fewer than 20 % of blocks are full-width
+        AND both columns contain at least 25 % of blocks each.
+        """
+        text_blocks = [b for b in blocks if b.get("type") == 0]
+        n = len(text_blocks)
+        if n < 6:
+            return False
+
+        mid    = page_width / 2
+        margin = page_width * 0.06   # 6 % tolerance
+
+        full_width = sum(
+            1 for b in text_blocks
+            if b["bbox"][0] < mid - margin and b["bbox"][2] > mid + margin
+        )
+        left_only  = sum(1 for b in text_blocks if b["bbox"][2] <= mid + margin)
+        right_only = sum(1 for b in text_blocks if b["bbox"][0] >= mid - margin)
+
+        return (
+            full_width < n * 0.20 and
+            left_only  >= n * 0.25 and
+            right_only >= n * 0.25
+        )
+
+    def _reading_order(self, blocks: list, page_width: float) -> list:
+        """
+        Return blocks sorted in natural reading order.
+
+        Two-column layout: left column (top→bottom) then right column.
+        Single-column: top→bottom, left→right within the same Y band (rounded to 5pt).
+        """
+        relevant = [b for b in blocks if b.get("type") in (0, 1)]
+
+        if self._is_two_column(relevant, page_width):
+            mid = page_width / 2
+            left  = sorted(
+                [b for b in relevant if b["bbox"][0] < mid],
+                key=lambda b: (b["bbox"][1], b["bbox"][0]),
+            )
+            right = sorted(
+                [b for b in relevant if b["bbox"][0] >= mid],
+                key=lambda b: (b["bbox"][1], b["bbox"][0]),
+            )
+            return left + right
+
+        return sorted(relevant, key=lambda b: (round(b["bbox"][1] / 5) * 5, b["bbox"][0]))
+
+    # ==================================================================
+    # Private: block → HTML helpers
+    # ==================================================================
+
+    def _median_font_size(self, blocks: list) -> float:
+        """Median font size across all non-empty text spans on the page."""
+        sizes: list[float] = []
+        for b in blocks:
+            if b.get("type") != 0:
+                continue
+            for line in b.get("lines", []):
+                for span in line.get("spans", []):
+                    if span.get("text", "").strip() and span.get("size", 0) > 0:
+                        sizes.append(float(span["size"]))
+        if not sizes:
+            return 11.0
+        sizes.sort()
+        return sizes[len(sizes) // 2]
+
+    def _heading_level(self, font_size: float, base: float) -> int | None:
+        """Return heading level 1-4 if font_size is notably larger than body, else None."""
+        ratio = font_size / base if base > 0 else 1.0
+        for threshold, level in self._HEADING_THRESHOLDS:
+            if ratio >= threshold:
+                return level
+        return None
+
+    @staticmethod
+    def _color_rgb(color) -> tuple[int, int, int]:
+        """
+        Convert a PyMuPDF span colour to an (R, G, B) tuple of integers 0-255.
+
+        PyMuPDF may return colour as an int (24-bit RGB) or a float tuple.
+        """
+        if isinstance(color, int):
+            return (color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF
+        if isinstance(color, (list, tuple)) and len(color) >= 3:
+            return int(color[0] * 255), int(color[1] * 255), int(color[2] * 255)
+        return 0, 0, 0   # default — treated as dark, stripped
+
+    @staticmethod
+    def _luminance(r: int, g: int, b: int) -> float:
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+
+    def _span_html(self, span: dict, base: float) -> str:
+        """Render a single text span as an HTML fragment."""
+        text = span.get("text", "")
+        if not text:
+            return ""
+
+        # PUA bullet detection: if the span contains *only* Wingdings/Symbol
+        # private-use-area bullet glyphs, return the internal sentinel so
+        # _text_block_html can build <ul><li> structure around it.
+        stripped = text.strip()
+        if stripped and all(c in self._PUA_BULLETS for c in stripped):
+            return self._BULLET_SENTINEL
+
+        # Strip decorative box / ballot characters that PDFs use as structural
+        # bullet markers — they render as floating □ squares between paragraphs.
+        text = "".join(c for c in text if c not in self._DECO_CHARS)
+        if not text:
+            return ""
+
+        flags = int(span.get("flags", 0))
+        size  = float(span.get("size", base))
+
+        # ── Inline styles ──────────────────────────────────────────────────────
+        styles: list[str] = []
+
+        # Relative font size (only if notably different from body)
+        ratio = size / base if base > 0 else 1.0
+        if ratio < 0.82:
+            styles.append("font-size:0.82em")
+        elif ratio > 1.15:
+            em = min(round(ratio * 10) / 10, 2.5)
+            styles.append(f"font-size:{em}em")
+
+        # Accent colour — keep only if luminance is in the "readable on both themes" band
+        raw_color = span.get("color", 0)
+        r, g, b = self._color_rgb(raw_color)
+        lum = self._luminance(r, g, b)
+        if self._LUM_LO < lum < self._LUM_HI:
+            styles.append(f"color:#{r:02x}{g:02x}{b:02x}")
+
+        # ── Markup ────────────────────────────────────────────────────────────
+        inner = html_escape(text)
+        if flags & self._FLAG_BOLD:
+            inner = f"<strong>{inner}</strong>"
+        if flags & self._FLAG_ITALIC:
+            inner = f"<em>{inner}</em>"
+
+        if styles:
+            return f'<span style="{";".join(styles)}">{inner}</span>'
+        return inner
+
+    def _text_block_html(self, block: dict, base: float) -> str:
+        """Render a text block as a heading or paragraph."""
+        lines = block.get("lines", [])
+        if not lines:
+            return ""
+
+        # Dominant font size for heading detection.
+        # Exclude PUA-bullet-only spans — their slightly-larger glyph size would
+        # skew dom_size away from the true body-text reference.
+        sizes: list[float] = [
+            float(span["size"])
+            for line in lines
+            for span in line.get("spans", [])
+            if span.get("text", "").strip()
+            and span.get("size", 0) > 0
+            and not all(c in self._PUA_BULLETS for c in span.get("text", "").strip())
+        ]
+        dom_size = max(set(sizes), key=sizes.count) if sizes else base
+
+        # Determine heading level first so we can choose the right span_base.
+        # For heading blocks we pass dom_size as the reference — that way every
+        # span inside the heading has ratio ≈ 1.0 and _span_html won't emit a
+        # conflicting inline font-size that fights the CSS heading size.
+        level    = self._heading_level(dom_size, base)
+        span_base = dom_size if level else base
+
+        # Build per-line HTML fragments (PUA bullets come back as _BULLET_SENTINEL)
+        line_htmls: list[str] = []
+        for line in lines:
+            spans_html = "".join(self._span_html(s, span_base) for s in line.get("spans", []))
+            if spans_html.strip():
+                line_htmls.append(spans_html)
+
+        # ── List detection ────────────────────────────────────────────────────
+        # If any line is a bullet sentinel this block has list structure.
+        # Delegate to the list builder instead of emitting a flat paragraph.
+        if any(l == self._BULLET_SENTINEL for l in line_htmls):
+            return self._build_list_block_html(line_htmls)
+
+        content = " ".join(line_htmls).strip()
+        if not content:
+            return ""
+
+        if level:
+            return f"<h{level}>{content}</h{level}>"
+        return f"<p>{content}</p>"
+
+    # ── List-block builder ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_bold_only_line(html_line: str) -> bool:
+        """
+        Return True when *all* visible text in the line is inside <strong> tags.
+        Used to detect job-title / section-sub-header lines within a mixed block.
+        """
+        import re
+        without_bold = re.sub(r"<strong>.*?</strong>", "", html_line, flags=re.DOTALL)
+        without_tags = re.sub(r"<[^>]+>", "", without_bold)
+        return bool(html_line.strip()) and not without_tags.strip()
+
+    def _build_list_block_html(self, line_htmls: list[str]) -> str:
+        """
+        Convert a list of per-line HTML fragments that contain _BULLET_SENTINEL
+        markers into proper semantic <ul><li>…</li></ul> HTML.
+
+        Handles two common resume patterns in a single text block:
+
+        Pattern A — flat list (Skills):
+            SENTINEL · Frontend: … · SENTINEL · Backend: … · …
+            → <ul><li>Frontend: …</li><li>Backend: …</li>…</ul>
+
+        Pattern B — grouped list (Experience):
+            <strong>Job Title</strong> · SENTINEL · bullet1-line1 · bullet1-line2
+            · SENTINEL · bullet2 · … · <strong>Next Job</strong> · …
+            → <p><strong>Job Title</strong></p>
+              <ul><li>bullet1-line1 bullet1-line2</li><li>bullet2</li>…</ul>
+              <p><strong>Next Job</strong></p>
+              <ul>…</ul>
+        """
+        SEN = self._BULLET_SENTINEL
+        html_out: list[str] = []
+        in_list = False
+        li_parts: list[str] = []   # lines accumulating into the current <li>
+
+        def _flush_li() -> None:
+            if li_parts:
+                html_out.append(f"<li>{' '.join(li_parts)}</li>")
+                li_parts.clear()
+
+        def _close_list() -> None:
+            nonlocal in_list
+            if in_list:
+                _flush_li()
+                html_out.append("</ul>")
+                in_list = False
+
+        for line in line_htmls:
+            if line == SEN:
+                # Bullet marker: flush any accumulated li content, open list
+                _flush_li()
+                if not in_list:
+                    html_out.append("<ul>")
+                    in_list = True
+                # Next non-sentinel lines form the new <li>
+
+            elif self._is_bold_only_line(line):
+                # Bold-only line = job title / sub-header → close list, emit as <p>
+                _close_list()
+                html_out.append(f"<p>{line}</p>")
+
+            else:
+                # Regular text: accumulate into current <li> if in list,
+                # otherwise emit as a standalone <p>
+                if in_list:
+                    li_parts.append(line)
+                else:
+                    html_out.append(f"<p>{line}</p>")
+
+        _close_list()   # close any trailing open list
+
+        return "\n".join(html_out)
+
+    def _image_block_html(self, block: dict, page_num: int, filename: str) -> str:
+        """Render an image block as a base64 <img> tag wrapped in <figure>."""
+        try:
+            img_bytes = block.get("image")
+            if not img_bytes:
+                return ""
+            ext = block.get("ext", "png").lower()
+            if ext not in ("png", "jpg", "jpeg", "gif", "webp", "bmp"):
+                ext = "png"
+            b64 = base64.b64encode(img_bytes).decode("ascii")
+            return f'<figure><img src="data:image/{ext};base64,{b64}" alt="image" /></figure>'
+        except Exception as exc:
+            logger.debug(
+                "PyMuPDF: failed to encode image on page %d of %s: %s",
+                page_num, filename, exc,
+            )
+            return ""
 
 
 # ---------------------------------------------------------------------------

@@ -23,10 +23,13 @@ SRP: routes only translate HTTP ↔ domain. Business logic lives in KBService.
 from __future__ import annotations
 
 import logging
+import os
+import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from backend.core.dependencies import KBServiceDep
+from backend.core.config import settings as app_config
 from backend.models.schemas import (
     FileAddRequest,
     FileListResponse,
@@ -40,6 +43,9 @@ from backend.models.schemas import (
     ReindexResponse,
 )
 from backend.storage.repositories.base import EntityNotFoundError
+
+# Supported upload extensions (mirrors reader)
+_UPLOAD_EXTS = {".pdf", ".docx", ".txt", ".md", ".csv", ".udf"}
 
 logger = logging.getLogger("knovex.api.kb")
 
@@ -159,6 +165,63 @@ async def add_file(
     """
     try:
         return await svc.add_file(kb_id, body)
+    except Exception as exc:
+        _handle_domain_error(exc)
+
+
+@router.post(
+    "/{kb_id}/upload",
+    response_model=FileRecordResponse,
+    status_code=201,
+    summary="Upload a file to a KB via multipart form (browser-friendly)",
+)
+async def upload_file_to_kb(
+    kb_id: str,
+    file: UploadFile = File(...),
+    svc: KBServiceDep = ...,  # type: ignore[assignment]
+) -> FileRecordResponse:
+    """
+    Accept a multipart file upload, persist it to disk, and register it
+    in the specified Knowledge Base.  Ingestion starts automatically.
+
+    Use this endpoint from web/browser clients instead of the
+    ``POST /files`` path-based endpoint (which requires Electron's native
+    file-picker to resolve an absolute path).
+
+    Supported formats: PDF, DOCX, TXT, MD, CSV, UDF.
+
+    HTTP status codes:
+      - **201** Created — file registered; ingestion started
+      - **400** Unsupported file type, duplicate, or missing filename
+      - **404** Knowledge Base not found
+      - **500** Storage error
+    """
+    filename = file.filename or "upload"
+    suffix = os.path.splitext(filename)[1].lower()
+
+    if not suffix or suffix not in _UPLOAD_EXTS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported file type: '{suffix or '(none)'}'. "
+                f"Supported: {', '.join(sorted(_UPLOAD_EXTS))}"
+            ),
+        )
+
+    # Persist bytes to a stable, collision-safe location
+    upload_dir = app_config.data_dir / "kb_uploads" / kb_id / str(uuid.uuid4())
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = upload_dir / filename
+
+    try:
+        contents = await file.read()
+        dest_path.write_bytes(contents)
+    except Exception as exc:
+        logger.exception("Failed to save uploaded file for KB %s: %s", kb_id, exc)
+        raise HTTPException(status_code=500, detail=f"Storage error: {exc}") from exc
+
+    try:
+        return await svc.add_file(kb_id, FileAddRequest(file_path=str(dest_path)))
     except Exception as exc:
         _handle_domain_error(exc)
 
