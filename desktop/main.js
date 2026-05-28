@@ -34,7 +34,7 @@ const VITE_DEV_URL = 'http://localhost:5173'
 // Port is resolved dynamically in app.on('ready') via findFreePort().
 // Prefer 8765; fall back to any free port the OS assigns if 8765 is occupied.
 let BACKEND_PORT = 8765
-let BACKEND_URL  = `http://localhost:${BACKEND_PORT}`
+let BACKEND_URL  = `http://127.0.0.1:${BACKEND_PORT}`
 let HEALTH_URL   = `${BACKEND_URL}/api/health`
 
 const WINDOW_MIN_WIDTH = 900
@@ -189,7 +189,7 @@ function spawnBackend() {
 
 // ─── Health polling ───────────────────────────────────────────────────────────
 
-function waitForBackend(retries = 40, interval = 500) {
+function waitForBackend(retries = 60, interval = 500) {
   return new Promise((resolve, reject) => {
     let attempts = 0
 
@@ -205,7 +205,7 @@ function waitForBackend(retries = 40, interval = 500) {
         }
       })
       req.on('error', retry)
-      req.setTimeout(400, () => { req.destroy(); retry() })
+      req.setTimeout(3000, () => { req.destroy(); retry() })
     }
 
     const retry = () => {
@@ -468,7 +468,7 @@ app.on('ready', async () => {
 
   // Resolve the backend port before registering IPC (handlers read BACKEND_PORT)
   BACKEND_PORT = await findFreePort(8765)
-  BACKEND_URL  = `http://localhost:${BACKEND_PORT}`
+  BACKEND_URL  = `http://127.0.0.1:${BACKEND_PORT}`
   HEALTH_URL   = `${BACKEND_URL}/api/health`
   console.log(`[app] backend port: ${BACKEND_PORT}`)
 

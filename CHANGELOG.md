@@ -11,6 +11,27 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.5] — 2026-05-29
+
+Fix — health check timeout too short; app never opened despite backend being ready
+
+### Fixed
+
+- **`desktop/main.js` — `waitForBackend()`**
+  - Per-request timeout raised `400 ms → 3 000 ms`: the backend was receiving every
+    health check and responding 200 OK (confirmed in backend.log — 41 consecutive
+    `"GET /api/health" 200 OK` entries) but Electron destroyed the socket at 400 ms
+    before the response arrived, treated every attempt as a failure, and showed the
+    "Backend did not start after 40 attempts" error dialog
+  - Retry count raised `40 → 60` (30 s total window) for extra headroom on slow machines
+  - Health-check URL changed from `http://localhost:PORT` to `http://127.0.0.1:PORT`
+    to bypass any `localhost → ::1` IPv6 resolution that could silently misroute the
+    request on Windows machines where IPv6 loopback is preferred
+- **`frontend/src/api/client.ts`** — `API_BASE` likewise uses `127.0.0.1` (not
+  `localhost`) when reading the port from `window.knovex.backendPort`
+
+---
+
 ## [0.8.4] — 2026-05-29
 
 Fix — dynamic port selection; app survives port 8765 already in use

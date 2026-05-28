@@ -13,7 +13,7 @@ import axios from 'axios'
 // back to the env var or the default port.
 const _electronPort = (window as { knovex?: { backendPort?: number } }).knovex?.backendPort
 export const API_BASE = _electronPort
-  ? `http://localhost:${_electronPort}`
+  ? `http://127.0.0.1:${_electronPort}`
   : (import.meta.env.VITE_API_BASE ?? 'http://localhost:8765')
 
 const apiClient = axios.create({
