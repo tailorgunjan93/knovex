@@ -22,16 +22,14 @@ SRP: routes only handle HTTP concerns (request parsing, status codes,
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
-import shutil
-import tempfile
 import uuid
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
+from backend.core.config import settings as app_config
 from backend.core.dependencies import KBServiceDep, ReaderServiceDep, SettingsServiceDep
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
@@ -41,7 +39,6 @@ from backend.models.schemas import (
     ReaderUploadResponse,
 )
 from backend.storage.repositories.base import EntityNotFoundError
-from backend.core.config import settings as app_config
 
 logger = logging.getLogger("knovex.api.reader")
 

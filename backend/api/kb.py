@@ -28,8 +28,8 @@ import uuid
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from backend.core.dependencies import KBServiceDep
 from backend.core.config import settings as app_config
+from backend.core.dependencies import KBServiceDep
 from backend.models.schemas import (
     FileAddRequest,
     FileListResponse,

@@ -29,6 +29,9 @@ import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+# Optional import — SearchService may not be injected in all contexts
+from typing import TYPE_CHECKING
+
 from backend.adapters.document_parsers import (
     IParagraphAdapter,
     IPDFAdapter,
@@ -46,8 +49,6 @@ from backend.models.schemas import (
 from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.file_repository import IFileRepository
 
-# Optional import — SearchService may not be injected in all contexts
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from backend.core.search_service import SearchService
 
@@ -79,7 +80,7 @@ class ReaderService:
         llm_svc: LLMService,
         pdf_adapter: IPDFAdapter | None = None,
         para_adapter: IParagraphAdapter | None = None,
-        search_svc: "SearchService | None" = None,   # injected for web search support
+        search_svc: SearchService | None = None,   # injected for web search support
     ) -> None:
         self._file_repo = file_repo
         self._backend = backend

@@ -305,17 +305,17 @@ class ChatService:
         # Build an OR query so ANY keyword match scores (AND is too strict for
         # natural-language questions — most words won't appear in the chunk).
         # Filter out short/non-alphanumeric tokens and common stop words.
-        _STOPS = {"the","and","for","are","but","not","you","all","can",
-                  "her","was","one","our","out","day","get","has","him",
-                  "his","how","man","new","now","old","see","two","way",
-                  "who","boy","did","its","let","put","say","she","too",
-                  "use","what","does","this","that","with","have","from",
-                  "they","will","been","were","said","each","which","their",
-                  "about","would","there","could","other","than","then","some"}
+        stops = {"the","and","for","are","but","not","you","all","can",
+                 "her","was","one","our","out","day","get","has","him",
+                 "his","how","man","new","now","old","see","two","way",
+                 "who","boy","did","its","let","put","say","she","too",
+                 "use","what","does","this","that","with","have","from",
+                 "they","will","been","were","said","each","which","their",
+                 "about","would","there","could","other","than","then","some"}
         tokens = [
             w for w in query.split()
             if (len(w) > 2 and w.isalnum() or w.replace("'", "").isalnum())
-            and w.lower() not in _STOPS
+            and w.lower() not in stops
         ]
         safe_query = " OR ".join(tokens) if tokens else query[:50]
 
@@ -366,6 +366,7 @@ class ChatService:
         Falls back to FTS5-only if dense search fails.
         """
         import asyncio as _asyncio
+
         from backend.adapters.vector_index import kb_vector_index
         from backend.core.config import settings as app_cfg
 
@@ -421,7 +422,7 @@ class ChatService:
             return fts_rows
 
         # ── RRF fusion ──────────────────────────────────────────────────────
-        K = 60
+        rrf_k = 60
         scores: dict[str, float] = {}
         row_by_id: dict[str, dict] = {}
 
@@ -430,12 +431,12 @@ class ChatService:
 
         for rank, row in enumerate(fts_rows):
             rid = _rid(row)
-            scores[rid] = scores.get(rid, 0.0) + 1.0 / (K + rank + 1)
+            scores[rid] = scores.get(rid, 0.0) + 1.0 / (rrf_k + rank + 1)
             row_by_id[rid] = row
 
         for rank, row in enumerate(dense_rows):
             rid = _rid(row)
-            scores[rid] = scores.get(rid, 0.0) + 1.0 / (K + rank + 1)
+            scores[rid] = scores.get(rid, 0.0) + 1.0 / (rrf_k + rank + 1)
             row_by_id[rid] = row
 
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)

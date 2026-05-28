@@ -209,7 +209,7 @@ class LLMProvider(ABC):
             )
             latency_ms = round((time.monotonic() - start) * 1000, 1)
             return TestLLMResponse(success=True, latency_ms=latency_ms, model=model)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("[%s] connection test timed out after %.0fs", self.provider_name, timeout)
             return TestLLMResponse(success=False, model=model,
                                    error=f"Connection timed out after {timeout:.0f}s")

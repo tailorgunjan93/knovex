@@ -212,7 +212,7 @@ async def get_llm_models(
 )
 async def get_embedding_model_status() -> EmbeddingModelStatus:
     """Return whether the local all-MiniLM-L6-v2 ONNX model is ready."""
-    from backend.adapters.embedder import model_files_ready, _model_dir
+    from backend.adapters.embedder import _model_dir, model_files_ready
     d = _model_dir()
     return EmbeddingModelStatus(
         ready=model_files_ready(),
@@ -237,6 +237,7 @@ async def download_embedding_model() -> dict:
     Returns immediately; poll /model-status to check readiness.
     """
     import asyncio
+
     from backend.adapters.embedder import download_model, model_files_ready
 
     if model_files_ready():

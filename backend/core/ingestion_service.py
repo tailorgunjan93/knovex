@@ -501,9 +501,10 @@ class IngestionService:
         Compute embeddings synchronously (runs in thread-pool executor).
         Updates the embedding BLOB column for each chunk row.
         """
-        import asyncio
         import sqlite3
+
         import numpy as np
+
         from backend.core.config import settings as app_cfg
 
         texts = [c.content for c in chunks if c.content]
@@ -515,7 +516,7 @@ class IngestionService:
         # Write directly with sync sqlite3 (we're in a thread, not async context)
         conn = sqlite3.connect(str(app_cfg.db_path))
         try:
-            for cid, vec in zip(chunk_ids, vectors):
+            for cid, vec in zip(chunk_ids, vectors, strict=False):
                 blob = np.array(vec, dtype=np.float32).tobytes()
                 conn.execute("UPDATE chunks SET embedding = ? WHERE id = ?", (blob, cid))
             conn.commit()

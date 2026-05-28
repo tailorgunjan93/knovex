@@ -28,8 +28,8 @@ import base64
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 from html import escape as html_escape
+from pathlib import Path
 
 logger = logging.getLogger("knovex.adapters.docs")
 
@@ -440,7 +440,7 @@ class PyMuPDFAdapter(IPDFAdapter):
         # ── List detection ────────────────────────────────────────────────────
         # If any line is a bullet sentinel this block has list structure.
         # Delegate to the list builder instead of emitting a flat paragraph.
-        if any(l == self._BULLET_SENTINEL for l in line_htmls):
+        if any(ln == self._BULLET_SENTINEL for ln in line_htmls):
             return self._build_list_block_html(line_htmls)
 
         content = " ".join(line_htmls).strip()
@@ -483,7 +483,7 @@ class PyMuPDFAdapter(IPDFAdapter):
               <p><strong>Next Job</strong></p>
               <ul>…</ul>
         """
-        SEN = self._BULLET_SENTINEL
+        sen = self._BULLET_SENTINEL
         html_out: list[str] = []
         in_list = False
         li_parts: list[str] = []   # lines accumulating into the current <li>
@@ -501,7 +501,7 @@ class PyMuPDFAdapter(IPDFAdapter):
                 in_list = False
 
         for line in line_htmls:
-            if line == SEN:
+            if line == sen:
                 # Bullet marker: flush any accumulated li content, open list
                 _flush_li()
                 if not in_list:
