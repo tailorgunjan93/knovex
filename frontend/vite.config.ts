@@ -24,4 +24,10 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
   },
+  test: {
+    // Extend Vitest's expect with @testing-library/jest-dom matchers
+    setupFiles: ['./src/setupTests.ts'],
+    environment: 'jsdom',
+    globals: true,
+  },
 })
