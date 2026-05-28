@@ -11,6 +11,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.2] — 2026-05-29
+
+Hotfix — port conflict with uvicorn `--reload` parent process
+
+### Fixed
+
+- **`desktop/main.js` — `clearBackendPort()` rewritten** to handle the case where a
+  `uvicorn --reload` dev server is running:
+  - Previously only the *worker* process (the one listening on port 8765) was killed;
+    the invisible *reloader parent* immediately spawned a replacement worker, creating a
+    race condition that let the port stay occupied
+  - Now resolves the worker's parent PID via `wmic` (Windows) before killing, then kills
+    the parent with `/F /T` (force + full process tree) so no respawn can occur
+  - Retries up to 4 times with a 400 ms gap in case the OS needs extra time to release
+    the socket
+  - macOS/Linux path likewise retries up to 4 times (`lsof -ti` returns all PIDs in the
+    process group, so one pass is usually enough)
+
+---
+
 ## [0.8.1] — 2026-05-29
 
 Hotfix — port conflict on app launch

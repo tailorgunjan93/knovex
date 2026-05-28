@@ -72,32 +72,68 @@ function getBackendExecutable() {
 /**
  * Kill any existing process holding BACKEND_PORT so the freshly-installed app
  * doesn't collide with a leftover dev uvicorn or a previous Knovex instance.
- * Runs synchronously (spawnSync) so the backend spawn never races the cleanup.
- * Safe to call even when nothing is holding the port — exits silently.
+ *
+ * Handles the uvicorn --reload case: the reloader PARENT process is not the one
+ * listening on the port, but it will immediately respawn a new worker if only the
+ * child is killed.  We therefore:
+ *   1. Look up the listening PID
+ *   2. Resolve its parent PID via WMIC (Windows) / /proc (Linux/macOS)
+ *   3. Kill the parent with /T (tree) so the whole process group is gone
+ *   4. Retry up to 4 times with a 400 ms gap to handle any respawning
+ *
+ * Runs synchronously so the backend spawn never races the cleanup.
+ * Non-fatal — any error is swallowed and logged as a warning.
  */
 function clearBackendPort() {
   try {
     const { spawnSync } = require('child_process')
+
     if (process.platform === 'win32') {
-      // netstat → find LISTENING PID → taskkill
-      const ns = spawnSync('netstat', ['-ano'], { encoding: 'utf8', timeout: 3000 })
-      const match = ns.stdout
-        .split('\n')
-        .find(l => l.includes(`:${BACKEND_PORT}`) && l.includes('LISTENING'))
-      if (match) {
-        const pid = match.trim().split(/\s+/).pop()
-        if (pid && /^\d+$/.test(pid) && pid !== '0') {
-          spawnSync('taskkill', ['/PID', pid, '/F'], { timeout: 3000 })
-          console.log(`[backend] cleared stale process on port ${BACKEND_PORT} (PID ${pid})`)
+      for (let attempt = 0; attempt < 4; attempt++) {
+        // 1. Find the PID listening on BACKEND_PORT
+        const ns = spawnSync('netstat', ['-ano'], { encoding: 'utf8', timeout: 3000 })
+        const match = ns.stdout
+          .split('\n')
+          .find(l => l.includes(`:${BACKEND_PORT}`) && l.includes('LISTENING'))
+        if (!match) break  // port is free — done
+
+        const workerPid = match.trim().split(/\s+/).pop()
+        if (!workerPid || !/^\d+$/.test(workerPid) || workerPid === '0') break
+
+        // 2. Resolve the parent PID BEFORE killing the worker
+        let parentPid = null
+        try {
+          const wmic = spawnSync(
+            'wmic', ['process', 'where', `processid=${workerPid}`, 'get', 'parentprocessid', '/value'],
+            { encoding: 'utf8', timeout: 3000 },
+          )
+          const m = wmic.stdout.match(/ParentProcessId=(\d+)/)
+          if (m) parentPid = m[1]
+        } catch { /* wmic unavailable on some Windows SKUs — not fatal */ }
+
+        // 3. Kill worker + its whole parent tree (handles uvicorn --reload parent)
+        spawnSync('taskkill', ['/PID', workerPid, '/F'], { timeout: 3000 })
+        console.log(`[backend] killed worker PID ${workerPid} on port ${BACKEND_PORT} (attempt ${attempt + 1})`)
+
+        if (parentPid && parentPid !== '0' && parentPid !== '4' && parentPid !== workerPid) {
+          spawnSync('taskkill', ['/PID', parentPid, '/F', '/T'], { timeout: 3000 })
+          console.log(`[backend] killed parent PID ${parentPid} (tree)`)
         }
+
+        // 4. Brief pause — gives the OS time to release the socket
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400)
       }
     } else {
-      // macOS / Linux: lsof -ti :<port> | xargs kill -9
-      const lsof = spawnSync('lsof', ['-ti', `:${BACKEND_PORT}`], { encoding: 'utf8', timeout: 3000 })
-      const pids = lsof.stdout.trim().split('\n').filter(Boolean)
-      for (const pid of pids) {
-        spawnSync('kill', ['-9', pid], { timeout: 3000 })
-        console.log(`[backend] cleared stale process on port ${BACKEND_PORT} (PID ${pid})`)
+      // macOS / Linux: lsof -ti :<port> returns all PIDs (worker + reloader parent)
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const lsof = spawnSync('lsof', ['-ti', `:${BACKEND_PORT}`], { encoding: 'utf8', timeout: 3000 })
+        const pids = lsof.stdout.trim().split('\n').filter(Boolean)
+        if (pids.length === 0) break  // port is free — done
+        for (const p of pids) {
+          spawnSync('kill', ['-9', p], { timeout: 3000 })
+          console.log(`[backend] killed PID ${p} on port ${BACKEND_PORT} (attempt ${attempt + 1})`)
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400)
       }
     }
   } catch (e) {
