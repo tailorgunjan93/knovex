@@ -1,18 +1,22 @@
 name: Package
 
-# Triggered when a release tag is pushed (e.g. v0.7.1).
-# Builds distributable installers for Windows, macOS, and Linux
-# and uploads them as release assets.
+# Triggered when a release tag is pushed (e.g. v0.8.2).
+# Builds distributable installers for Windows, macOS, and Linux,
+# then publishes them — plus the auto-updater metadata (latest.yml) —
+# directly to the GitHub Release via electron-builder --publish always.
 #
 # Required GitHub secrets:
-#   (none for unsigned builds)
+#   (none for unsigned builds — GITHUB_TOKEN is provided automatically)
 #   APPLE_ID, APPLE_ID_PASSWORD, APPLE_TEAM_ID  — macOS notarisation (optional)
 #   WIN_CSC_LINK, WIN_CSC_KEY_PASSWORD            — Windows code signing (optional)
 #
-# Produced artifacts (stable download URLs via /releases/latest/download/):
+# Produced release assets (stable download URLs via /releases/latest/download/):
 #   Knovex-Setup-<version>.exe          Windows NSIS installer
+#   latest.yml                          Windows auto-updater metadata
 #   Knovex-<version>.dmg                macOS DMG
+#   latest-mac.yml                      macOS auto-updater metadata
 #   Knovex-<version>.AppImage           Linux AppImage (portable)
+#   latest-linux.yml                    Linux auto-updater metadata
 #   knovex_<version>_amd64.deb          Linux Debian package
 
 on:
@@ -23,6 +27,9 @@ on:
 jobs:
   # ─── Build on each target platform ──────────────────────────────────────────
   build:
+    permissions:
+      contents: write   # electron-builder --publish always needs this to upload release assets
+
     strategy:
       fail-fast: false
       matrix:
@@ -120,32 +127,36 @@ jobs:
         working-directory: desktop
         run: npm ci
 
+      # --publish always  →  electron-builder uploads installer + latest*.yml
+      # to the GitHub Release automatically, enabling electron-updater auto-update.
       - name: Package with electron-builder (AppImage)
         if: matrix.platform == 'linux'
         working-directory: desktop
-        run: npx electron-builder --linux AppImage --publish never
+        run: npx electron-builder --linux AppImage --publish always
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Package with electron-builder (deb)
         if: matrix.platform == 'linux-deb'
         working-directory: desktop
-        run: npx electron-builder --linux deb --publish never
+        run: npx electron-builder --linux deb --publish always
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Package with electron-builder (win/mac)
         if: "!startsWith(matrix.platform, 'linux')"
         working-directory: desktop
-        run: npm run build:${{ matrix.platform }}
+        run: npx electron-builder --${{ matrix.platform }} --publish always
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       # ── Verify installer was produced ─────────────────────────────────────
       - name: Verify installer artifact exists
         shell: bash
         run: |
-          # Use find — portable across bash 3.2 (macOS), bash 5, and Windows Git Bash
           count=$(find desktop/release/ -maxdepth 1 -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" 2>/dev/null | wc -l)
           if [ "$count" -eq 0 ]; then
             echo "ERROR: No installer found in desktop/release/"
@@ -155,44 +166,16 @@ jobs:
           fi
           echo "Installer artifact OK ($count file(s) found):"
           find desktop/release/ -maxdepth 1 \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) -exec ls -lh {} \;
+          echo "Auto-updater metadata:"
+          find desktop/release/ -maxdepth 1 -name "latest*.yml" -exec ls -lh {} \; || echo "(no latest*.yml — check publish step)"
 
-      # ── Upload installer as artifact ──────────────────────────────────────
+      # ── Upload installer as GitHub Actions artifact (for direct download) ──
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_glob }}
+          path: |
+            ${{ matrix.artifact_glob }}
+            desktop/release/latest*.yml
           if-no-files-found: error
           retention-days: 30
-
-  # ─── Attach artifacts to GitHub Release ─────────────────────────────────────
-  release:
-    name: Attach to GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist/
-
-      - name: List downloaded files
-        run: find dist/ -type f | sort
-
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/**/*.exe
-            dist/**/*.dmg
-            dist/**/*.AppImage
-            dist/**/*.deb
-          fail_on_unmatched_files: false
-          generate_release_notes: true

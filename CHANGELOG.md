@@ -11,6 +11,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.3] — 2026-05-29
+
+Hotfix — enable auto-updater by publishing `latest.yml` to GitHub Releases
+
+### Fixed
+
+- **`.github/workflows/package.yml`** — switched electron-builder from `--publish never`
+  to `--publish always` with `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`
+  - electron-builder now uploads both the installer **and** the platform metadata file
+    (`latest.yml` / `latest-mac.yml` / `latest-linux.yml`) directly to the GitHub Release
+  - `electron-updater` in the installed app checks for `latest.yml` on startup;
+    without it the auto-updater silently did nothing — the banner/restart flow in
+    `AppShell.tsx` was already complete but had no update signal to act on
+  - Removed the now-redundant manual `release` job (electron-builder handles the upload)
+  - Added `permissions: contents: write` to the `build` job
+  - `Upload installer artifact` step also captures `latest*.yml` for direct download
+    from the Actions run
+
+---
+
 ## [0.8.2] — 2026-05-29
 
 Hotfix — port conflict with uvicorn `--reload` parent process
