@@ -7,7 +7,14 @@
 
 import axios from 'axios'
 
-export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8765'
+// In the packaged Electron app, window.knovex.backendPort holds the port the
+// backend actually bound to (8765, or a fallback if 8765 was already in use).
+// In the Vite dev server the window.knovex bridge doesn't exist, so we fall
+// back to the env var or the default port.
+const _electronPort = (window as { knovex?: { backendPort?: number } }).knovex?.backendPort
+export const API_BASE = _electronPort
+  ? `http://localhost:${_electronPort}`
+  : (import.meta.env.VITE_API_BASE ?? 'http://localhost:8765')
 
 const apiClient = axios.create({
   baseURL: `${API_BASE}/api`,

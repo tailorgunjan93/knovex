@@ -29,10 +29,13 @@ const { autoUpdater } = require('electron-updater')
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const IS_DEV = process.argv.includes('--dev') || !app.isPackaged
-const BACKEND_PORT = 8765
-const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
-const HEALTH_URL = `${BACKEND_URL}/api/health`
 const VITE_DEV_URL = 'http://localhost:5173'
+
+// Port is resolved dynamically in app.on('ready') via findFreePort().
+// Prefer 8765; fall back to any free port the OS assigns if 8765 is occupied.
+let BACKEND_PORT = 8765
+let BACKEND_URL  = `http://localhost:${BACKEND_PORT}`
+let HEALTH_URL   = `${BACKEND_URL}/api/health`
 
 const WINDOW_MIN_WIDTH = 900
 const WINDOW_MIN_HEIGHT = 600
@@ -70,82 +73,38 @@ function getBackendExecutable() {
 }
 
 /**
- * Kill any existing process holding BACKEND_PORT so the freshly-installed app
- * doesn't collide with a leftover dev uvicorn or a previous Knovex instance.
+ * Find a free TCP port on 127.0.0.1.
  *
- * Handles the uvicorn --reload case: the reloader PARENT process is not the one
- * listening on the port, but it will immediately respawn a new worker if only the
- * child is killed.  We therefore:
- *   1. Look up the listening PID
- *   2. Resolve its parent PID via WMIC (Windows) / /proc (Linux/macOS)
- *   3. Kill the parent with /T (tree) so the whole process group is gone
- *   4. Retry up to 4 times with a 400 ms gap to handle any respawning
+ * Tries `preferred` first (default 8765).  If it is already in use, asks the
+ * OS to assign any available port by binding to port 0 — this always succeeds
+ * and guarantees the app starts even when another process owns 8765.
  *
- * Runs synchronously so the backend spawn never races the cleanup.
- * Non-fatal — any error is swallowed and logged as a warning.
+ * @param {number} preferred - Port to try first.
+ * @returns {Promise<number>}  The port that was actually free.
  */
-function clearBackendPort() {
-  try {
-    const { spawnSync } = require('child_process')
-
-    if (process.platform === 'win32') {
-      for (let attempt = 0; attempt < 4; attempt++) {
-        // 1. Find the PID listening on BACKEND_PORT
-        const ns = spawnSync('netstat', ['-ano'], { encoding: 'utf8', timeout: 3000 })
-        const match = ns.stdout
-          .split('\n')
-          .find(l => l.includes(`:${BACKEND_PORT}`) && l.includes('LISTENING'))
-        if (!match) break  // port is free — done
-
-        const workerPid = match.trim().split(/\s+/).pop()
-        if (!workerPid || !/^\d+$/.test(workerPid) || workerPid === '0') break
-
-        // 2. Resolve the parent PID BEFORE killing the worker
-        let parentPid = null
-        try {
-          const wmic = spawnSync(
-            'wmic', ['process', 'where', `processid=${workerPid}`, 'get', 'parentprocessid', '/value'],
-            { encoding: 'utf8', timeout: 3000 },
-          )
-          const m = wmic.stdout.match(/ParentProcessId=(\d+)/)
-          if (m) parentPid = m[1]
-        } catch { /* wmic unavailable on some Windows SKUs — not fatal */ }
-
-        // 3. Kill worker + its whole parent tree (handles uvicorn --reload parent)
-        spawnSync('taskkill', ['/PID', workerPid, '/F'], { timeout: 3000 })
-        console.log(`[backend] killed worker PID ${workerPid} on port ${BACKEND_PORT} (attempt ${attempt + 1})`)
-
-        if (parentPid && parentPid !== '0' && parentPid !== '4' && parentPid !== workerPid) {
-          spawnSync('taskkill', ['/PID', parentPid, '/F', '/T'], { timeout: 3000 })
-          console.log(`[backend] killed parent PID ${parentPid} (tree)`)
-        }
-
-        // 4. Brief pause — gives the OS time to release the socket
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400)
-      }
-    } else {
-      // macOS / Linux: lsof -ti :<port> returns all PIDs (worker + reloader parent)
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const lsof = spawnSync('lsof', ['-ti', `:${BACKEND_PORT}`], { encoding: 'utf8', timeout: 3000 })
-        const pids = lsof.stdout.trim().split('\n').filter(Boolean)
-        if (pids.length === 0) break  // port is free — done
-        for (const p of pids) {
-          spawnSync('kill', ['-9', p], { timeout: 3000 })
-          console.log(`[backend] killed PID ${p} on port ${BACKEND_PORT} (attempt ${attempt + 1})`)
-        }
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400)
-      }
-    }
-  } catch (e) {
-    // Non-fatal — best-effort cleanup only
-    console.warn('[backend] clearBackendPort warning:', e.message)
-  }
+function findFreePort(preferred = 8765) {
+  return new Promise((resolve) => {
+    const net = require('net')
+    const probe = net.createServer()
+    probe.listen(preferred, '127.0.0.1', () => {
+      // Preferred port is free — claim it
+      probe.close(() => resolve(preferred))
+    })
+    probe.on('error', () => {
+      // Preferred port is busy — let the OS pick any free port
+      const fallback = net.createServer()
+      fallback.listen(0, '127.0.0.1', () => {
+        const port = fallback.address().port
+        fallback.close(() => {
+          console.log(`[backend] port ${preferred} busy — using ${port} instead`)
+          resolve(port)
+        })
+      })
+    })
+  })
 }
 
 function spawnBackend() {
-  // Clear any stale process on the backend port before spawning our own
-  clearBackendPort()
-
   const { executable, args } = getBackendExecutable()
   // In production, __dirname resolves to inside app.asar — a virtual path the OS
   // does not recognise as a real directory.  Passing it as `cwd` to spawn() causes
@@ -186,7 +145,8 @@ function spawnBackend() {
   for (const key of Object.keys(backendEnv)) {
     if (/^PYTHON/i.test(key)) delete backendEnv[key]
   }
-  backendEnv.PYTHONUNBUFFERED = '1'  // re-add the one we actually want
+  backendEnv.PYTHONUNBUFFERED    = '1'              // re-add the one we actually want
+  backendEnv.KNOVEX_BACKEND_PORT = String(BACKEND_PORT) // tell the binary which port to bind
 
   backendProcess = spawn(executable, args, {
     cwd,
@@ -479,6 +439,9 @@ function registerIpcHandlers() {
   // App version
   ipcMain.handle('app:version', () => app.getVersion())
 
+  // Backend port — synchronous so preload can read it before any renderer code runs
+  ipcMain.on('app:backendPort', (event) => { event.returnValue = BACKEND_PORT })
+
   // Auto-update: quit and install the downloaded update
   ipcMain.on('app:install-update', () => {
     app.isQuitting = true
@@ -502,6 +465,12 @@ function setupFileDrop() {
 
 app.on('ready', async () => {
   console.log('[app] Knovex starting (dev:', IS_DEV, ')')
+
+  // Resolve the backend port before registering IPC (handlers read BACKEND_PORT)
+  BACKEND_PORT = await findFreePort(8765)
+  BACKEND_URL  = `http://localhost:${BACKEND_PORT}`
+  HEALTH_URL   = `${BACKEND_URL}/api/health`
+  console.log(`[app] backend port: ${BACKEND_PORT}`)
 
   registerIpcHandlers()
   setupFileDrop()

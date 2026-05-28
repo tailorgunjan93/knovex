@@ -35,6 +35,13 @@ interface KnovexAPI {
   /** App version from package.json */
   appVersion: () => Promise<string>
 
+  /**
+   * The TCP port the backend is actually listening on.
+   * Normally 8765; may be a different port if 8765 was already in use at launch.
+   * Read synchronously by preload.js — always available before any renderer code runs.
+   */
+  backendPort: number
+
   /** Subscribe to file-drop events from the main process */
   onFileDrop: (callback: (paths: string[]) => void) => () => void
 

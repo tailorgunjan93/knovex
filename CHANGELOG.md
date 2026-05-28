@@ -11,6 +11,31 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.4] — 2026-05-29
+
+Fix — dynamic port selection; app survives port 8765 already in use
+
+### Changed
+
+- **`desktop/main.js`** — replaced `clearBackendPort()` (process-killing approach, fragile)
+  with `findFreePort()` (pure Node.js `net` probe, always reliable):
+  - Tries port 8765 first by briefly binding to it; if free, uses it
+  - If 8765 is occupied by *anything* (dev server, another app, leftover process),
+    immediately falls back to an OS-assigned free port — no killing, no race conditions
+  - Dynamic port is stored in `let BACKEND_PORT` and passed to the backend via
+    `KNOVEX_BACKEND_PORT` env var (read by pydantic-settings with `KNOVEX_` prefix)
+  - Adds `ipcMain.on('app:backendPort', ...)` synchronous IPC handler so the renderer
+    always knows the actual port before any API call is made
+- **`desktop/preload.js`** — exposes `window.knovex.backendPort` (number, synchronous)
+  resolved via `ipcRenderer.sendSync('app:backendPort')` in preload — available
+  immediately, before any renderer JS runs
+- **`frontend/src/api/client.ts`** — `API_BASE` now reads `window.knovex?.backendPort`
+  first; falls back to `VITE_API_BASE` env var or `http://localhost:8765` for the
+  dev server where the Electron bridge is absent
+- **`frontend/src/types/electron.d.ts`** — added `backendPort: number` to `KnovexAPI`
+
+---
+
 ## [0.8.3] — 2026-05-29
 
 Hotfix — enable auto-updater by publishing `latest.yml` to GitHub Releases

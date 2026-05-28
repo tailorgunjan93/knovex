@@ -9,7 +9,18 @@
 
 const { contextBridge, ipcRenderer } = require('electron')
 
+// Resolve the actual backend port synchronously — this value is set by main.js
+// in app.on('ready') before the BrowserWindow is created, so it is always valid
+// by the time any renderer/preload code runs.
+const _backendPort = ipcRenderer.sendSync('app:backendPort')
+
 contextBridge.exposeInMainWorld('knovex', {
+  /**
+   * The port the backend is actually listening on.
+   * Normally 8765; may differ if that port was already in use at launch.
+   */
+  backendPort: _backendPort,
+
   /**
    * Open the native file picker and return selected file paths.
    * @param {object} options - Options for the file dialog.
