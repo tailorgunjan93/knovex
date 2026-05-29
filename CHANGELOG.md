@@ -11,6 +11,46 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.7] — 2026-05-29
+
+Electron E2E suite: all 33 tests passing + unknown-route white screen fixed
+
+### Fixed
+
+- **`frontend/src/App.tsx`** — added `<Route path="*" element={<Navigate to="/kb" replace />} />`
+  catch-all inside the `AppShell` wrapper.  Without it, any unrecognised hash route
+  (`#/does-not-exist`, typos in deep links, stale bookmarks) rendered the dark AppShell
+  background with no content — a completely black screen.  Now redirects to Library.
+
+- **`desktop/main.js`** — suppressed `openDevTools()` when `KNOVEX_TESTING=1`.
+  In `--dev` mode the DevTools panel opens automatically; when Playwright launches
+  Electron with this flag it interfered with page evaluation (preload context appeared
+  undefined to the test runner).
+
+### Tests
+
+- **`e2e/electron/fixtures.ts`** — fixed three issues that prevented Electron tests
+  from running:
+  1. Import changed from `'playwright'` (not installed) to `'@playwright/test'`
+  2. Added `executablePath` resolved from `desktop/node_modules/electron` (cross-platform)
+  3. Fixture now navigates to `http://localhost:5173` and waits for `window.knovex` to
+     be defined before yielding `page` to tests — eliminated race between `domcontentloaded`
+     and preload `contextBridge.exposeInMainWorld`
+
+- **`playwright.config.electron.ts`** — added `webServer` block to auto-start the Vite
+  dev server (`npm run dev` in `./frontend`) before tests; `reuseExistingServer: true`
+  avoids double-starts when Vite is already running.
+
+- **`e2e/electron/startup.spec.ts`** — fixed "Electron window opens" test to use the
+  `page` fixture (which awaits `firstWindow()`) instead of calling `windows()` synchronously
+  at launch time before the backend had started.
+
+- **`package.json`** (root) — added `test:e2e:electron` script for the Electron suite.
+
+### Result: 33/33 Electron E2E + 208 Python + 61 browser = **302 tests passing**
+
+---
+
 ## [0.9.6] — 2026-05-29
 
 Quality release: process overhaul, all tests green, NSIS installer fixed

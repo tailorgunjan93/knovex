@@ -35,6 +35,8 @@ export default function App() {
           <Route path="/learn/*"    element={<LearnPage />} />
           <Route path="/progress/*" element={<ProgressPage />} />
           <Route path="/settings"   element={<SettingsPage />} />
+          {/* Catch-all: redirect unknown routes to Library instead of blank screen */}
+          <Route path="*" element={<Navigate to="/kb" replace />} />
         </Route>
       </Routes>
     </HashRouter>

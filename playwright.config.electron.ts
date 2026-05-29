@@ -41,8 +41,13 @@ export default defineConfig({
     // Electron tests use electronApp fixture — no baseURL needed
   },
 
-  // No webServer needed: Electron opens a BrowserWindow itself.
-  // In --dev mode it loads from localhost:5173 (Vite dev server).
-  // The Vite server must be running separately before running these tests.
-  // In CI: start it with `npm run dev -- --mode test` before running playwright.
+  // Auto-start the Vite dev server before the Electron tests run.
+  // Electron in --dev mode loads its frontend from http://localhost:5173.
+  webServer: {
+    command: 'npm run dev',
+    cwd: './frontend',
+    url: 'http://localhost:5173',
+    reuseExistingServer: true,   // don't start a second one if already running
+    timeout: 60_000,
+  },
 })

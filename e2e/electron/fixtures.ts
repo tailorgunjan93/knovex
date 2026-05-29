@@ -9,8 +9,7 @@
  *   test('my test', async ({ electronApp, page }) => { ... })
  */
 
-import { test as base, expect } from '@playwright/test'
-import { ElectronApplication, Page, _electron as electron } from 'playwright'
+import { test as base, expect, ElectronApplication, Page, _electron as electron } from '@playwright/test'
 import path from 'path'
 
 export { expect }
@@ -23,8 +22,15 @@ interface ElectronFixtures {
 export const test = base.extend<ElectronFixtures>({
   electronApp: async ({}, use) => {
     const appPath = path.join(__dirname, '../../desktop/main.js')
+    // The `electron` package's index.js exports the path to its own binary.
+    // Resolving from desktop/node_modules ensures we use the right version.
+    const electronPackage = require(
+      path.join(__dirname, '../../desktop/node_modules/electron')
+    ) as string
+    const electronExe: string = electronPackage
 
     const app = await electron.launch({
+      executablePath: electronExe,
       args: [appPath, '--dev'],
       env: {
         ...process.env,
@@ -42,8 +48,20 @@ export const test = base.extend<ElectronFixtures>({
 
   page: async ({ electronApp }, use) => {
     const win = await electronApp.firstWindow()
-    // Wait for the window to actually be visible
-    await win.waitForLoadState('domcontentloaded')
+    // Navigate to the app root — ensures the window is on the correct URL regardless
+    // of what state it was in when firstWindow() resolved (could be about:blank or
+    // mid-load).  Also works around DevTools-interference on initial load.
+    await win.goto('http://localhost:5173')
+    await win.waitForLoadState('load')
+    // Wait for the Electron preload bridge to be injected.
+    // contextBridge.exposeInMainWorld() runs in the preload before page code,
+    // but the sendSync('app:backendPort') inside it may take a tick — this
+    // waitForFunction ensures window.knovex is truly available before any test runs.
+    await win.waitForFunction(
+      () => typeof (window as any).knovex !== 'undefined',
+      undefined,
+      { timeout: 15_000 },
+    )
     await use(win)
   },
 })

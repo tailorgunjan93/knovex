@@ -282,7 +282,10 @@ function createMainWindow() {
   // Load the app
   if (IS_DEV) {
     mainWindow.loadURL(VITE_DEV_URL)
-    mainWindow.webContents.openDevTools()
+    // Don't open DevTools when running under Playwright (it interferes with test evaluation)
+    if (!process.env.KNOVEX_TESTING) {
+      mainWindow.webContents.openDevTools()
+    }
   } else {
     // frontend/dist is placed in resources/frontend/dist/ via extraResources —
     // process.resourcesPath is the guaranteed real-disk path to resources/.
