@@ -35,12 +35,17 @@ class CerebrasProvider(LLMProvider):
 
     @property
     def model_catalogue(self) -> list[LLMModelInfo]:
-        """Static fallback — used when no API key is available or live fetch fails."""
+        """Static fallback — used when no API key is available or live fetch fails.
+
+        Cerebras model IDs use dot-notation for the version number (llama3.3-70b),
+        NOT hyphen-before-version (llama-3.3-70b).  The two look similar but only
+        the dot form is accepted by the Cerebras API.
+        """
         return [
-            LLMModelInfo(id="cerebras/llama-3.3-70b",                    name="Llama 3.3 70B",       context_window=128_000),
-            LLMModelInfo(id="cerebras/llama-3.1-8b",                     name="Llama 3.1 8B",        context_window=128_000),
-            LLMModelInfo(id="cerebras/qwen-3-32b",                       name="Qwen 3 32B",          context_window=32_768),
-            LLMModelInfo(id="cerebras/deepseek-r1-distill-llama-70b",    name="DeepSeek R1 70B",     context_window=128_000),
+            LLMModelInfo(id="cerebras/llama3.3-70b",                  name="Llama 3.3 70B",   context_window=128_000),
+            LLMModelInfo(id="cerebras/llama3.1-8b",                   name="Llama 3.1 8B",    context_window=128_000),
+            LLMModelInfo(id="cerebras/qwen-3-32b",                    name="Qwen 3 32B",      context_window=32_768),
+            LLMModelInfo(id="cerebras/deepseek-r1-distill-llama-70b", name="DeepSeek R1 70B", context_window=128_000),
         ]
 
     async def fetch_live_models(

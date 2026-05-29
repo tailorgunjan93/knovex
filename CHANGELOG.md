@@ -11,6 +11,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.4] — 2026-05-29
+
+Hotfix — Cerebras model IDs wrong format causing NotFoundError
+
+### Fixed
+
+- **`backend/core/providers/cerebras.py`** — static fallback catalogue had wrong model
+  ID format: `llama-3.3-70b` (hyphen before version) instead of `llama3.3-70b`
+  (dot notation, no hyphen).  The Cerebras API only accepts the dot form.
+  When the live fetch was unavailable the auto-fix effect in the Settings page
+  would pick the first static model, save the wrong ID, and every subsequent
+  completion call would fail with:
+  `CerebrasException - Model llama-3.3-70b does not exist or you do not have access to it`
+  Fixed IDs: `cerebras/llama3.3-70b`, `cerebras/llama3.1-8b` (unchanged: `qwen-3-32b`,
+  `deepseek-r1-distill-llama-70b`).
+
+---
+
 ## [0.9.3] — 2026-05-29
 
 Fix — auto-update "Failed to uninstall old application files" error
