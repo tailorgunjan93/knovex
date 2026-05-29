@@ -11,6 +11,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.9] — 2026-05-29
+
+Fix — tiktoken `cl100k_base` encoding unavailable in packaged binary
+
+### Fixed
+
+- **`backend/knovex-backend.spec`** — added `collect_submodules("tiktoken_ext")` and explicit
+  `hiddenimports` for `tiktoken_ext` + `tiktoken_ext.openai_public`:
+  - tiktoken discovers encoding modules (cl100k\_base, p50k\_base, r50k\_base, …) by calling
+    `pkgutil.iter_modules(tiktoken_ext.__path__)` at runtime.
+  - `tiktoken_ext` is a **namespace package** — PyInstaller does not bundle its submodules
+    unless explicitly told.  Without them the frozen binary raises:
+    `Unknown encoding cl100k_base. Plugins found: [] tiktoken version: 0.13.0`
+    on every "Test connection" / chat / token-counting call.
+  - Fix: `collect_submodules("tiktoken_ext")` ensures PyInstaller bundles the submodule and
+    its frozen importer exposes it to `pkgutil.iter_modules`.
+
+- **`backend/hooks/rthook_tiktoken.py`** — new runtime hook:
+  - Pre-imports `tiktoken_ext.openai_public` before any application code runs, as a
+    belt-and-suspenders guarantee that the encoding constructors are in `sys.modules`
+    even if `pkgutil.iter_modules` behaves differently in the frozen environment.
+
+---
+
 ## [0.8.8] — 2026-05-29
 
 Fix — LiteLLM data files missing from bundle; stale model catalogues; blank model dropdown; correct Vite base path

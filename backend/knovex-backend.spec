@@ -21,7 +21,7 @@ Notes:
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files  # noqa: E402
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules  # noqa: E402
 
 # Project root = parent of the spec file's directory
 ROOT = Path(SPECPATH).parent  # noqa: F821 — SPECPATH injected by PyInstaller
@@ -36,6 +36,14 @@ ROOT = Path(SPECPATH).parent  # noqa: F821 — SPECPATH injected by PyInstaller
 # collect_data_files() picks up ALL json/data files from the litellm package dir.
 _datas = collect_data_files("litellm", include_py_files=False)
 
+# tiktoken uses a namespace-package plugin pattern: registry.py calls
+#   pkgutil.iter_modules(tiktoken_ext.__path__)
+# to discover encoding modules (e.g. tiktoken_ext.openai_public which defines
+# cl100k_base, p50k_base, r50k_base, etc.).  Without explicit collection,
+# PyInstaller does NOT bundle tiktoken_ext submodules and every token-counting
+# call raises:  Unknown encoding cl100k_base. Plugins found: []
+_tiktoken_hidden = collect_submodules("tiktoken_ext")
+
 
 # ---------------------------------------------------------------------------
 # Analysis
@@ -46,7 +54,7 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=[],
     datas=_datas,
-    hiddenimports=[
+    hiddenimports=_tiktoken_hidden + [
         # ── uvicorn internals ─────────────────────────────────────────────
         "uvicorn.logging",
         "uvicorn.loops.auto",
@@ -101,6 +109,13 @@ a = Analysis(
         "litellm",
         "litellm.main",
         "litellm.utils",
+        # ── tiktoken encoding plugins ─────────────────────────────────────
+        # tiktoken discovers encodings (cl100k_base, p50k_base, etc.) by calling
+        # pkgutil.iter_modules(tiktoken_ext.__path__).  Both the namespace
+        # package and its sole submodule must be explicitly listed so the
+        # PyInstaller frozen importer exposes them to pkgutil.
+        "tiktoken_ext",
+        "tiktoken_ext.openai_public",
         # ── pydantic ──────────────────────────────────────────────────────
         "pydantic",
         "pydantic.v1",
@@ -131,7 +146,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(ROOT / "backend" / "hooks" / "rthook_tiktoken.py")],
     excludes=[
         # ── Dev / test tools ──────────────────────────────────────────────
         "pytest",
