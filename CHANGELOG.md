@@ -11,6 +11,29 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.10.0] — 2026-05-29
+
+Fix "Failed to uninstall old application files.: 2" on Windows auto-update
+
+### Bug Fix
+
+**Root cause:** `oneClick: true` in the NSIS config silently installs Knovex to
+`%LOCALAPPDATA%\Programs\Knovex` without showing a directory picker. If the user
+chose a different install path on first install (e.g. `C:\Program Files\Knovex`),
+the Windows registry uninstall key pointed to the custom path, but the NSIS updater
+assumed the default path → `ERROR_FILE_NOT_FOUND` (error code 2) on every update.
+
+**Fix:** Set `oneClick: false` + `allowToChangeInstallationDirectory: true` in
+`desktop/package.json`. The installer now shows a directory picker on every
+install/update, reads the existing install location from the registry, and
+pre-fills the correct path — so the uninstaller always knows where to look.
+
+**Note:** Users currently affected by the mismatched install path still need to
+manually uninstall via Windows Settings and do a fresh install of v0.10.0 once.
+All subsequent updates will work correctly after that.
+
+---
+
 ## [0.9.9] — 2026-05-29
 
 Fix quiz/flashcard generation crashing with "LLM returned invalid JSON: Unterminated string"

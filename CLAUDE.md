@@ -101,12 +101,11 @@ Track every bug found in the packaged app here. Each entry must have:
 | 6 | "filePaths is not iterable" on file upload | IPC returned `string[]` but renderer accessed `.filePaths` on it | v0.9.5 | ❌ TODO |
 | 7 | Groq model list outdated | Static fallback had retired models (llama3-70b-8192, mixtral-8x7b) | v0.9.1 | ❌ TODO |
 | 8 | "LLM returned invalid JSON: Unterminated string" on quiz/flashcard generation | `max_tokens=2048` too low — LLM hit token limit mid-JSON string | v0.9.9 | ✅ `TestTruncatedJsonRepair` (8 tests) |
+| 9 | "Failed to uninstall old application files.: 2" on auto-update | `oneClick: true` NSIS silently installs to `%LOCALAPPDATA%\Programs\Knovex`; if user changed dir on first install the registry uninstall path diverges → `ERROR_FILE_NOT_FOUND` (code 2) | v0.10.0 | ❌ TODO |
 
 ### Open Issues
 
-| # | Symptom | Root Cause | Workaround |
-|---|---------|-----------|------------|
-| 1 | "Failed to uninstall old application files.: 2" | App was installed to `C:\Program Files\` (user changed dir on first install). NSIS updater looks at `%LOCALAPPDATA%\Programs\Knovex` default path — mismatch → ERROR_FILE_NOT_FOUND | Manual uninstall from Windows Settings, then fresh install |
+_(none)_
 
 ---
 
