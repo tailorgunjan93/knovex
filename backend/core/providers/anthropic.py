@@ -15,8 +15,16 @@ class AnthropicProvider(LLMProvider):
     @property
     def model_catalogue(self) -> list[LLMModelInfo]:
         return [
-            LLMModelInfo(id="claude-3-5-sonnet-20241022", name="Claude 3.5 Sonnet", context_window=200_000),
-            LLMModelInfo(id="claude-3-haiku-20240307",    name="Claude 3 Haiku",    context_window=200_000),
+            # ── Claude 4 family (2025) ────────────────────────────────────────
+            LLMModelInfo(id="claude-opus-4-5",            name="Claude Opus 4.5",     context_window=200_000),
+            LLMModelInfo(id="claude-sonnet-4-5",          name="Claude Sonnet 4.5",   context_window=200_000),
+            # ── Claude 3.7 ───────────────────────────────────────────────────
+            LLMModelInfo(id="claude-3-7-sonnet-20250219", name="Claude 3.7 Sonnet",   context_window=200_000),
+            # ── Claude 3.5 family ────────────────────────────────────────────
+            LLMModelInfo(id="claude-3-5-sonnet-20241022", name="Claude 3.5 Sonnet",   context_window=200_000),
+            LLMModelInfo(id="claude-3-5-haiku-20241022",  name="Claude 3.5 Haiku",    context_window=200_000),
+            # ── Claude 3 (legacy) ────────────────────────────────────────────
+            LLMModelInfo(id="claude-3-haiku-20240307",    name="Claude 3 Haiku",      context_window=200_000),
         ]
 
     def _build_completion_kwargs(

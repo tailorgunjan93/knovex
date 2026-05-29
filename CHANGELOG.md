@@ -11,6 +11,45 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.8] — 2026-05-29
+
+Fix — LiteLLM data files missing from bundle; stale model catalogues; blank model dropdown; correct Vite base path
+
+### Fixed
+
+- **`backend/knovex-backend.spec`** — added `collect_data_files("litellm")` to the `datas` list:
+  - LiteLLM reads `model_prices_and_context_window_backup.json` and related JSON files at runtime.
+    PyInstaller does not include them automatically.  Result: every LLM call (chat, learn, summarize,
+    test connection) raised `FileNotFoundError` inside the packaged binary.
+  - `collect_data_files("litellm", include_py_files=False)` collects all JSON/data files from the
+    litellm package and places them under `_internal/litellm/` in the bundle — exactly where litellm
+    expects them via `os.path.dirname(__file__)`.
+
+- **`frontend/vite.config.ts`** — moved `base: './'` from `build:{}` to the **top level** of `defineConfig`:
+  - `base` is a shared Vite option; placing it inside `build:{}` is silently ignored.  The default
+    `base: '/'` produced absolute `/assets/…` paths that resolve to the filesystem root under
+    Electron's `file://` protocol, so the JS bundle was never found and React never mounted.
+  - With `base: './'` at top level, Vite emits `./assets/…` (relative), which loads correctly
+    from any directory on disk.
+
+- **`frontend/src/pages/Settings/LLMSettings.tsx`** — auto-fix blank model dropdown:
+  - When a saved model ID is no longer in the provider's catalogue (removed or renamed), the MUI
+    `Select` showed a blank field with no feedback.  Added a `useEffect` that detects this on
+    initial model-list load and silently selects the first available model.
+
+### Changed
+
+- **`backend/core/providers/openai.py`** — updated model catalogue: added GPT-4.1 / 4.1 Mini /
+  4.1 Nano (1 M context), o1, o1-mini, o3, o3-mini, o4-mini; removed deprecated gpt-4-turbo.
+- **`backend/core/providers/anthropic.py`** — updated model catalogue: added Claude Opus 4.5,
+  Claude Sonnet 4.5, Claude 3.7 Sonnet, Claude 3.5 Haiku; retained Claude 3 Haiku as legacy.
+- **`backend/core/providers/gemini.py`** — updated model catalogue: added Gemini 2.5 Pro / Flash /
+  Flash Lite, Gemini 2.0 Flash / Flash Lite; retained Gemini 1.5 family for compatibility.
+- Version bumped to `0.8.8` across `backend/core/config.py`, `frontend/package.json`,
+  `desktop/package.json`, and `tests/test_imports.py`.
+
+---
+
 ## [0.8.7] — 2026-05-29
 
 Fix — blank window in packaged app; all API calls silently failing via CORS

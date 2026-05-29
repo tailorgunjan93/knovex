@@ -4,6 +4,15 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // CRITICAL — must be at the TOP LEVEL, NOT inside build:{}.
+  // Vite's `base` is a shared option; placing it inside build:{} is a silent
+  // no-op and Vite keeps the default base:'/' which generates absolute asset
+  // paths (/assets/...).  Under Electron's file:// protocol, /assets/... is
+  // resolved against the filesystem root (C:\assets\...) so the JS bundle is
+  // never found, React never mounts, and the window stays black.
+  // With base:'./' here, Vite emits ./assets/... which resolves correctly
+  // relative to the index.html file regardless of where it lives on disk.
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
@@ -23,10 +32,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
-    // Electron loads the built index.html via file:// — asset paths MUST be
-    // relative (e.g. "./assets/...") otherwise Chromium resolves "/assets/..."
-    // against the filesystem root (C:\assets\...) and the JS bundle never loads.
-    base: './',
   },
   test: {
     // Extend Vitest's expect with @testing-library/jest-dom matchers

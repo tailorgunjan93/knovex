@@ -21,8 +21,20 @@ Notes:
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files  # noqa: E402
+
 # Project root = parent of the spec file's directory
 ROOT = Path(SPECPATH).parent  # noqa: F821 — SPECPATH injected by PyInstaller
+
+# ---------------------------------------------------------------------------
+# Data files to bundle
+# ---------------------------------------------------------------------------
+
+# LiteLLM requires its model pricing/metadata JSON files at runtime.
+# Without them every LLM call (chat, learn, summarize, test connection) raises:
+#   FileNotFoundError: …/_internal/litellm/model_prices_and_context_window_backup.json
+# collect_data_files() picks up ALL json/data files from the litellm package dir.
+_datas = collect_data_files("litellm", include_py_files=False)
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +45,7 @@ a = Analysis(
     [str(ROOT / "backend" / "backend_entry.py")],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=[],
+    datas=_datas,
     hiddenimports=[
         # ── uvicorn internals ─────────────────────────────────────────────
         "uvicorn.logging",

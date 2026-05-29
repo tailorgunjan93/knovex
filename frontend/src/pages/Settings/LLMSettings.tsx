@@ -172,6 +172,19 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
     queryFn: () => settingsApi.getModels(provider),
   })
 
+  // Auto-fix stale model: if the saved model ID no longer appears in the catalogue
+  // (e.g. a provider removed or renamed it), silently select the first available model.
+  // Without this the MUI Select shows a blank field because no MenuItem matches.
+  useEffect(() => {
+    if (
+      modelsData?.models.length &&
+      model &&
+      !modelsData.models.find((m) => m.id === model)
+    ) {
+      setModel(modelsData.models[0].id)
+    }
+  }, [modelsData])
+
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: (patch: Parameters<typeof settingsApi.update>[0]) =>
