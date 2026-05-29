@@ -4,7 +4,7 @@
 # the module here (before any application code runs), its ENCODING_CONSTRUCTORS
 # dict is already in sys.modules and tiktoken's registry._find_constructors()
 # can re-import it without relying on pkgutil.
-try:
+import contextlib
+
+with contextlib.suppress(Exception):
     import tiktoken_ext.openai_public  # noqa: F401 — side-effect import
-except Exception:
-    pass
