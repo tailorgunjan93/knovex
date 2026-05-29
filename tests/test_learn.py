@@ -25,7 +25,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from backend.core.domain.learn import LearnSession, UserStats
-from backend.core.learn_service import LearnService
+from backend.core.learn_service import LearnService, _repair_truncated_json
 from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.learn_repository import ILearnRepository
 
@@ -405,47 +405,32 @@ class TestTruncatedJsonRepair:
     # -- Unit tests for _repair_truncated_json directly ----------------------
 
     def test_repair_closes_open_string(self):
-        from backend.core.learn_service import _repair_truncated_json
-        # Truncated mid-string value
         truncated = '{"questions": [{"q": "What is gravity'
-        repaired = _repair_truncated_json(truncated)
-        import json
-        # Must parse without raising
-        data = json.loads(repaired)
+        data = json.loads(_repair_truncated_json(truncated))
         assert isinstance(data, dict)
 
     def test_repair_closes_open_array_and_object(self):
-        from backend.core.learn_service import _repair_truncated_json
-        import json
         truncated = '{"questions": [{"q": "Q?", "options": ["A", "B"'
-        repaired = _repair_truncated_json(truncated)
-        data = json.loads(repaired)
+        data = json.loads(_repair_truncated_json(truncated))
         assert "questions" in data
 
     def test_repair_exact_bug_report_payload(self):
         """Reproduces the exact truncation from the filed bug report."""
-        from backend.core.learn_service import _repair_truncated_json
-        import json
         truncated = (
             '{ "questions": [ { "q": "What is the primary cause of the Coriolis effect '
             'observed on Earth?", "options": [ "A. The tilt of the Earth\'s axis", '
             '"B. The rotation of the'
         )
-        repaired = _repair_truncated_json(truncated)
-        data = json.loads(repaired)
+        data = json.loads(_repair_truncated_json(truncated))
         assert "questions" in data
         assert len(data["questions"]) >= 1
 
     def test_repair_complete_json_unchanged(self):
         """A well-formed JSON string must survive the repair pass intact."""
-        from backend.core.learn_service import _repair_truncated_json
-        import json
         complete = '{"questions": [{"q": "Q?", "options": ["A","B","C","D"], "correct": 0, "explanation": "exp"}]}'
-        repaired = _repair_truncated_json(complete)
-        assert json.loads(repaired) == json.loads(complete)
+        assert json.loads(_repair_truncated_json(complete)) == json.loads(complete)
 
     def test_repair_no_closing_brace_returns_original(self):
-        from backend.core.learn_service import _repair_truncated_json
         text = "no braces here"
         assert _repair_truncated_json(text) == text
 
