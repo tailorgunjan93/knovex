@@ -37,9 +37,11 @@ class GroqProvider(LLMProvider):
     def model_catalogue(self) -> list[LLMModelInfo]:
         """Static fallback — used when no API key is available or live fetch fails."""
         return [
-            LLMModelInfo(id="groq/llama3-70b-8192",    name="Llama 3 70B",   context_window=8_192),
-            LLMModelInfo(id="groq/mixtral-8x7b-32768", name="Mixtral 8x7B",  context_window=32_768),
-            LLMModelInfo(id="groq/gemma-7b-it",         name="Gemma 7B",      context_window=8_192),
+            LLMModelInfo(id="groq/llama-3.3-70b-versatile",  name="Llama 3.3 70B",        context_window=128_000),
+            LLMModelInfo(id="groq/llama-3.1-8b-instant",     name="Llama 3.1 8B Instant", context_window=131_072),
+            LLMModelInfo(id="groq/llama-3.1-70b-versatile",  name="Llama 3.1 70B",        context_window=131_072),
+            LLMModelInfo(id="groq/gemma2-9b-it",             name="Gemma 2 9B",           context_window=8_192),
+            LLMModelInfo(id="groq/deepseek-r1-distill-llama-70b", name="DeepSeek R1 70B", context_window=131_072),
         ]
 
     async def fetch_live_models(

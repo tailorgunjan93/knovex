@@ -189,8 +189,19 @@ async def get_llm_models(
     """
     current = await settings_svc.get()
     base_url = current.llm.base_url if provider.lower() == "ollama" else ""
-    # Prefer the caller-supplied key (form value before save) over the stored key
-    effective_key = api_key or current.llm.api_key
+
+    # Only reuse the stored key when it belongs to the same provider that is being
+    # queried.  Using a different provider's key (e.g. an OpenAI key when the user
+    # switches to Cerebras in the UI) causes live-fetch to fail with 401, silently
+    # falling back to the stale static catalogue — which is the root cause of the
+    # "not fetching new models" bug.
+    stored_key = (
+        current.llm.api_key
+        if current.llm.provider.lower() == provider.lower()
+        else ""
+    )
+    effective_key = api_key or stored_key
+
     credentials = ProviderCredentials(
         api_key=effective_key,
         base_url=current.llm.base_url,

@@ -247,6 +247,7 @@ export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
           onChange={(e) => {
             setProvider(e.target.value)
             setModel('')
+            setApiKey('')        // clear key — previous provider's key must not leak to new one
             setTestResult(null)
             setModelsRefreshed(null)
           }}

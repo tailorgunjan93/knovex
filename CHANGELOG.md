@@ -11,6 +11,38 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.1] — 2026-05-29
+
+Fix — live model fetching from provider APIs; stale model list bug
+
+### Fixed
+
+- **`backend/api/settings.py`** — root cause fix: `GET /api/settings/llm/models` was
+  using the **stored provider's key** (e.g. an OpenAI key) even when querying a
+  **different provider** (e.g. Cerebras). This caused every live-fetch to return a 401
+  → `fetch_live_models` returned `None` → silent fallback to the stale static catalogue.
+  Fix: only reuse the stored key when `current.llm.provider == requested provider`.
+
+- **`backend/core/providers/openai.py`** — added `fetch_live_models`:
+  calls `https://api.openai.com/v1/models`, filters to chat-completion-capable models
+  (gpt-*, o1/o3/o4, chatgpt-*; excludes embeddings, whisper, TTS, DALL-E).
+
+- **`backend/core/providers/anthropic.py`** — added `fetch_live_models`:
+  calls `https://api.anthropic.com/v1/models` with `x-api-key` + `anthropic-version`
+  headers; uses `display_name` for human-readable labels.
+
+- **`backend/core/providers/cerebras.py`** — updated static fallback catalogue with
+  current Cerebras models: Qwen 3 32B, DeepSeek R1 70B.
+
+- **`backend/core/providers/groq.py`** — refreshed stale static fallback catalogue:
+  replaced retired `llama3-70b-8192` / `mixtral-8x7b-32768` / `gemma-7b-it` with
+  current Groq models (Llama 3.3 70B, Llama 3.1 8B/70B, Gemma 2 9B, DeepSeek R1 70B).
+
+- **`frontend/src/pages/Settings/LLMSettings.tsx`** — clear the API key field when
+  the provider changes so a stale key from one provider is never passed to another.
+
+---
+
 ## [0.9.0] — 2026-05-29
 
 Fix — auto-update now installs silently with no installer UI
