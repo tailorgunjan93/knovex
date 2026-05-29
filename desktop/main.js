@@ -461,6 +461,11 @@ function killBackendAndWait() {
 
 function registerIpcHandlers() {
   // Native file open dialog
+  // IMPORTANT: must return the full { canceled, filePaths } object so the renderer
+  // can check result.canceled and iterate result.filePaths — matching the
+  // FilePickerResult type declared in frontend/src/types/electron.d.ts.
+  // Previously returned a raw array which caused "filePaths is not iterable" in
+  // the packaged app because result.filePaths was undefined on a string[].
   ipcMain.handle('dialog:openFile', async (_, options = {}) => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openFile', 'multiSelections'],
@@ -473,7 +478,7 @@ function registerIpcHandlers() {
       ],
       ...options,
     })
-    return result.canceled ? [] : result.filePaths
+    return { canceled: result.canceled, filePaths: result.filePaths }
   })
 
   // Native folder picker

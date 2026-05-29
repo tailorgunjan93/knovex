@@ -11,6 +11,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.5] — 2026-05-29
+
+Fix — "filePaths is not iterable" crash when adding files in packaged app
+
+### Fixed
+
+- **`desktop/main.js`** — `dialog:openFile` IPC handler was returning a raw `string[]`
+  (`result.filePaths`) instead of the full `{ canceled, filePaths }` object.
+  The renderer code in `KBDetail.tsx` and `UpdatePathDialog.tsx` correctly accesses
+  `result.filePaths` matching the `FilePickerResult` type in `electron.d.ts`, but
+  `"string[]".filePaths` is `undefined` — not iterable — causing the crash.
+  In dev mode `window.knovex` is undefined so the browser `<input>` fallback runs
+  instead, hiding the bug entirely.
+  Fix: return `{ canceled: result.canceled, filePaths: result.filePaths }`.
+
+---
+
 ## [0.9.4] — 2026-05-29
 
 Hotfix — Cerebras model IDs wrong format causing NotFoundError
