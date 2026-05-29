@@ -415,12 +415,17 @@ function setupAutoUpdater() {
     console.error('[updater] error:', err.message)
   })
 
-  // Check on startup (after a short delay so the app finishes loading first)
-  setTimeout(() => {
+  const checkNow = () =>
     autoUpdater.checkForUpdates().catch((err) => {
       console.error('[updater] checkForUpdates failed:', err.message)
     })
-  }, 8_000)
+
+  // Check on startup (after a short delay so the app finishes loading first)
+  setTimeout(checkNow, 8_000)
+
+  // Re-check every 4 hours so updates are found even if the app runs for days
+  // without a restart (same cadence as Chrome / Slack / VS Code).
+  setInterval(checkNow, 4 * 60 * 60 * 1_000)
 }
 
 // ─── Update helpers ───────────────────────────────────────────────────────────

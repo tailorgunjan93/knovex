@@ -11,6 +11,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.2] — 2026-05-29
+
+Fix — auto-updater now checks for updates every 4 hours, not just at startup
+
+### Fixed
+
+- **`desktop/main.js`** — added `setInterval(checkNow, 4h)` alongside the existing
+  8-second startup check.  Previously the app only checked once at launch; if a new
+  release was published while the app was already running, users would never see the
+  "Restart to update" banner until they manually restarted — which could be days later.
+  Now the check repeats every 4 hours, matching the cadence used by Chrome / Slack / VS Code.
+
+---
+
 ## [0.9.1] — 2026-05-29
 
 Fix — live model fetching from provider APIs; stale model list bug
