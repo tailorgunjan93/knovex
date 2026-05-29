@@ -159,8 +159,9 @@ class LearnService:
                 new_content: dict = {"text": accumulated}
             else:
                 # JSON format: generate with complete(), stream as tokens
-                # Guided lessons need more tokens for rich multi-step content
-                json_max_tokens = 4096 if format == "guided" else 2048
+                # Token budget: guided > quiz/flashcard > simpler formats
+                _json_token_budget = {"guided": 4096, "quiz": 3000, "flashcard": 2500}
+                json_max_tokens = _json_token_budget.get(format, 2048)
                 messages = self._build_prompt(format, topic, difficulty, context_text)
                 try:
                     raw = await self._llm_svc.complete(
@@ -178,8 +179,21 @@ class LearnService:
                 cleaned = _strip_code_fences(raw)
                 try:
                     new_content = json.loads(cleaned)
-                except json.JSONDecodeError as exc:
-                    raise ValueError(f"LLM returned invalid JSON: {exc}\n\nRaw response:\n{raw[:200]}") from exc
+                except json.JSONDecodeError:
+                    # LLM hit token limit mid-JSON — attempt repair by truncating
+                    # to the last complete top-level closing brace.
+                    repaired = _repair_truncated_json(cleaned)
+                    try:
+                        new_content = json.loads(repaired)
+                        logger.warning(
+                            "Repaired truncated JSON for format=%s topic=%r "
+                            "(original len=%d repaired len=%d)",
+                            format, topic, len(cleaned), len(repaired),
+                        )
+                    except json.JSONDecodeError as exc:
+                        raise ValueError(
+                            f"LLM returned invalid JSON: {exc}\n\nRaw response:\n{raw[:200]}"
+                        ) from exc
 
                 # Stream the JSON string as token chunks
                 json_str = json.dumps(new_content)
@@ -445,6 +459,56 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         ']}}'
     ),
 }
+
+
+def _repair_truncated_json(text: str) -> str:
+    """
+    Best-effort repair for JSON truncated mid-string by a token limit.
+    Finds the last valid closing brace and discards everything after it,
+    then closes any unclosed arrays/objects so json.loads can succeed.
+    """
+    # Walk backward to find the last `}` that closes the root object.
+    last_brace = text.rfind("}")
+    if last_brace == -1:
+        return text  # nothing to repair; caller will raise
+
+    candidate = text[: last_brace + 1]
+
+    # Count unclosed brackets to decide if we need to append closers.
+    depth_curly = 0
+    depth_square = 0
+    in_string = False
+    escape_next = False
+    for ch in candidate:
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == "\\" and in_string:
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth_curly += 1
+        elif ch == "}":
+            depth_curly -= 1
+        elif ch == "[":
+            depth_square += 1
+        elif ch == "]":
+            depth_square -= 1
+
+    # If we're still inside a string, close it first.
+    if in_string:
+        candidate += '"'
+
+    # Close any open arrays then objects.
+    candidate += "]" * max(depth_square, 0)
+    candidate += "}" * max(depth_curly, 0)
+
+    return candidate
 
 
 def _strip_code_fences(text: str) -> str:
