@@ -11,7 +11,7 @@ Responsibilities:
 SRP: this file only wires the app. Business logic lives in services;
      DI wiring lives in core/dependencies.py.
 
-Version: 0.6.0
+Version: 0.8.7
 """
 
 import logging
@@ -125,6 +125,7 @@ def create_app() -> FastAPI:
             "http://localhost:5173",   # Vite dev server
             "http://localhost:4173",   # Vite preview
             "http://localhost:8765",   # Self (Electron prod)
+            "null",                    # Electron packaged app (file:// → Origin: null)
         ],
         allow_credentials=True,
         allow_methods=["*"],

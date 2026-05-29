@@ -83,6 +83,7 @@ def _default_settings() -> dict[str, Any]:
             "api_key": "",
         },
         "embedding": {
+            "enabled": False,
             "provider": "local",
             "model": "text-embedding-3-small",
             "api_key": "",

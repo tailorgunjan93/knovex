@@ -314,6 +314,24 @@ function createMainWindow() {
     return { action: 'deny' }
   })
 
+  // ── DevTools toggle — Ctrl+Shift+I or F12 (works in both dev and prod) ──────
+  // In dev mode DevTools are opened automatically above.  In production the user
+  // has no way to inspect console errors without this — which makes diagnosing
+  // renderer issues impossible.  This shortcut lets us attach DevTools in any
+  // packaged build without rebuilding.
+  mainWindow.webContents.on('before-input-event', (_, input) => {
+    const isDevToolsShortcut =
+      (input.control && input.shift && input.key.toLowerCase() === 'i') ||
+      input.key === 'F12'
+    if (isDevToolsShortcut) {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools()
+      } else {
+        mainWindow.webContents.openDevTools({ mode: 'detach' })
+      }
+    }
+  })
+
   return mainWindow
 }
 

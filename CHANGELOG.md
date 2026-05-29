@@ -11,6 +11,54 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.7] — 2026-05-29
+
+Fix — blank window in packaged app; all API calls silently failing via CORS
+
+### Fixed
+
+- **`frontend/src/App.tsx`** — replaced `BrowserRouter` with `HashRouter`:
+  - Under `file://` protocol, `BrowserRouter` reads `window.location.pathname` as the
+    full filesystem path (e.g. `C:/Users/…/index.html`). No route matches; React renders
+    nothing; without an error boundary, the component tree unmounts silently → black window.
+  - `HashRouter` uses the URL hash (`#/kb`, `#/settings`) which is immune to the
+    `file://` path prefix. Routes resolve correctly in both dev (Vite) and packaged app.
+
+- **`frontend/src/components/ErrorBoundary.tsx`** — new `RootErrorBoundary` component:
+  - React 18: an uncaught render error causes the entire tree to unmount with no visible
+    output. Added a root-level class component error boundary that catches any render
+    crash and renders a styled error screen (message, stack trace, Reload button)
+    instead of going silently blank. Styled with Knovex dark theme using only inline CSS
+    so it works even if MUI fails to load.
+
+- **`frontend/src/main.tsx`** — defensive `#root` null-check before `ReactDOM.createRoot`:
+  - If the DOM element is missing (e.g. corrupted build), renders a plain HTML error
+    message rather than throwing uncaught `TypeError: Cannot read properties of null`.
+  - Wraps the React tree in `<RootErrorBoundary>` so any startup crash is surfaced.
+
+- **`desktop/main.js`** — added DevTools toggle shortcut (Ctrl+Shift+I / F12):
+  - Production builds previously had no way to inspect console errors. The shortcut opens
+    DevTools in detached mode so the app window stays intact while debugging.
+
+- **`backend/main.py`** — added `"null"` to CORS `allow_origins`:
+  - The Electron packaged app loads `index.html` via `file://` protocol. Chromium sends
+    `Origin: null` for cross-origin requests from a `file://` page.
+  - Without `"null"` in `allow_origins`, FastAPI's `CORSMiddleware` drops the
+    `Access-Control-Allow-Origin` header from every response; Electron's Chromium blocks
+    all API responses → settings, KB list, chat — everything silently fails.
+
+- **`backend/core/settings_service.py`** — added `"enabled": False` to default embedding dict:
+  - The `EmbeddingSettings` Pydantic model has `enabled: bool = False`. The
+    `_default_settings()` factory was missing this key; `_merge_defaults()` filled it
+    via `setdefault`, but explicit is safer and avoids any future schema divergence.
+
+### Changed
+
+- Version bumped to `0.8.7` across `backend/core/config.py`, `frontend/package.json`,
+  `desktop/package.json`, and `tests/test_imports.py`.
+
+---
+
 ## [0.8.6] — 2026-05-29
 
 Fix — blank white/black window; frontend never rendered in installed app
