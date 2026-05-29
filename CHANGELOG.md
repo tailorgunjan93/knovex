@@ -11,6 +11,35 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.8.6] — 2026-05-29
+
+Fix — blank white/black window; frontend never rendered in installed app
+
+### Fixed
+
+- **`frontend/vite.config.ts`** — added `base: './'` to the build config:
+  - Without this, Vite generates `<script src="/assets/index-HASH.js">` (absolute path).
+    Electron loads the app via `file://` protocol; `/assets/...` resolves to the root of
+    the C: drive, so the JS bundle is never found, React never mounts, and the window
+    stays solid black (only `backgroundColor: '#0B0B0C'` visible)
+  - With `base: './'`, all asset references become relative (`./assets/...`), which
+    resolves correctly relative to `index.html` under any `file://` path
+- **`desktop/package.json`** — moved frontend dist from `files` (packed into ASAR) to
+  `extraResources` (copied to disk at `resources/frontend/dist/`):
+  - Files inside the ASAR at a `../frontend/dist/` path are never reached by
+    `loadFile(path.join(__dirname, '..', ...))` because Node.js normalises the path
+    outside the `.asar` directory, bypassing the ASAR virtual filesystem
+  - `extraResources` puts the dist folder on real disk at `resources/frontend/dist/`
+    which is exactly what `process.resourcesPath + '/frontend/dist/index.html'` points to
+- **`desktop/main.js`** — `loadFile` now uses `process.resourcesPath` explicitly:
+  ```js
+  mainWindow.loadFile(path.join(process.resourcesPath, 'frontend', 'dist', 'index.html'))
+  ```
+  `process.resourcesPath` is the guaranteed real-disk path to the `resources/` directory,
+  consistent with how the backend binary path is resolved
+
+---
+
 ## [0.8.5] — 2026-05-29
 
 Fix — health check timeout too short; app never opened despite backend being ready

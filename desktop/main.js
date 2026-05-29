@@ -284,7 +284,9 @@ function createMainWindow() {
     mainWindow.loadURL(VITE_DEV_URL)
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'))
+    // frontend/dist is placed in resources/frontend/dist/ via extraResources —
+    // process.resourcesPath is the guaranteed real-disk path to resources/.
+    mainWindow.loadFile(path.join(process.resourcesPath, 'frontend', 'dist', 'index.html'))
   }
 
   // Show window once ready

@@ -23,6 +23,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // Electron loads the built index.html via file:// — asset paths MUST be
+    // relative (e.g. "./assets/...") otherwise Chromium resolves "/assets/..."
+    // against the filesystem root (C:\assets\...) and the JS bundle never loads.
+    base: './',
   },
   test: {
     // Extend Vitest's expect with @testing-library/jest-dom matchers
