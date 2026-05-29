@@ -100,6 +100,7 @@ Track every bug found in the packaged app here. Each entry must have:
 | 5 | Cerebras "Model llama-3.3-70b does not exist" | Static catalogue had `llama-3.3-70b` (hyphen) not `llama3.3-70b` (dot) | v0.9.4 | ❌ TODO |
 | 6 | "filePaths is not iterable" on file upload | IPC returned `string[]` but renderer accessed `.filePaths` on it | v0.9.5 | ❌ TODO |
 | 7 | Groq model list outdated | Static fallback had retired models (llama3-70b-8192, mixtral-8x7b) | v0.9.1 | ❌ TODO |
+| 8 | "LLM returned invalid JSON: Unterminated string" on quiz/flashcard generation | `max_tokens=2048` too low — LLM hit token limit mid-JSON string | v0.9.9 | ✅ `TestTruncatedJsonRepair` (8 tests) |
 
 ### Open Issues
 

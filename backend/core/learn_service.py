@@ -464,49 +464,54 @@ _SYSTEM_PROMPTS: dict[str, str] = {
 def _repair_truncated_json(text: str) -> str:
     """
     Best-effort repair for JSON truncated mid-string by a token limit.
-    Finds the last valid closing brace and discards everything after it,
-    then closes any unclosed arrays/objects so json.loads can succeed.
+
+    Uses a bracket stack so closers are emitted in the correct reverse order
+    of opening. If the text ends inside a string, closes the string first.
     """
-    # Walk backward to find the last `}` that closes the root object.
-    last_brace = text.rfind("}")
-    if last_brace == -1:
-        return text  # nothing to repair; caller will raise
+    if not text.strip():
+        return text
 
-    candidate = text[: last_brace + 1]
-
-    # Count unclosed brackets to decide if we need to append closers.
-    depth_curly = 0
-    depth_square = 0
+    stack: list[str] = []  # "{" or "[" for each unclosed bracket
     in_string = False
     escape_next = False
-    for ch in candidate:
+
+    for ch in text:
         if escape_next:
             escape_next = False
             continue
-        if ch == "\\" and in_string:
-            escape_next = True
+        if in_string:
+            if ch == "\\":
+                escape_next = True
+            elif ch == '"':
+                in_string = False
             continue
         if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == "{":
-            depth_curly += 1
-        elif ch == "}":
-            depth_curly -= 1
+            in_string = True
+        elif ch == "{":
+            stack.append("{")
         elif ch == "[":
-            depth_square += 1
+            stack.append("[")
+        elif ch == "}":
+            if stack and stack[-1] == "{":
+                stack.pop()
         elif ch == "]":
-            depth_square -= 1
+            if stack and stack[-1] == "[":
+                stack.pop()
 
-    # If we're still inside a string, close it first.
+    candidate = text
+
+    # Close an open string.
     if in_string:
         candidate += '"'
 
-    # Close any open arrays then objects.
-    candidate += "]" * max(depth_square, 0)
-    candidate += "}" * max(depth_curly, 0)
+    # Strip trailing commas/colons left dangling before closers.
+    candidate = candidate.rstrip()
+    while candidate and candidate[-1] in (",", ":"):
+        candidate = candidate[:-1].rstrip()
+
+    # Close brackets in reverse order of opening.
+    for bracket in reversed(stack):
+        candidate += "}" if bracket == "{" else "]"
 
     return candidate
 

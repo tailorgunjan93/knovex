@@ -11,6 +11,48 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.9] — 2026-05-29
+
+Fix quiz/flashcard generation crashing with "LLM returned invalid JSON: Unterminated string"
+
+### Bug Fix
+
+**Root cause:** `max_tokens=2048` was too low for quiz and flashcard generation. The LLM
+would hit the token limit mid-string, producing unterminated JSON that `json.loads` could
+not parse — causing the entire Learn session to fail with an error event.
+
+**Fix — two layers:**
+1. **Raised token budgets** in `learn_service.py`:
+   - `quiz`: 2048 → 3000
+   - `flashcard`: 2048 → 2500
+   - `guided`: unchanged at 4096
+   This prevents truncation for all normal-length topics.
+2. **Added `_repair_truncated_json()`** — if a response is still truncated (very long topic,
+   small model, provider-imposed output limit), the function uses a bracket stack to close
+   any open string, arrays, and objects in the correct reverse order so the partial JSON
+   can still be parsed. A warning is logged when repair triggers.
+
+### Tests
+
+- Added `TestTruncatedJsonRepair` class (8 tests) to `tests/test_learn.py`:
+  - Unit tests for `_repair_truncated_json()` directly (5 cases including the exact
+    payload from the filed bug report)
+  - Integration tests: `LearnService.stream_session()` recovers from truncated quiz
+    and flashcard responses (yields `done` event, not `error`)
+  - Regression: completely unparseable JSON still yields an `error` event (not a crash)
+
+### Deep QA Test Suite (from v0.9.8 commit)
+
+4 new professional-grade browser E2E spec files covering every real user workflow:
+- `e2e/kb-workflow.spec.ts` (24 tests) — KB create/rename/delete, file upload, FileViewer
+- `e2e/chat-workflow.spec.ts` (14 tests) — session CRUD, web search, streaming, errors
+- `e2e/settings.spec.ts` (55 tests) — all 4 tabs, provider/model switch, API key, theme
+- `e2e/learn-workflow.spec.ts` (27 tests) — all 6 formats, structured output, history
+
+**Total test count: 216 Python + 202 browser + 55 Electron = 473 tests**
+
+---
+
 ## [0.9.8] — 2026-05-29
 
 Full E2E coverage for KB, Chat, and Reader — the three zero-coverage core workflows

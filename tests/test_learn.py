@@ -389,6 +389,120 @@ class TestStreamSessionLLMError:
 
 
 # ---------------------------------------------------------------------------
+# Truncated JSON repair (_repair_truncated_json + service integration)
+# ---------------------------------------------------------------------------
+
+class TestTruncatedJsonRepair:
+    """
+    Regression tests for the token-limit truncation bug (fixed in v0.9.9).
+
+    Root cause: max_tokens=2048 was too low for quiz/flashcard generation.
+    The LLM hit the limit mid-string, producing unterminated JSON.
+    _repair_truncated_json() should recover parseable content from a truncated
+    response; LearnService.stream_session() should yield a done event (not error).
+    """
+
+    # -- Unit tests for _repair_truncated_json directly ----------------------
+
+    def test_repair_closes_open_string(self):
+        from backend.core.learn_service import _repair_truncated_json
+        # Truncated mid-string value
+        truncated = '{"questions": [{"q": "What is gravity'
+        repaired = _repair_truncated_json(truncated)
+        import json
+        # Must parse without raising
+        data = json.loads(repaired)
+        assert isinstance(data, dict)
+
+    def test_repair_closes_open_array_and_object(self):
+        from backend.core.learn_service import _repair_truncated_json
+        import json
+        truncated = '{"questions": [{"q": "Q?", "options": ["A", "B"'
+        repaired = _repair_truncated_json(truncated)
+        data = json.loads(repaired)
+        assert "questions" in data
+
+    def test_repair_exact_bug_report_payload(self):
+        """Reproduces the exact truncation from the filed bug report."""
+        from backend.core.learn_service import _repair_truncated_json
+        import json
+        truncated = (
+            '{ "questions": [ { "q": "What is the primary cause of the Coriolis effect '
+            'observed on Earth?", "options": [ "A. The tilt of the Earth\'s axis", '
+            '"B. The rotation of the'
+        )
+        repaired = _repair_truncated_json(truncated)
+        data = json.loads(repaired)
+        assert "questions" in data
+        assert len(data["questions"]) >= 1
+
+    def test_repair_complete_json_unchanged(self):
+        """A well-formed JSON string must survive the repair pass intact."""
+        from backend.core.learn_service import _repair_truncated_json
+        import json
+        complete = '{"questions": [{"q": "Q?", "options": ["A","B","C","D"], "correct": 0, "explanation": "exp"}]}'
+        repaired = _repair_truncated_json(complete)
+        assert json.loads(repaired) == json.loads(complete)
+
+    def test_repair_no_closing_brace_returns_original(self):
+        from backend.core.learn_service import _repair_truncated_json
+        text = "no braces here"
+        assert _repair_truncated_json(text) == text
+
+    # -- Integration: LearnService recovers from truncated LLM response ------
+
+    @pytest.mark.asyncio
+    async def test_quiz_recovers_from_truncated_json(self):
+        """
+        LearnService should yield a done event (not error) when the LLM
+        returns truncated JSON that _repair_truncated_json can fix.
+        """
+        # A realistic truncation: options array cut off mid-string
+        truncated_response = (
+            '{"questions": [{"q": "What causes the Coriolis effect?", '
+            '"options": ["A. Earth tilt", "B. Earth rotation'
+        )
+        svc, _ = _make_svc(complete_text=truncated_response)
+        events = await _drain(svc.stream_session(
+            topic="Coriolis Effect", format="quiz", source_type="topic",
+            difficulty="intermediate", source_ref=None,
+            provider="openai", model="gpt-4o-mini", credentials=_creds(),
+        ))
+        error_events = [e for e in events if '"type": "error"' in e]
+        done_events  = [e for e in events if '"type": "done"'  in e]
+        assert len(error_events) == 0, f"Unexpected error: {error_events}"
+        assert len(done_events)  == 1
+
+    @pytest.mark.asyncio
+    async def test_flashcard_recovers_from_truncated_json(self):
+        truncated_response = '{"cards": [{"front": "What is photosynthesis?", "back": "Process by which'
+        svc, _ = _make_svc(complete_text=truncated_response)
+        events = await _drain(svc.stream_session(
+            topic="Photosynthesis", format="flashcard", source_type="topic",
+            difficulty="beginner", source_ref=None,
+            provider="openai", model="gpt-4o-mini", credentials=_creds(),
+        ))
+        error_events = [e for e in events if '"type": "error"' in e]
+        done_events  = [e for e in events if '"type": "done"'  in e]
+        assert len(error_events) == 0
+        assert len(done_events)  == 1
+
+    @pytest.mark.asyncio
+    async def test_completely_unparseable_json_yields_error_event(self):
+        """If repair also fails, the service must yield an error event — not crash."""
+        svc, _ = _make_svc(complete_text="not json at all {{{{")
+        events = await _drain(svc.stream_session(
+            topic="Test", format="quiz", source_type="topic",
+            difficulty="beginner", source_ref=None,
+            provider="openai", model="gpt-4o-mini", credentials=_creds(),
+        ))
+        error_events = [e for e in events if '"type": "error"' in e]
+        assert len(error_events) == 1
+        data = json.loads(error_events[0][len("data: "):])
+        assert "invalid JSON" in data["error"].lower() or "json" in data["error"].lower()
+
+
+# ---------------------------------------------------------------------------
 # submit_quiz_answer
 # ---------------------------------------------------------------------------
 
