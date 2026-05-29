@@ -11,6 +11,35 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.8] — 2026-05-29
+
+Full E2E coverage for KB, Chat, and Reader — the three zero-coverage core workflows
+
+### Tests
+
+**Browser E2E (mocked API):**
+- `e2e/kb.spec.ts` (25 tests) — Library page: empty state, create dialog (name validation,
+  colour & icon presets, live preview, Enter to submit), filter pills (All/Mastered/Review/New),
+  KB card rendering, error state on 500
+- `e2e/chat.spec.ts` (14 tests) — Chat page: session list, clicking session loads messages,
+  markdown rendering, source citations, KB selector, no-sessions empty state
+- `e2e/reader.spec.ts` (16 tests) — Reader page: upload zone, KB accordion, file list,
+  clicking file opens viewer, content block rendering, URL deep-link (?kb=&file=)
+
+**Electron E2E (real backend — live SQLite DB):**
+- `e2e/electron/kb.spec.ts` (13 tests) — KB CRUD: GET returns array, POST 201 + shape check,
+  created KB visible in list, 422 on missing name, file_count=0 on fresh KB, POST file adds
+  record, file has correct shape, non-existent path returns 4xx, DELETE 204 + removed from
+  list, GET 404 after delete, PUT updates name
+- `e2e/electron/chat.spec.ts` (9 tests) — Chat CRUD: GET sessions, POST 201 + shape,
+  session in list, kb_id=null preserved, empty messages on new session, DELETE 204 + removed,
+  messages 404 after delete, stream without LLM key returns error event (not crash), export
+  returns markdown
+
+### Result: 55 Electron + 98 browser + 208 Python = **361 tests passing**
+
+---
+
 ## [0.9.7] — 2026-05-29
 
 Electron E2E suite: all 33 tests passing + unknown-route white screen fixed
