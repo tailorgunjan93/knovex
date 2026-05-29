@@ -11,6 +11,33 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.3] — 2026-05-29
+
+Fix — auto-update "Failed to uninstall old application files" error
+
+### Fixed
+
+- **`desktop/package.json`** — NSIS `allowToChangeInstallationDirectory` changed from
+  `true` → `false`, and `allowElevation` changed from `true` → `false`:
+  - When `allowToChangeInstallationDirectory: true`, a user who moved the install path
+    from the default (`%LOCALAPPDATA%\Programs\Knovex`) to a custom location (e.g.
+    `C:\Program Files\Knovex`) would break all future auto-updates.  The NSIS installer
+    always looks for the old app at the **default** path; if the app is somewhere else it
+    fails with *"Failed to uninstall old application files.: 2"*
+    (Windows `ERROR_FILE_NOT_FOUND`).
+  - Fix: lock every install to `%LOCALAPPDATA%\Programs\Knovex` (the `perMachine: false`
+    default).  This makes the install path 100% predictable so auto-update always finds
+    the previous version to replace.
+  - `allowElevation: false` is also set — elevation is not needed for a per-user install
+    and was the reason auto-update ran the installer without UAC when the app was in
+    `C:\Program Files\`, silently failing.
+
+> **One-time migration:** Users who installed to a custom path must uninstall the old
+> copy via *Windows Settings → Apps* and then re-run the latest installer.  All future
+> updates will be seamless from that point on.
+
+---
+
 ## [0.9.2] — 2026-05-29
 
 Fix — auto-updater now checks for updates every 4 hours, not just at startup

@@ -1,6 +1,6 @@
 {
   "name": "knovex-desktop",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Knovex Desktop — Electron shell",
   "homepage": "https://tailorgunjan93.github.io/knovex/",
   "author": {
@@ -75,8 +75,8 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "allowElevation": true,
+      "allowToChangeInstallationDirectory": false,
+      "allowElevation": false,
       "shortcutName": "Knovex",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
