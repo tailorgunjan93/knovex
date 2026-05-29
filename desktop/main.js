@@ -423,6 +423,35 @@ function setupAutoUpdater() {
   }, 8_000)
 }
 
+// ─── Update helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Kill the backend subprocess and wait for it to actually exit (max 3 s).
+ *
+ * Must be called BEFORE autoUpdater.quitAndInstall() so the NSIS installer
+ * never finds knovex-backend.exe running.  On Windows, Node's .kill() maps
+ * directly to TerminateProcess — it is effectively instantaneous, but we still
+ * await the 'exit' event so we are certain the OS has released all file handles
+ * before the installer tries to overwrite them.
+ */
+function killBackendAndWait() {
+  return new Promise((resolve) => {
+    if (!backendProcess || backendProcess.killed) {
+      resolve()
+      return
+    }
+    backendProcess.once('exit', resolve)
+    backendProcess.kill()
+    // Safety net: force-resolve after 3 s in case the process hangs
+    setTimeout(() => {
+      if (backendProcess && !backendProcess.killed) {
+        try { backendProcess.kill('SIGKILL') } catch (_) {}
+      }
+      resolve()
+    }, 3_000)
+  })
+}
+
 // ─── IPC handlers ─────────────────────────────────────────────────────────────
 
 function registerIpcHandlers() {
@@ -463,9 +492,21 @@ function registerIpcHandlers() {
   ipcMain.on('app:backendPort', (event) => { event.returnValue = BACKEND_PORT })
 
   // Auto-update: quit and install the downloaded update
-  ipcMain.on('app:install-update', () => {
+  //
+  // Sequence:
+  //   1. Mark app as quitting (suppresses minimize-to-tray on window close)
+  //   2. Kill the backend subprocess and wait for it to actually exit — this
+  //      prevents NSIS from finding knovex-backend.exe still running and
+  //      showing the "Knovex cannot be closed" dialog.
+  //   3. Brief OS-level pause so all file handles are released.
+  //   4. quitAndInstall(isSilent=true, forceRunAfter=true)
+  //        isSilent=true       → NSIS runs with /S flag — zero installer UI
+  //        forceRunAfter=true  → new version launches automatically after install
+  ipcMain.on('app:install-update', async () => {
     app.isQuitting = true
-    autoUpdater.quitAndInstall(false, true)
+    await killBackendAndWait()
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    autoUpdater.quitAndInstall(true, true)
   })
 }
 

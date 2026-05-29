@@ -11,6 +11,32 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.0] — 2026-05-29
+
+Fix — auto-update now installs silently with no installer UI
+
+### Fixed
+
+- **`desktop/main.js`** — seamless silent auto-update on Windows:
+  - Previously `autoUpdater.quitAndInstall(false, true)` launched the NSIS installer in
+    interactive mode, showing a progress bar and a recurring *"Knovex cannot be closed —
+    please close it manually and click Retry"* dialog.
+  - Root cause: `knovex-backend.exe` (a child process of the Electron app) was not killed
+    before the installer ran.  NSIS found it alive and could not proceed without user
+    intervention.
+  - Fix 1 — new `killBackendAndWait()` helper explicitly kills `backendProcess` and awaits
+    the `'exit'` event (with a 3 s safety-net timeout) **before** calling `quitAndInstall`.
+    This guarantees the OS has released all file handles so NSIS never needs to ask the user
+    to close anything.
+  - Fix 2 — changed to `quitAndInstall(true, true)`:
+    - `isSilent = true` → NSIS runs with the `/S` flag — **zero installer UI**, no dialogs,
+      no progress bar.
+    - `forceRunAfter = true` → the new version launches automatically after installation.
+  - Net result: user clicks *"Restart to update"* → app closes → new version installs
+    invisibly → new version opens.  Exactly like Chrome / Slack / Discord.
+
+---
+
 ## [0.8.9] — 2026-05-29
 
 Fix — tiktoken `cl100k_base` encoding unavailable in packaged binary
