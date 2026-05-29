@@ -1,6 +1,6 @@
 {
   "name": "knovex-desktop",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "Knovex Desktop — Electron shell",
   "homepage": "https://tailorgunjan93.github.io/knovex/",
   "author": {
@@ -73,18 +73,14 @@
     },
 
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
-      "allowElevation": false,
       "shortcutName": "Knovex",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "menuCategory": "Knovex",
-      "license": null,
       "runAfterFinish": true,
-      "deleteAppDataOnUninstall": false,
-      "displayLanguageSelector": false
+      "deleteAppDataOnUninstall": false
     },
 
     "mac": {

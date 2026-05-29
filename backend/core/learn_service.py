@@ -276,7 +276,12 @@ class LearnService:
 
         # Spaced repetition intervals by ease
         intervals = {"again": 1, "hard": 2, "good": 4, "easy": 7}
-        days = intervals.get(ease_rating, 3)
+        if ease_rating not in intervals:
+            raise ValueError(
+                f"Invalid ease_rating '{ease_rating}'. "
+                f"Must be one of: {', '.join(intervals)}"
+            )
+        days = intervals[ease_rating]
         next_review = datetime.utcnow() + timedelta(days=days)
 
         if ease_rating in ("good", "easy"):

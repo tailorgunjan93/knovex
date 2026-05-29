@@ -1,9 +1,9 @@
-/**
- * E2E Tests — Learn Page
+﻿/**
+ * E2E Tests â€” Learn Page
  *
  * Two perspectives:
- *  • UI/UX Expert   — every pixel: layout, labels, disabled states, animations
- *  • Business Analyst — every rule: format selection, streaming, XP, history, delete
+ *  â€¢ UI/UX Expert   â€” every pixel: layout, labels, disabled states, animations
+ *  â€¢ Business Analyst â€” every rule: format selection, streaming, XP, history, delete
  *
  * All /api/* calls are intercepted with page.route() so no backend is needed.
  * The Playwright webServer config auto-starts the Vite dev server.
@@ -11,7 +11,7 @@
 
 import { test, expect, type Page } from '@playwright/test'
 
-// ─── Shared fixture data ───────────────────────────────────────────────────────
+// â”€â”€â”€ Shared fixture data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const EMPTY_STATS = {
   xp: 0, level: 1, streak: 0,
@@ -36,7 +36,7 @@ const GUIDED_SESSION = {
   completed_at: '2026-05-28T08:05:00',
   content: {
     topic:       'Neural Networks',
-    intro:       'Welcome to Neural Networks — a step-by-step guide.',
+    intro:       'Welcome to Neural Networks â€” a step-by-step guide.',
     total_steps: 2,
     steps: [
       {
@@ -53,7 +53,7 @@ const GUIDED_SESSION = {
         step:        2,
         title:       'Layers in a Network',
         explanation: 'Networks are organised in layers.',
-        example:     'Input → Hidden → Output.',
+        example:     'Input â†’ Hidden â†’ Output.',
         analogy:     null,
         key_insight: 'Depth gives networks their power.',
         check_in:    'How many layers does a shallow network have?',
@@ -85,7 +85,7 @@ function buildStorySSE(sessionId: string): string {
   ].join('')
 }
 
-// ─── Setup helpers ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Setup helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Register core mocks: stats + session list.
@@ -107,7 +107,7 @@ async function mockBase(
     (route) => route.fulfill({ json: stats }),
   )
 
-  // Session list (exact path — not individual session GETs)
+  // Session list (exact path â€” not individual session GETs)
   await page.route(
     (url) => url.pathname === '/api/learn/sessions',
     (route) => route.fulfill({ json: sessions }),
@@ -122,16 +122,16 @@ async function mockGetSession(page: Page, session: { id: string } & object) {
   )
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
+test.describe('UI/UX Expert â€” Learn Page: Visual & Layout', () => {
 
   test.beforeEach(async ({ page }) => {
     await mockBase(page)
   })
 
   test('renders all 9 format card labels in the empty state grid', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     const expected = [
       'Guided', 'Quiz', 'Flashcards', 'Mind Map',
@@ -143,7 +143,7 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
   })
 
   test('each format card shows a description below the label', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     const descriptions = [
       'Personal tutor',         // Guided
@@ -162,7 +162,7 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
   })
 
   test('renders 3 difficulty pills: Beginner, Intermediate, Expert', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await expect(page.getByText('Beginner').first()).toBeVisible()
     await expect(page.getByText('Intermediate').first()).toBeVisible()
@@ -170,7 +170,7 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
   })
 
   test('renders 4 source mode pills in the header', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await expect(page.getByText('Topic').first()).toBeVisible()
     await expect(page.getByText('Library').first()).toBeVisible()
@@ -179,7 +179,7 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
   })
 
   test('empty state shows the motivational heading', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await expect(
       page.getByText('What do you want to learn today?')
@@ -187,13 +187,13 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
   })
 
   test('sidebar shows "History" section label', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await expect(page.getByText(/history/i).first()).toBeVisible()
   })
 
   test('sidebar shows placeholder when no sessions exist', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await expect(
       page.getByText('Your sessions will appear here')
@@ -201,14 +201,14 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
   })
 
   test('Generate button is disabled when topic field is empty', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     const generateBtn = page.getByRole('button', { name: /Generate/i })
     await expect(generateBtn).toBeDisabled()
   })
 
   test('Generate button becomes enabled after typing a topic', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await page.getByPlaceholder('What do you want to learn?').fill('Python basics')
 
@@ -218,7 +218,7 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
 
   test('sidebar stats bar shows level when user has XP', async ({ page }) => {
     await mockBase(page, { stats: STATS_WITH_XP })
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // StatsBar renders "Lv 2" for level 2
     await expect(page.getByText(/Lv\s*2/i).first()).toBeVisible()
@@ -226,21 +226,21 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
 
   test('sidebar stats bar shows XP value', async ({ page }) => {
     await mockBase(page, { stats: STATS_WITH_XP })
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await expect(page.getByText(/150\s*XP/i).first()).toBeVisible()
   })
 
   test('streak badge renders when streak > 0', async ({ page }) => {
     await mockBase(page, { stats: STATS_WITH_XP })
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // StatsBar shows streak number followed by "d" (3d)
     await expect(page.getByText(/3d/i).first()).toBeVisible()
   })
 
   test('header shows "Start learning" italic emphasis in empty state', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // The italic <em> contains "learning"
     await expect(page.locator('em').filter({ hasText: /learning/i }).first()).toBeVisible()
@@ -249,27 +249,27 @@ test.describe('UI/UX Expert — Learn Page: Visual & Layout', () => {
 })
 
 
-test.describe('Business Analyst — Learn Page: Functional Flows', () => {
+test.describe('Business Analyst â€” Learn Page: Functional Flows', () => {
 
   test.beforeEach(async ({ page }) => {
     await mockBase(page)
   })
 
   test('clicking a format card updates the active selection (Guided)', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // Guided card in the format grid (empty state area)
     const guidedCard = page.getByText('Guided').first()
     await guidedCard.click()
 
     // The format pill in the header row should now show Guided as active
-    // Active format has a colored border — check the pill row's Guided item
+    // Active format has a colored border â€” check the pill row's Guided item
     const guidedPill = page.locator('text=Guided').first()
     await expect(guidedPill).toBeVisible()
   })
 
   test('selecting Story format then typing topic enables Generate', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // Click Story in the format card grid
     await page.getByText('Story').first().click()
@@ -307,7 +307,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
       (route) => route.fulfill({ json: { ...EMPTY_STATS, xp: 25 } }),
     )
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // Select Story format via the format card (data-testid is unambiguous)
     await page.locator('[data-testid="format-card-story"]').click()
@@ -331,7 +331,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
         body:   buildStorySSE('story-001'),
       }),
     )
-    // No sessions-list override — beforeEach returns [] so sidebar stays empty,
+    // No sessions-list override â€” beforeEach returns [] so sidebar stays empty,
     // ensuring getByText('Story') unambiguously hits the format card (not a sidebar item).
     await mockGetSession(page, STORY_SESSION)
     await page.route(
@@ -339,7 +339,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
       (route) => route.fulfill({ json: { ...EMPTY_STATS, xp: 25 } }),
     )
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // Use data-testid to unambiguously click the Story format card
     await page.locator('[data-testid="format-card-story"]').click()
@@ -371,7 +371,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
       (route) => route.fulfill({ json: { ...EMPTY_STATS, xp: 25 } }),
     )
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await page.getByText('Story').first().click()
     await page.getByPlaceholder('What do you want to learn?').fill('Machine Learning')
@@ -404,13 +404,13 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
       (route) => route.fulfill({ json: { ...EMPTY_STATS, xp: 25 } }),
     )
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await page.getByText('Story').first().click()
     await page.getByPlaceholder('What do you want to learn?').fill('Machine Learning')
     await page.getByRole('button', { name: /Generate/i }).click()
 
-    // After stream completes, sessions list refreshes — should show topic in sidebar
+    // After stream completes, sessions list refreshes â€” should show topic in sidebar
     await expect(
       page.getByText('Machine Learning').first()
     ).toBeVisible({ timeout: 8_000 })
@@ -422,7 +422,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
     })
     await mockGetSession(page, STORY_SESSION)
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // Click the history sidebar item
     await page.getByText('Machine Learning').first().click()
@@ -439,7 +439,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
     })
     await mockGetSession(page, GUIDED_SESSION)
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // Click the guided session in the history sidebar
     await page.getByText('Neural Networks').first().click()
@@ -456,11 +456,11 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
     })
     await mockGetSession(page, GUIDED_SESSION)
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
     await page.getByText('Neural Networks').first().click()
 
     // Step indicator: "Step 1 of 2" or "1 / 2"
-    // Use alternation (?:\/|of) — character class [\/of] only matches one char,
+    // Use alternation (?:\/|of) â€” character class [\/of] only matches one char,
     // not the two-character word "of".
     await expect(
       page.getByText(/1\s*(?:\/|of)\s*2/i).first()
@@ -473,7 +473,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
     })
     await mockGetSession(page, GUIDED_SESSION)
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
     await page.getByText('Neural Networks').first().click()
 
     // Wait for step 1 to render
@@ -515,7 +515,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
       },
     )
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // Hover over the session to reveal the delete button
     const sessionItem = page.getByText('Machine Learning').first()
@@ -530,7 +530,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
   })
 
   test('switching source mode to Web shows URL input field', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await page.getByText('Web').first().click()
 
@@ -540,7 +540,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
   })
 
   test('switching source mode to Upload shows file drop zone', async ({ page }) => {
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     await page.getByText('Upload').first().click()
 
@@ -553,7 +553,7 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
     await mockBase(page, { sessions: [STORY_SESSION] })
     await mockGetSession(page, STORY_SESSION)
 
-    await page.goto('/learn')
+    await page.goto('/#/learn')
 
     // Load a session so "New session" button appears
     await page.getByText('Machine Learning').first().click()
@@ -567,3 +567,4 @@ test.describe('Business Analyst — Learn Page: Functional Flows', () => {
   })
 
 })
+

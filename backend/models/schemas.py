@@ -8,7 +8,7 @@ Organise by domain: Settings, KB, Files, Chat, Summarizer, Search, Learn.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -321,10 +321,13 @@ class WebSearchResponse(BaseModel):
 
 class LearnSessionCreate(BaseModel):
     topic: str = Field(..., min_length=1)
-    format: str                         # quiz | flashcard | mindmap | story | timeline | eli5 | speedlearn | brainstorm
+    format: Literal[
+        "quiz", "flashcard", "mindmap", "story",
+        "timeline", "eli5", "speedlearn", "brainstorm", "guided",
+    ]
     source_type: str                    # topic | kb_file | url | upload
     source_ref: str | None = None       # file_id for kb_file, URL string for url
-    difficulty: str = "intermediate"    # beginner | intermediate | expert
+    difficulty: Literal["beginner", "intermediate", "expert"] = "intermediate"
     use_web_search: bool = False
     context_text: str = ""              # pre-fetched source text (KB/upload); backend fetches URL if empty + source_type=='url'
 

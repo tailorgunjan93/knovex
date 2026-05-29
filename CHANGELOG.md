@@ -11,6 +11,55 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.9.6] — 2026-05-29
+
+Quality release: process overhaul, all tests green, NSIS installer fixed
+
+### Fixed
+
+- **`desktop/package.json`** — changed NSIS `oneClick: false` → `oneClick: true`.
+  `oneClick: false` ran the old version's uninstaller via `ExecWait ... /S _?=$INSTDIR`
+  which returned exit code 2, triggering "Failed to uninstall old application files."
+  on every auto-update.  `oneClick: true` uses an overwrite-style install that skips
+  the old-uninstaller step entirely — same approach used by Chrome, Slack, VS Code.
+  Also removed `allowToChangeInstallationDirectory` and `allowElevation` (not applicable
+  with oneClick mode).
+
+- **`backend/models/schemas.py`** — added `Literal` types for `LearnSessionCreate.format`
+  and `LearnSessionCreate.difficulty`.  Plain `str` let invalid values (e.g. `"nonsense"`,
+  `"ultra-hard"`) pass Pydantic validation and reach the service where they raised
+  `ValueError` → 500.  Now FastAPI returns 422 at the schema level.
+
+- **`backend/core/learn_service.py`** — `review_flashcard` now raises `ValueError` for
+  unknown `ease_rating` values instead of silently falling back to a 3-day interval.
+  The route's existing `except ValueError → 400` handler now fires correctly.
+
+- **`e2e/progress.spec.ts` and `e2e/learn.spec.ts`** — fixed all `page.goto('/route')`
+  calls to `page.goto('/#/route')`.  The app uses `HashRouter` so all routes are hash-
+  prefixed; the wrong URLs silently redirected to the Library page, causing every
+  progress/learn E2E test to fail since the project began.
+
+- **`playwright.config.ts`** — added `testIgnore: '**/electron/**'` to exclude the new
+  Electron-specific tests from the browser test run.
+
+### Added
+
+- **`CLAUDE.md`** — project-level developer guide documenting the mandatory release
+  process (understand → audit → test first → fix → run full suite → one release).
+  Also lists all known issues, architecture, and why bugs weren't caught early.
+
+- **`playwright.config.electron.ts`** + **`e2e/electron/`** — new Electron-specific
+  E2E test suite covering the bugs that only appear in the packaged app:
+  - `ipc.spec.ts`: Verifies `dialog:openFile` returns `{canceled, filePaths}` (not raw
+    array), and all `window.knovex.*` API surface is correct
+  - `startup.spec.ts`: App launch, backend health, settings API, provider model fetch,
+    Cerebras model ID format, provider key isolation
+  - `navigation.spec.ts`: All 6 pages load without crashing via hash routes
+  - `settings.spec.ts`: Provider model catalogues, retired model ID regression,
+    provider key isolation
+
+---
+
 ## [0.9.5] — 2026-05-29
 
 Fix — "filePaths is not iterable" crash when adding files in packaged app

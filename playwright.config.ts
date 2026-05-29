@@ -15,6 +15,7 @@ import path from 'path'
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: '**/electron/**',   // Electron tests have their own config: playwright.config.electron.ts
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
