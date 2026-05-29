@@ -101,10 +101,14 @@ async function mockKbApi(page: Page, kbs: object[]) {
 test.describe('UI/UX Expert — Library Page: Visual & Layout', () => {
 
   test('page header shows "Your knowledge base"', async ({ page }) => {
+    /**
+     * ScreenHeader renders title="Your", emphasis="knowledge", titleSuffix="base"
+     * These are in separate spans — check the eyebrow which is unique
+     */
     await mockKbApi(page, KB_EMPTY)
     await page.goto('/#/kb')
-    await expect(page.getByText('Your')).toBeVisible()
-    await expect(page.getByText('knowledge')).toBeVisible()
+    await expect(page.getByText('knowledge').first()).toBeVisible()
+    await expect(page.getByText(/LIBRARY/)).toBeVisible()
   })
 
   test('eyebrow shows "LIBRARY · 0 COLLECTIONS" when empty', async ({ page }) => {
@@ -122,7 +126,8 @@ test.describe('UI/UX Expert — Library Page: Visual & Layout', () => {
   test('"New collection" button is visible', async ({ page }) => {
     await mockKbApi(page, KB_EMPTY)
     await page.goto('/#/kb')
-    await expect(page.getByRole('button', { name: /New collection/i })).toBeVisible()
+    // Multiple "New collection" buttons may exist (header + empty state) — use first
+    await expect(page.getByRole('button', { name: /New collection/i }).first()).toBeVisible()
   })
 
   test('Daily Spark is shown on first load', async ({ page }) => {
@@ -134,10 +139,10 @@ test.describe('UI/UX Expert — Library Page: Visual & Layout', () => {
   test('filter pills All / Mastered / Review / New are present', async ({ page }) => {
     await mockKbApi(page, KB_MANY)
     await page.goto('/#/kb')
-    await expect(page.getByText('All')).toBeVisible()
-    await expect(page.getByText('Mastered')).toBeVisible()
-    await expect(page.getByText('Review')).toBeVisible()
-    await expect(page.getByText('New')).toBeVisible()
+    await expect(page.getByText('All').first()).toBeVisible()
+    await expect(page.getByText('Mastered').first()).toBeVisible()
+    await expect(page.getByText('Review').first()).toBeVisible()
+    await expect(page.getByText('New').first()).toBeVisible()
   })
 
   test('Collections section label is visible', async ({ page }) => {
@@ -149,8 +154,8 @@ test.describe('UI/UX Expert — Library Page: Visual & Layout', () => {
   test('KB card shows name and icon', async ({ page }) => {
     await mockKbApi(page, KB_ONE)
     await page.goto('/#/kb')
-    await expect(page.getByText('Machine Learning Notes')).toBeVisible()
-    await expect(page.getByText('🧠')).toBeVisible()
+    await expect(page.getByText('Machine Learning Notes').first()).toBeVisible()
+    await expect(page.getByText('🧠').first()).toBeVisible()
   })
 
   test('KB card shows file count', async ({ page }) => {
@@ -301,18 +306,18 @@ test.describe('Business Analyst — Filter Pills', () => {
   test('"All" filter shows all KBs', async ({ page }) => {
     await mockKbApi(page, KB_MANY)
     await page.goto('/#/kb')
-    await page.getByText('All').click()
-    await expect(page.getByText('Machine Learning Notes')).toBeVisible()
-    await expect(page.getByText('Research Papers')).toBeVisible()
-    await expect(page.getByText('Empty Collection')).toBeVisible()
+    await page.getByText('All').first().click()
+    await expect(page.getByText('Machine Learning Notes').first()).toBeVisible()
+    await expect(page.getByText('Research Papers').first()).toBeVisible()
+    await expect(page.getByText('Empty Collection').first()).toBeVisible()
   })
 
   test('"New" filter shows only KBs with 0 files', async ({ page }) => {
     await mockKbApi(page, KB_MANY)
     await page.goto('/#/kb')
-    await page.getByText('New').click()
+    await page.getByText('New').first().click()
     // Only "Empty Collection" has 0 files
-    await expect(page.getByText('Empty Collection')).toBeVisible()
+    await expect(page.getByText('Empty Collection').first()).toBeVisible()
     // "Machine Learning Notes" has 5 files — should not appear
     await expect(page.getByText('Machine Learning Notes')).not.toBeVisible()
   })

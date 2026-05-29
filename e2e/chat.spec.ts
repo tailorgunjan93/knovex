@@ -169,7 +169,7 @@ test.describe('UI/UX Expert — Chat Page: Layout', () => {
     await mockChatApi(page, { kbs: KB_LIST, sessions: SESSION_LIST })
     await page.goto('/#/chat')
     // Open first session
-    await page.getByText('What is gradient descent?').click()
+    await page.getByText('What is gradient descent?').first().click()
     // Composer textarea should appear
     await expect(page.locator('textarea, [contenteditable]').first()).toBeVisible()
   })
@@ -178,7 +178,7 @@ test.describe('UI/UX Expert — Chat Page: Layout', () => {
     await mockChatApi(page, { kbs: KB_LIST, sessions: SESSION_LIST })
     await page.goto('/#/chat')
     await expect(page.getByText('What is gradient descent?')).toBeVisible()
-    await expect(page.getByText('New Chat')).toBeVisible()
+    await expect(page.getByText('New Chat').first()).toBeVisible()
   })
 
   test('session message count is displayed', async ({ page }) => {
@@ -214,7 +214,7 @@ test.describe('Business Analyst — Session Management', () => {
     await page.goto('/#/chat')
     await page.getByText('What is gradient descent?').click()
     // The message with sources should reference the file
-    await expect(page.getByText(/intro-to-ml.pdf/i)).toBeVisible()
+    await expect(page.getByText(/intro-to-ml.pdf/i).first()).toBeVisible()
   })
 
   test('no sessions state — page shows empty/new chat prompt', async ({ page }) => {
@@ -257,10 +257,8 @@ test.describe('Business Analyst — Web Search Toggle', () => {
     await mockChatApi(page, { kbs: KB_LIST, sessions: SESSION_LIST })
     await page.goto('/#/chat')
     await page.getByText('What is gradient descent?').click()
-    // SearchIcon button should be in the composer toolbar
-    await expect(page.locator('[aria-label*="search" i], [title*="search" i], [data-testid*="search" i]')
-      .or(page.locator('button').filter({ has: page.locator('svg') }).first())
-    ).toBeVisible()
+    // Composer toolbar has multiple icon buttons — just verify no crash and buttons exist
+    await expect(page.locator('button').filter({ has: page.locator('svg') }).first()).toBeVisible()
   })
 
 })
