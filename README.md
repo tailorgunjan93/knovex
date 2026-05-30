@@ -12,6 +12,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
 [![Powered by docnest](https://img.shields.io/badge/powered%20by-docnest--ai-purple.svg)](https://pypi.org/project/docnest-ai/)
+[![Read on DEV](https://img.shields.io/badge/dev.to-Read%20the%20Article-0A0A0A?logo=devdotto&logoColor=white)](https://dev.to/gunjantailor/i-built-a-local-first-ai-desktop-knowledge-base-heres-what-i-learned-3o4a)
 
 **Knovex** is a local-first, AI-powered desktop knowledge base with an interactive learning engine.  
 Drop in your documents, ask questions, summarise, search the web, and turn complex topics into animated, gamified learning sessions — all running on your machine.
@@ -462,6 +463,11 @@ git push origin v0.4.0
 | [docs/FEATURES.md](docs/FEATURES.md) | Complete feature specification |
 | [docs/API_SPEC.md](docs/API_SPEC.md) | All API endpoints and data contracts |
 | [docs/TECH_STACK.md](docs/TECH_STACK.md) | Technology choices and rationale |
+
+## Article
+
+**[I Built a Local-First AI Desktop Knowledge Base — Here's What I Learned](https://dev.to/gunjantailor/i-built-a-local-first-ai-desktop-knowledge-base-heres-what-i-learned-3o4a)**  
+Published on [DEV Community](https://dev.to) — covers the architecture decisions, lessons from shipping a PyInstaller + Electron desktop app, and the real bugs that shipped and had to be fixed.
 
 ---
 
