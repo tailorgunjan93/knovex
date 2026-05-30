@@ -12,30 +12,66 @@ Knovex is an AI-powered desktop knowledge base app.
 
 ## MANDATORY Release Process
 
-> These steps are non-negotiable. Every release must follow them in order.
-> **Never push a git tag until all steps pass.**
+> **Quality over quantity. One working release beats ten broken ones.**
+> These steps are non-negotiable and must be followed in order — every single time.
+> Do NOT rush to deployment. Rushing is what caused 9 broken releases in a row.
+> **Never push a git tag until every step below is complete and green.**
 
-### Step 1 — Understand the issue
-- Read the full error message and stack trace
+---
+
+### Step 1 — Deeply understand the issue first. Don't touch code yet.
+
+Resist the urge to fix immediately. Understand first.
+
+- Read the full error message, stack trace, and any logs
 - Find the exact file and line causing the bug
-- Understand WHY it happens in production but not in dev (if applicable)
-- Check if the same root cause could affect other code paths
+- Understand WHY it happens in production but not in dev (packaged vs dev differences — see table below)
+- Trace the root cause: what assumption was wrong? what was missing?
+- Ask: could the same root cause exist in other code paths? Other IPC handlers? Other providers?
 
-### Step 2 — Audit for related issues
-- Before fixing anything, search the codebase for similar patterns
-- Check if the same bug class exists elsewhere (e.g. other IPC handlers, other providers)
-- Read the KNOWN ISSUES section below and update it
+---
 
-### Step 3 — Write test cases FIRST
-- Add failing test cases to the E2E suite (`e2e/`) that reproduce the bug
-- Add unit tests where appropriate (`tests/`)
-- Tests must fail before the fix, pass after
+### Step 2 — Audit the whole codebase before writing a single fix
+
+Before fixing anything, do a full audit:
+
+- Search the codebase for similar patterns that could have the same bug
+- Read ALL entries in the **Known Issues** table below
+- Check every ❌ TODO in the E2E Test Coverage list — these are unguarded failure points
+- Look for anything related to the current issue that might have been missed
+
+Then write a **process checklist** — ask yourself:
+- Why wasn't this caught by existing tests?
+- Was it a missing test? A wrong assumption? A type mismatch? A packaged-app-only path?
+- Are there other bugs of this class still lurking?
+
+This checklist becomes the basis for the new test cases in Step 3. It also goes into "Why Bugs Weren't Caught Early" at the bottom of this file — keep that section updated.
+
+---
+
+### Step 3 — Write failing test cases BEFORE touching production code
+
+Tests prove the bug exists and prove the fix works. Write them first.
+
+- Add failing E2E tests to `e2e/` that reproduce the exact bug
+- Add unit/integration tests to `tests/` where appropriate
+- Every bug in the Known Issues table with ❌ TODO must eventually get a test — if you're touching related code, add the test now
+- Tests must **fail** before the fix. If they pass before the fix, the test is wrong.
+
+---
 
 ### Step 4 — Fix the code
-- Make the minimal correct change
-- Do not introduce unrelated refactors in the same commit
 
-### Step 5 — Run the full test suite
+Now — and only now — write the fix.
+
+- Make the minimal correct change. Don't refactor unrelated things in the same commit.
+- Double-check: does the fix address the root cause, or just the symptom?
+- Update the **Known Issues** table: add the root cause, fixed version, and E2E test status
+
+---
+
+### Step 5 — Run the full test suite. All of it. No shortcuts.
+
 ```bash
 # Unit / integration tests
 pytest tests/ -v
@@ -43,13 +79,35 @@ pytest tests/ -v
 # E2E tests against the packaged app
 cd e2e && npx playwright test
 ```
-**Do not proceed unless ALL tests pass.**
 
-### Step 6 — Single clean release
-- Bump version in ALL version files (config.py, package.json ×2, test, docs, README, CHANGELOG)
-- Write a meaningful CHANGELOG entry explaining root cause and fix
-- One commit, one tag, one release
-- **Never release multiple versions in a single session without full test coverage**
+- Every test must pass — including the new ones you just wrote
+- If anything fails, go back. Do not proceed with a partially-green suite.
+- Do not skip slow tests. Do not comment out failing tests to make the suite green.
+
+---
+
+### Step 6 — Pre-release historical audit (do this before EVERY release)
+
+Before creating any release, do one final sweep:
+
+1. **Mine all known issues** — go through this CLAUDE.md's Known Issues table, previous session notes, and any bugs found during manual testing
+2. **Check E2E coverage** — for every ❌ TODO in the Known Issues table, either add a test now or explicitly acknowledge it as deferred with a reason
+3. **Check server-side issues too** — not just Electron/desktop bugs. Backend, API, provider bugs all count.
+4. **Run the full suite one final time** after all new tests are added
+5. Only when everything is green: bump version, write CHANGELOG, commit, tag, release
+
+---
+
+### Step 7 — Single clean release
+
+- Bump version in ALL version files (see Version Files section below)
+- Write a CHANGELOG entry that explains: what the bug was, what the root cause was, how it was fixed
+- One commit, one tag, one GitHub release
+- **Never release multiple versions in a single session.** If you find another bug after releasing, go back to Step 1.
+
+---
+
+**The philosophy:** A release that works is worth infinitely more than five releases that don't. Every broken release erodes trust. Slow down, do it right, ship once.
 
 ---
 
