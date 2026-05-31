@@ -633,3 +633,71 @@ class StubParagraphAdapter(IParagraphAdapter):
 
     def extract_paragraphs(self, file_path: Path) -> list[ParagraphContent]:
         return self._paragraphs
+
+
+# ---------------------------------------------------------------------------
+# Caching decorator — Reader performance fix
+# ---------------------------------------------------------------------------
+
+class CachingPDFAdapter(IPDFAdapter):
+    """
+    Decorator (GoF) that memoizes ``extract_pages`` of any ``IPDFAdapter``.
+
+    Why: ReaderService re-parsed the whole PDF on every page turn and threw
+    away all but one page — O(full-parse) per turn. Wrapping the real adapter
+    in this cache makes the first open parse once and every subsequent page
+    turn an O(1) dict lookup.
+
+    Cache key: ``(resolved_path, mtime_ns, size)`` so the entry auto-invalidates
+    if the file is modified or replaced on disk (correctness over staleness).
+
+    Bounded LRU (``maxsize`` entries, default 8) so a long reading session over
+    many documents can't grow memory without bound; the least-recently-used
+    document is evicted first. Thread-safe: ``get_content`` runs the renderer in
+    a thread-pool executor, so the cache may be touched from multiple threads.
+
+    SOLID: SRP (only caching — parsing stays in the wrapped adapter), OCP (wraps
+    any current/future IPDFAdapter without modifying it), LSP (is an IPDFAdapter).
+    """
+
+    def __init__(self, inner: IPDFAdapter, maxsize: int = 8) -> None:
+        self._inner = inner
+        self._maxsize = max(1, maxsize)
+        # OrderedDict as an LRU: most-recently-used moved to the end.
+        from collections import OrderedDict
+        from threading import Lock
+        self._cache: "OrderedDict[tuple, list[PageContent]]" = OrderedDict()
+        self._lock = Lock()
+
+    @staticmethod
+    def _key(file_path: Path) -> tuple:
+        """Identity that changes whenever the file content could have changed."""
+        p = file_path.resolve()
+        try:
+            st = p.stat()
+            return (str(p), st.st_mtime_ns, st.st_size)
+        except OSError:
+            # File missing/unreadable — use a key that won't collide with a real
+            # stat; the inner adapter will raise the appropriate error.
+            return (str(p), -1, -1)
+
+    def extract_pages(self, file_path: Path) -> list[PageContent]:
+        key = self._key(file_path)
+
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit is not None:
+                self._cache.move_to_end(key)        # mark most-recently-used
+                return hit
+
+        # Parse outside the lock so concurrent reads of *different* files don't
+        # serialize on a slow parse. A duplicate concurrent miss for the same
+        # file may parse twice, but the result is identical and idempotent.
+        pages = self._inner.extract_pages(file_path)
+
+        with self._lock:
+            self._cache[key] = pages
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._maxsize:
+                self._cache.popitem(last=False)     # evict least-recently-used
+        return pages

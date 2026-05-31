@@ -61,7 +61,7 @@ import MenuBookIcon           from '@mui/icons-material/MenuBook'
 import LanguageIcon           from '@mui/icons-material/Language'
 import PushPinOutlinedIcon    from '@mui/icons-material/PushPinOutlined'
 import TravelExploreIcon      from '@mui/icons-material/TravelExplore'
-import { useQuery }           from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { readerApi, type ContentBlock } from '../../api/reader.api'
 import InlineQA               from '../../pages/KnowledgeBase/components/InlineQA'
 
@@ -874,6 +874,7 @@ export default function FileViewer({
     }
   }, [])
 
+  const qc = useQueryClient()
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['file-content', kbId, fileId, page],
     queryFn:  () => readerApi.getContent(kbId, fileId, page),
@@ -882,6 +883,21 @@ export default function FileViewer({
 
   const totalPages = data?.total_pages ?? 1
   const blocks     = data?.content.blocks ?? []
+
+  // ── Prefetch adjacent pages (±1) ───────────────────────────────────────────
+  // Pairs with the backend page cache so a page turn is served from memory and
+  // feels instant. Only runs once totalPages is known; bounds-checked.
+  useEffect(() => {
+    if (!data) return
+    const neighbours = [page - 1, page + 1].filter(p => p >= 1 && p <= totalPages && p !== page)
+    for (const p of neighbours) {
+      qc.prefetchQuery({
+        queryKey: ['file-content', kbId, fileId, p],
+        queryFn:  () => readerApi.getContent(kbId, fileId, p),
+        staleTime: 60_000,
+      })
+    }
+  }, [data, page, totalPages, kbId, fileId, qc])
 
   // Split mode: auto-open Q&A
   const effectiveQaOpen = qaOpen || readingMode === 'split'

@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from backend.adapters.document_parsers import (
+    CachingPDFAdapter,
     IParagraphAdapter,
     IPDFAdapter,
     PyMuPDFAdapter,
@@ -85,7 +86,11 @@ class ReaderService:
         self._file_repo = file_repo
         self._backend = backend
         self._llm_svc = llm_svc
-        self._pdf_adapter = pdf_adapter or PyMuPDFAdapter()
+        # Wrap the PDF adapter in a caching decorator so page turns don't
+        # re-parse the whole document each time (Reader perf fix). The wrap is
+        # transparent (same IPDFAdapter contract) and applies to injected stubs
+        # too, which keeps tests fast and still exercises the cached path.
+        self._pdf_adapter: IPDFAdapter = CachingPDFAdapter(pdf_adapter or PyMuPDFAdapter())
         self._para_adapter = para_adapter or PythonDocxAdapter()
         self._search_svc = search_svc
 
