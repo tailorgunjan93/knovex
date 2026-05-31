@@ -320,6 +320,7 @@ describe('Generate and streaming', () => {
         'topic',               // sourceType
         undefined,             // sourceRef
         '',                    // contextText
+        'English',             // language (default)
       )
     )
   })
@@ -653,6 +654,7 @@ describe('Guided Learning — UI/UX Expert', () => {
         'topic',
         undefined,
         '',
+        'English',             // language (default)
       )
     )
   })

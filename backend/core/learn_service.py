@@ -110,6 +110,7 @@ class LearnService:
         model: str,
         credentials: ProviderCredentials,
         context_text: str = "",
+        language: str = "English",
     ) -> AsyncGenerator[str, None]:
         """
         Create a LearnSession, generate content, stream SSE events.
@@ -142,7 +143,7 @@ class LearnService:
             if format in _TEXT_FORMATS:
                 # Stream tokens in real-time AND accumulate for saving — one LLM call.
                 accumulated = ""
-                messages = self._build_prompt(format, topic, difficulty, context_text)
+                messages = self._build_prompt(format, topic, difficulty, context_text, language)
                 try:
                     async for token in self._llm_svc.stream(
                         messages=messages,
@@ -162,7 +163,7 @@ class LearnService:
                 # Token budget: guided > quiz/flashcard > simpler formats
                 _json_token_budget = {"guided": 4096, "quiz": 3000, "flashcard": 2500}
                 json_max_tokens = _json_token_budget.get(format, 2048)
-                messages = self._build_prompt(format, topic, difficulty, context_text)
+                messages = self._build_prompt(format, topic, difficulty, context_text, language)
                 try:
                     raw = await self._llm_svc.complete(
                         messages=messages,
@@ -363,9 +364,24 @@ class LearnService:
         topic: str,
         difficulty: str,
         context_text: str,
+        language: str = "English",
     ) -> list[dict[str, str]]:
-        """Return messages list for the LLM call."""
+        """Return messages list for the LLM call.
+
+        Multilingual (generate-in-language): when *language* is anything other
+        than English we append an instruction to write all human-readable text
+        in that language while keeping JSON keys in English — so the downstream
+        JSON parser and the renderer keep working unchanged. Default English
+        adds nothing, so existing behavior is untouched.
+        """
         system = _SYSTEM_PROMPTS[format].format(topic=topic, difficulty=difficulty)
+        if language and language.strip().lower() != "english":
+            system += (
+                f"\n\nIMPORTANT: Write all human-readable text (questions, answers, "
+                f"explanations, titles, body copy) in {language}. "
+                f"Keep all JSON keys/field names in English exactly as specified — "
+                f"translate only the values, never the keys."
+            )
         user_parts = [f"Topic: {topic}"]
         if context_text:
             user_parts.append(f"\nContext from knowledge base:\n{context_text[:3000]}")

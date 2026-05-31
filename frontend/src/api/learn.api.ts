@@ -211,6 +211,7 @@ export const learnApi = {
     sourceType: SourceType = 'topic',
     sourceRef?: string,
     contextText?: string,
+    language: string = 'English',
   ): Promise<void> {
     const response = await fetch(
       `${API_BASE}/api/learn/sessions/stream`,
@@ -224,6 +225,7 @@ export const learnApi = {
           source_type: sourceType,
           source_ref: sourceRef ?? null,
           context_text: contextText ?? '',
+          language,
         }),
         signal,
       },

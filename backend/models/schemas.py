@@ -328,6 +328,7 @@ class LearnSessionCreate(BaseModel):
     source_type: str                    # topic | kb_file | url | upload
     source_ref: str | None = None       # file_id for kb_file, URL string for url
     difficulty: Literal["beginner", "intermediate", "expert"] = "intermediate"
+    language: str = "English"           # generate-in-language; default English = no behavior change
     use_web_search: bool = False
     context_text: str = ""              # pre-fetched source text (KB/upload); backend fetches URL if empty + source_type=='url'
 

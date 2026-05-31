@@ -483,6 +483,10 @@ export default function GuidedViewer({ content }: Props) {
   const [seen,       setSeen]       = useState<Set<number>>(new Set([0]))
   const [direction,  setDirection]  = useState<'forward' | 'back'>('forward')
   const [confetti,   setConfetti]   = useState(false)
+  // Conversational reveal: how many beats of the current step are shown.
+  // Starts at 1 (just the explanation) and grows as the learner taps Continue —
+  // replaces the old "wall of text" where all sections appeared at once.
+  const [revealed,   setRevealed]   = useState(1)
 
   // track how many steps have been completed (for pace-check cadence)
   const completedCount = useRef(0)
@@ -496,17 +500,26 @@ export default function GuidedViewer({ content }: Props) {
 
   if (!step) return null
 
+  // Beats in the current step: explanation, example, [analogy], key_insight, check_in.
+  const beatCount     = step.analogy ? 5 : 4
+  const allBeatsShown = revealed >= beatCount
+
   // ── Navigation helpers ─────────────────────────────────────────────────────
 
   function goTo(idx: number) {
     setDirection(idx > stepIdx ? 'forward' : 'back')
     setStepIdx(idx)
     setPhase('reading')
+    setRevealed(1)   // restart the conversational reveal for the new step
     setSeen(prev => new Set([...prev, idx]))
   }
 
-  // After reading: go to quiz check or next phase
+  // After reading: if beats remain, reveal them all first; otherwise advance.
   function handleGotIt() {
+    if (revealed < beatCount) {
+      setRevealed(beatCount)   // reveal the rest in one tap (skip-ahead)
+      return
+    }
     const quiz = step.quiz_check
     if (quiz) {
       setPhase('checking')
@@ -762,42 +775,57 @@ export default function GuidedViewer({ content }: Props) {
           </Typography>
         </Box>
 
-        {/* Reading phase — content sections */}
-        {phase === 'reading' && (
-          <Box sx={{ px: 3, pb: 2, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-            <Section icon={<LightbulbIcon />}   label="Explanation"       accent="#6366F1" animDelay={0}>
-              <Typography sx={{ fontSize: 13.5, lineHeight: 1.7, color: 'text.primary', whiteSpace: 'pre-wrap' }}>
-                {step.explanation}
-              </Typography>
-            </Section>
+        {/* Reading phase — conversational beats, revealed one at a time */}
+        {phase === 'reading' && (() => {
+          // Build the ordered beats for this step (skip null analogy).
+          const beats = [
+            { icon: <LightbulbIcon />,     label: 'Explanation',       accent: '#6366F1',
+              node: <Typography sx={{ fontSize: 13.5, lineHeight: 1.7, color: 'text.primary', whiteSpace: 'pre-wrap' }}>{step.explanation}</Typography> },
+            { icon: <CodeIcon />,          label: 'Real-world example', accent: '#0EA5E9',
+              node: <Typography sx={{ fontSize: 13, lineHeight: 1.65, color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)' }}>{step.example}</Typography> },
+            ...(step.analogy ? [{ icon: <CompareArrowsIcon />, label: 'Think of it like…', accent: '#F59E0B',
+              node: <Typography sx={{ fontSize: 13, lineHeight: 1.65, color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)', fontStyle: 'italic' }}>{step.analogy}</Typography> }] : []),
+            { icon: <StarBorderIcon />,    label: 'Key insight',        accent: '#10B981',
+              node: <Typography sx={{ fontSize: 13, fontWeight: 600, lineHeight: 1.55, color: 'text.primary' }}>{step.key_insight}</Typography> },
+            { icon: <HelpOutlineIcon />,   label: 'Check yourself',     accent: '#8B5CF6',
+              node: <Typography sx={{ fontSize: 13, lineHeight: 1.6, color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)' }}>{step.check_in}</Typography> },
+          ]
+          const shown = Math.min(revealed, beats.length)
+          const moreBeats = shown < beats.length
+          return (
+            <Box sx={{ px: 3, pb: 2, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+              {beats.slice(0, shown).map((b, i) => (
+                <Section key={b.label} icon={b.icon} label={b.label} accent={b.accent} animDelay={i === shown - 1 ? 0 : 0}>
+                  {b.node}
+                </Section>
+              ))}
 
-            <Section icon={<CodeIcon />}         label="Real-world example" accent="#0EA5E9" animDelay={80}>
-              <Typography sx={{ fontSize: 13, lineHeight: 1.65, color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)' }}>
-                {step.example}
-              </Typography>
-            </Section>
+              {/* In-step Continue — reveals the next beat instead of dumping all at once */}
+              {moreBeats && (
+                <Button
+                  variant="text"
+                  onClick={() => setRevealed(r => r + 1)}
+                  endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                  sx={{ alignSelf: 'flex-start', textTransform: 'none', fontSize: 12.5, fontWeight: 600,
+                        color: '#6366F1', mt: 0.5, '&:hover': { bgcolor: alpha('#6366F1', 0.08) } }}
+                >
+                  Continue
+                </Button>
+              )}
 
-            {step.analogy && (
-              <Section icon={<CompareArrowsIcon />} label="Think of it like…" accent="#F59E0B" animDelay={160}>
-                <Typography sx={{ fontSize: 13, lineHeight: 1.65, color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.75)', fontStyle: 'italic' }}>
-                  {step.analogy}
-                </Typography>
-              </Section>
-            )}
-
-            <Section icon={<StarBorderIcon />}  label="Key insight"       accent="#10B981" animDelay={step.analogy ? 240 : 160}>
-              <Typography sx={{ fontSize: 13, fontWeight: 600, lineHeight: 1.55, color: 'text.primary' }}>
-                {step.key_insight}
-              </Typography>
-            </Section>
-
-            <Section icon={<HelpOutlineIcon />} label="Check yourself"    accent="#8B5CF6" animDelay={step.analogy ? 320 : 240}>
-              <Typography sx={{ fontSize: 13, lineHeight: 1.6, color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)' }}>
-                {step.check_in}
-              </Typography>
-            </Section>
-          </Box>
-        )}
+              {/* Beat progress pips */}
+              <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+                {beats.map((_, i) => (
+                  <Box key={i} sx={{
+                    width: i < shown ? 18 : 7, height: 4, borderRadius: 2,
+                    bgcolor: i < shown ? '#6366F1' : theme.palette.divider,
+                    transition: 'width 0.3s ease, background 0.3s ease',
+                  }} />
+                ))}
+              </Box>
+            </Box>
+          )
+        })()}
 
         {/* Checking phase — MCQ quiz */}
         {phase === 'checking' && step.quiz_check && (
@@ -835,14 +863,16 @@ export default function GuidedViewer({ content }: Props) {
           <Button
             variant="contained"
             onClick={handleGotIt}
-            endIcon={isLast && !step.quiz_check ? <CheckCircleOutlineIcon /> : <ArrowForwardIcon />}
+            endIcon={!allBeatsShown ? <ArrowForwardIcon />
+                     : isLast && !step.quiz_check ? <CheckCircleOutlineIcon /> : <ArrowForwardIcon />}
             sx={{
               textTransform: 'none', fontSize: 13, fontWeight: 600,
               bgcolor: '#6366F1', px: 3,
               '&:hover': { bgcolor: '#4F46E5' },
             }}
           >
-            {isLast && !step.quiz_check ? 'Complete lesson' : 'Got it — next →'}
+            {!allBeatsShown ? 'Reveal all'
+             : isLast && !step.quiz_check ? 'Complete lesson' : 'Got it — next →'}
           </Button>
         )}
 

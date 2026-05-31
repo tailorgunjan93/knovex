@@ -46,6 +46,7 @@ import ChildCareIcon from '@mui/icons-material/ChildCare'
 import BoltIcon from '@mui/icons-material/Bolt'
 import EmojiObjectsIcon from '@mui/icons-material/EmojiObjects'
 import SchoolIcon from '@mui/icons-material/School'
+import TranslateIcon from '@mui/icons-material/Translate'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import StopIcon from '@mui/icons-material/Stop'
 import StarIcon from '@mui/icons-material/Star'
@@ -105,6 +106,9 @@ const DIFFICULTIES: Array<{ id: Difficulty; label: string; color: string; bg: st
   { id: 'intermediate', label: 'Intermediate', color: '#D97706', bg: '#FEF3C7' },
   { id: 'expert',       label: 'Expert',       color: '#DC2626', bg: '#FEE2E2' },
 ]
+
+// Multilingual (generate-in-language). 'English' is the default = no behavior change.
+const LANGUAGES = ['English', 'हिन्दी', 'Español', 'Français', 'Deutsch', 'Português', 'Italiano', '日本語', '中文', '한국어', 'العربية', 'Русский']
 
 const FORMAT_ICON_MAP: Record<LearnFormat, React.ReactNode> = {
   guided:     <SchoolIcon fontSize="small" />,
@@ -849,6 +853,7 @@ export default function LearnPage() {
   const [topic, setTopic]         = useState(() => searchParams.get('topic') ?? '')
   const [format, setFormat]       = useState<LearnFormat>('quiz')
   const [difficulty, setDifficulty] = useState<Difficulty>('intermediate')
+  const [language, setLanguage]     = useState<string>('English')
 
   // ── Consume ?topic= URL param (set by Chat "Turn into lesson") ─────────────
   useEffect(() => {
@@ -1054,6 +1059,7 @@ export default function LearnPage() {
         sourceType,
         sourceRef,
         contextText,
+        language,
       )
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== 'AbortError') {
@@ -1690,6 +1696,33 @@ export default function LearnPage() {
                 </Box>
               )
             })}
+
+            <Box sx={{ width: 1, height: 20, bgcolor: 'divider', mx: 0.5 }} />
+
+            {/* Language (generate-in-language) */}
+            <Select
+              value={language}
+              onChange={(e) => !isStreaming && setLanguage(e.target.value)}
+              disabled={isStreaming}
+              variant="standard"
+              disableUnderline
+              startAdornment={<TranslateIcon sx={{ fontSize: 15, color: 'text.disabled', mr: 0.5 }} />}
+              sx={{
+                fontSize: 12,
+                px: 1.1, py: 0.25,
+                borderRadius: 1.25,
+                border: '1px solid',
+                borderColor: language !== 'English' ? 'primary.main' : 'transparent',
+                color: language !== 'English' ? 'primary.main' : 'text.secondary',
+                '& .MuiSelect-select': { py: 0.25, pr: '20px !important' },
+                '&:hover': { borderColor: 'primary.main' },
+              }}
+              MenuProps={{ PaperProps: { sx: { maxHeight: 320 } } }}
+            >
+              {LANGUAGES.map(l => (
+                <MenuItem key={l} value={l} sx={{ fontSize: 13 }}>{l}</MenuItem>
+              ))}
+            </Select>
           </Box>}
         </Box>
 
