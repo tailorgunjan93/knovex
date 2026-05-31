@@ -22,11 +22,14 @@ import LearnPage from './pages/Learn'
 import SettingsPage from './pages/Settings'
 import ReaderPage from './pages/Reader'
 import ProgressPage from './pages/Progress'
+import DesignLab from './pages/DesignLab'
 
 export default function App() {
   return (
     <HashRouter>
       <Routes>
+        {/* Throwaway visual exploration — full canvas, no AppShell chrome */}
+        <Route path="/design-lab" element={<DesignLab />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/kb" replace />} />
           <Route path="/kb/*"       element={<KnowledgeBasePage />} />

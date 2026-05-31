@@ -111,20 +111,11 @@ export default function ScreenHeader({
           {titleSuffix && <>{' '}{titleSuffix}</>}
         </Typography>
 
-        {/* Subtitle */}
-        {sub && (
-          <Typography
-            sx={{
-              fontSize:   13,
-              color:      'text.secondary',
-              mt:          1,
-              maxWidth:   560,
-              lineHeight: 1.5,
-            }}
-          >
-            {sub}
-          </Typography>
-        )}
+        {/* Subtitle — intentionally not rendered.
+           Header-trim (matches rough build's `.screen-header .sub { display:none }`):
+           the descriptive paragraph took vertical space without earning it. The `sub`
+           prop is kept so callers don't break; it just isn't shown. */}
+        {void sub}
       </Box>
 
       {/* Actions */}
