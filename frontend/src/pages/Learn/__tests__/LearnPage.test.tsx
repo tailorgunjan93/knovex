@@ -153,9 +153,9 @@ beforeEach(() => {
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
 describe('Empty state', () => {
-  it('renders the three core format cards in the empty state grid', async () => {
+  it('renders the four lab format cards in the empty state grid', async () => {
     renderLearn()
-    const expected = ['Guided', 'Quiz', 'Flashcards']
+    const expected = ['Guided', 'Animated', 'Flashcards', 'Quiz']
     for (const label of expected) {
       await waitFor(() => expect(screen.getAllByText(label).length).toBeGreaterThan(0))
     }
@@ -310,14 +310,14 @@ describe('Generate and streaming', () => {
     const input = await screen.findByPlaceholderText('What do you want to learn?')
     await userEvent.type(input, 'Machine Learning')
 
-    // Default format is Quiz (one of the three offered formats).
+    // Default format is Guided (first lab card).
     const genBtn = screen.getByRole('button', { name: /Generate/i })
     await userEvent.click(genBtn)
 
     await waitFor(() =>
       expect(learnApi.streamSession).toHaveBeenCalledWith(
         'Machine Learning',
-        'quiz',
+        'guided',
         expect.any(String),    // difficulty
         expect.any(Function),  // onEvent
         expect.anything(),     // AbortSignal
@@ -585,7 +585,7 @@ describe('Guided Learning — UI/UX Expert', () => {
   it('renders the guided format description card', async () => {
     renderLearn()
     await waitFor(() =>
-      expect(screen.getByText(/Personal tutor/i)).toBeInTheDocument()
+      expect(screen.getByText(/conversational tutor walks you through/i)).toBeInTheDocument()
     )
   })
 

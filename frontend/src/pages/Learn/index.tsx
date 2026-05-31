@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 import AutoStoriesIcon from '@mui/icons-material/AutoStories'
 import QuizIcon from '@mui/icons-material/Quiz'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import StyleIcon from '@mui/icons-material/Style'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import TimelineIcon from '@mui/icons-material/Timeline'
@@ -83,6 +84,7 @@ import {
 import { kbApi } from '../../api/kb.api'
 import { readerApi } from '../../api/reader.api'
 import GuidedViewer from './GuidedViewer'
+import AnimatedView from './AnimatedView'
 import { BRAND } from '@/theme/tokens'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
@@ -92,12 +94,26 @@ const SERIF = '"Instrument Serif", Georgia, serif'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Offered formats (UI). Trimmed to the three core modes; the backend still
-// supports the others so any previously-saved session of another type renders.
-const FORMATS: Array<{ id: LearnFormat; label: string; icon: React.ReactNode; desc: string; color: string }> = [
-  { id: 'guided',     label: 'Guided',      icon: <SchoolIcon />,       desc: 'Personal tutor — learn step by step at your pace', color: '#DDA76A' },
-  { id: 'quiz',       label: 'Quiz',        icon: <QuizIcon />,         desc: 'Test your knowledge with MCQ & earn XP',            color: '#7C3AED' },
-  { id: 'flashcard',  label: 'Flashcards',  icon: <StyleIcon />,        desc: 'Spaced repetition for long-term memory',            color: '#0EA5E9' },
+// UI-level format id. 'animated' is a presentation of guided content (the
+// animated step-through), not a separate backend format — see backendFormatFor.
+export type UIFormat = LearnFormat | 'animated'
+
+/** Map a UI format to the backend LearnFormat used for generation. */
+export function backendFormatFor(f: UIFormat): LearnFormat {
+  return f === 'animated' ? 'guided' : f
+}
+
+/** Formats whose generated content is a JSON object (vs streamed text). */
+export function isObjectFormat(f: UIFormat): boolean {
+  return ['quiz', 'flashcard', 'mindmap', 'timeline', 'guided', 'animated'].includes(f)
+}
+
+// Offered formats (UI), matching the lab lesson tabs: the four functional modes.
+const FORMATS: Array<{ id: UIFormat; label: string; icon: React.ReactNode; desc: string; color: string }> = [
+  { id: 'guided',    label: 'Guided',     icon: <SchoolIcon />,         desc: 'A conversational tutor walks you through, one beat at a time.', color: '#DDA76A' },
+  { id: 'animated',  label: 'Animated',   icon: <AutoAwesomeIcon />,    desc: 'Watch the concept build itself — visually, step by step.',     color: '#DDA76A' },
+  { id: 'flashcard', label: 'Flashcards', icon: <StyleIcon />,          desc: 'Spaced-repetition cards that adapt to your recall.',           color: '#0EA5E9' },
+  { id: 'quiz',      label: 'Quiz',       icon: <QuizIcon />,           desc: 'Check understanding with adaptive questions.',                  color: '#7C3AED' },
 ]
 
 const DIFFICULTIES: Array<{ id: Difficulty; label: string; color: string; bg: string }> = [
@@ -109,8 +125,9 @@ const DIFFICULTIES: Array<{ id: Difficulty; label: string; color: string; bg: st
 // Multilingual (generate-in-language). 'English' is the default = no behavior change.
 const LANGUAGES = ['English', 'हिन्दी', 'Español', 'Français', 'Deutsch', 'Português', 'Italiano', '日本語', '中文', '한국어', 'العربية', 'Русский']
 
-const FORMAT_ICON_MAP: Record<LearnFormat, React.ReactNode> = {
+const FORMAT_ICON_MAP: Record<UIFormat, React.ReactNode> = {
   guided:     <SchoolIcon fontSize="small" />,
+  animated:   <AutoAwesomeIcon fontSize="small" />,
   quiz:       <QuizIcon fontSize="small" />,
   flashcard:  <StyleIcon fontSize="small" />,
   mindmap:    <AccountTreeIcon fontSize="small" />,
@@ -842,7 +859,7 @@ export default function LearnPage() {
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [topic, setTopic]         = useState(() => searchParams.get('topic') ?? '')
-  const [format, setFormat]       = useState<LearnFormat>('quiz')
+  const [format, setFormat]       = useState<UIFormat>('guided')
   const [difficulty, setDifficulty] = useState<Difficulty>('intermediate')
   const [language, setLanguage]     = useState<string>('English')
 
@@ -861,7 +878,7 @@ export default function LearnPage() {
   const [streamError, setStreamError]             = useState<string | null>(null)
   const [lastXP, setLastXP]                       = useState<number | null>(null)
   const [newBadges, setNewBadges]                 = useState<string[]>([])
-  const [activeFormat, setActiveFormat]           = useState<LearnFormat>('quiz')
+  const [activeFormat, setActiveFormat]           = useState<UIFormat>('guided')
 
   // ── Hover state for sidebar delete ─────────────────────────────────────────
   const [hoveredSession, setHoveredSession] = useState<string | null>(null)
@@ -1015,12 +1032,14 @@ export default function LearnPage() {
     abortRef.current  = controller
     let accumulatedText = ''
     let accumulatedJson = ''
-    const isJson = ['quiz', 'flashcard', 'mindmap', 'timeline', 'guided'].includes(format)
+    // 'animated' generates guided content; only the presentation differs.
+    const genFormat = backendFormatFor(format)
+    const isJson = isObjectFormat(genFormat)
 
     try {
       await learnApi.streamSession(
         effectiveTopic,
-        format,
+        genFormat,
         difficulty,
         (event) => {
           if (event.type === 'token') {
@@ -1100,7 +1119,7 @@ export default function LearnPage() {
   const displayContent = streamingContent ?? activeSession?.content
   const displayFormat  = activeSessionId ? activeFormat : format
   const displayText    = streamingText || (displayContent as TextContent)?.text || ''
-  const isJsonFormat   = ['quiz', 'flashcard', 'mindmap', 'timeline', 'guided'].includes(displayFormat)
+  const isJsonFormat   = isObjectFormat(displayFormat)
   const hasContent     = !!(displayContent || streamingText)
   const selectedDiff   = DIFFICULTIES.find(d => d.id === difficulty)!
 
@@ -1879,9 +1898,10 @@ export default function LearnPage() {
                 </Paper>
               )}
               {displayFormat === 'guided' && (
-                <Paper variant="outlined" sx={{ borderRadius: 2.5, overflow: 'hidden' }}>
-                  <GuidedViewer content={displayContent as GuidedContent} />
-                </Paper>
+                <GuidedViewer content={displayContent as GuidedContent} />
+              )}
+              {displayFormat === 'animated' && (
+                <AnimatedView content={displayContent as GuidedContent} />
               )}
             </Box>
           )}
