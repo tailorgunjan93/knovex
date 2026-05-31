@@ -49,9 +49,20 @@ import AutoAwesomeIcon   from '@mui/icons-material/AutoAwesome'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { chatApi, type AttachResult, type ChatMessage, type ChatSession, type SSEEvent, type SourceCitation } from '../../api/chat.api'
 import { kbApi, type KB } from '../../api/kb.api'
+import KnovexMark from '@/components/brand/KnovexMark'
+import { initialsOf, resolveDisplayName } from '@/lib/displayName'
+import { useSettingsStore } from '@/store/settings.store'
+import { BRAND } from '@/theme/tokens'
 
 const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
-const SERIF = '"Instrument Serif", Georgia, serif'
+
+// Stable empty-array references. React Query returns `undefined` for `data`
+// before/while disabled; a `= []` default would mint a NEW array every render,
+// which (when used as a useEffect dependency) triggers an infinite setState loop.
+// Sharing one frozen reference keeps the dependency identity stable.
+const EMPTY_SESSIONS: ChatSession[]   = []
+const EMPTY_KBS:      KB[]            = []
+const EMPTY_MESSAGES: ChatMessage[]   = []
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +93,8 @@ export default function ChatPage() {
   const navigate    = useNavigate()
   const isDark      = theme.palette.mode === 'dark'
   const accent      = theme.palette.primary.main
+  const { settings } = useSettingsStore()
+  const userInitials = initialsOf(settings?.display_name)
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [messages,        setMessages]         = useState<StreamingMessage[]>([])
@@ -126,12 +139,12 @@ export default function ChatPage() {
   }, [kbDropOpen])
 
   // ── Queries ────────────────────────────────────────────────────────────────
-  const { data: sessions = [] } = useQuery({
+  const { data: sessions = EMPTY_SESSIONS } = useQuery({
     queryKey: ['chat-sessions'],
     queryFn:  () => chatApi.listSessions(),
   })
 
-  const { data: kbs = [] } = useQuery({
+  const { data: kbs = EMPTY_KBS } = useQuery({
     queryKey: ['kbs'],
     queryFn:  () => kbApi.list(),
   })
@@ -143,7 +156,7 @@ export default function ChatPage() {
     }
   }, [kbs]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { data: serverMessages = [], isLoading: msgsLoading } = useQuery({
+  const { data: serverMessages = EMPTY_MESSAGES, isLoading: msgsLoading } = useQuery({
     queryKey: ['chat-messages', activeSessionId],
     queryFn:  () => chatApi.getMessages(activeSessionId!),
     enabled:  !!activeSessionId,
@@ -338,105 +351,50 @@ export default function ChatPage() {
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
 
       {/* ══════════════════════════════════════════════════════════════════
-          LEFT: collapsible history panel
-          ══════════════════════════════════════════════════════════════════ */}
-      <Box sx={{ width: historyOpen ? 240 : 28, flexShrink: 0, position: 'relative',
-                 transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', zIndex: 10 }}>
-        {/* Inner clip — flat, no hard border (lab style) */}
-        <Box sx={{ position: 'absolute', inset: 0, overflow: 'hidden',
-                   bgcolor: alpha(theme.palette.background.paper, 0.4), display: 'flex' }}>
-
-          {/* Panel content */}
-          <Box sx={{ width: 240, flexShrink: 0, height: '100%', display: 'flex',
-                     flexDirection: 'column', opacity: historyOpen ? 1 : 0,
-                     transition: 'opacity 0.15s ease', pointerEvents: historyOpen ? 'auto' : 'none' }}>
-            <Box sx={{ px: 1.75, pt: 1.5, pb: 1 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
-                                letterSpacing: '0.13em', color: 'text.disabled', mb: 1 }}>
-                Conversations
-              </Typography>
-              <Box
-                onClick={() => createSessionMutation.mutate()}
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.75,
-                      height: 30, px: 1.25, borderRadius: 1, cursor: 'pointer',
-                      border: `1px solid ${alpha(accent, 0.35)}`, color: accent,
-                      fontSize: 12, fontWeight: 500,
-                      '&:hover': { bgcolor: alpha(accent, 0.06), borderColor: accent } }}
-              >
-                <AddIcon sx={{ fontSize: 13 }} />
-                <Typography sx={{ fontSize: 12, fontWeight: 500 }}>New Chat</Typography>
-              </Box>
-            </Box>
-
-            <Divider sx={{ borderColor: alpha(theme.palette.divider, 0.6) }} />
-
-            <Box flex={1} overflow="auto">
-              {sessions.length === 0 ? (
-                <Box sx={{ p: 2, textAlign: 'center' }}>
-                  <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>No conversations yet</Typography>
-                </Box>
-              ) : (
-                <List dense disablePadding>
-                  {sessions.map(session => (
-                    <SessionItem
-                      key={session.id}
-                      session={session}
-                      active={session.id === activeSessionId}
-                      onClick={() => { setActiveSessionId(session.id); setMessages([]); setError(null) }}
-                      onDelete={() => deleteSessionMutation.mutate(session.id)}
-                    />
-                  ))}
-                </List>
-              )}
-            </Box>
-          </Box>
-
-          {/* Collapsed strip */}
-          {!historyOpen && (
-            <Box onClick={() => setHistoryOpen(true)} sx={{ position: 'absolute', inset: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                  '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } }}>
-              <Typography sx={{ transform: 'rotate(-90deg)', fontFamily: MONO, fontSize: 9,
-                                textTransform: 'uppercase', letterSpacing: '0.14em',
-                                color: 'text.disabled', whiteSpace: 'nowrap', userSelect: 'none' }}>
-                History
-              </Typography>
-            </Box>
-          )}
-        </Box>
-
-        {/* Toggle pill */}
-        <Box onClick={() => setHistoryOpen(v => !v)}
-          sx={{ position: 'absolute', right: -12, top: '50%', transform: 'translateY(-50%)',
-                width: 22, height: 44, bgcolor: theme.palette.action.hover,
-                borderRadius: '0 8px 8px 0', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 30,
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
-                             '& svg': { color: accent } } }}>
-          {historyOpen
-            ? <ChevronLeftIcon  sx={{ fontSize: 13, color: 'text.disabled' }} />
-            : <ChevronRightIcon sx={{ fontSize: 13, color: 'text.disabled' }} />}
-        </Box>
-      </Box>
-
-      {/* ══════════════════════════════════════════════════════════════════
-          CENTER: chat main
+          CENTER: chat main (lab: rail + this + sources; history is a header menu)
           ══════════════════════════════════════════════════════════════════ */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
 
-        {/* No header — chat-first like the lab. "New thread" lives below, in the thread area. */}
+        {/* Header bar (lab) — title · grounded scope · thread switcher · new thread */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 3, py: 2, flexShrink: 0 }}>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}>
+            Ask Knovex
+          </Typography>
+          {selectedKbs.length > 0 && (
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, height: 24, px: 1,
+                       borderRadius: 99, fontSize: 11.5, fontWeight: 600,
+                       color: BRAND.copperDark, bgcolor: alpha(accent, 0.11),
+                       border: `1px solid ${alpha(accent, 0.27)}` }}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: accent }} />
+              grounded · {selectedKbs.length} KB{selectedKbs.length !== 1 ? 's' : ''}
+            </Box>
+          )}
+          <Box flex={1} />
+          <ThreadSwitcher
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            open={historyOpen}
+            setOpen={setHistoryOpen}
+            onSelect={(id) => { setActiveSessionId(id); setMessages([]); setError(null); setHistoryOpen(false) }}
+            onDelete={(id) => deleteSessionMutation.mutate(id)}
+          />
+          <HeaderBtn
+            icon={<AddIcon sx={{ fontSize: 14 }} />}
+            label="New thread"
+            onClick={() => createSessionMutation.mutate()}
+          />
+          {!sourcesOpen && (
+            <Tooltip title="Show sources" placement="bottom">
+              <IconButton size="small" onClick={() => setSourcesOpen(true)} sx={{ color: 'text.secondary' }}>
+                <FolderOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
 
         {/* Messages area — centered reading column (lab document style) */}
-        <Box flex={1} overflow="auto" sx={{ px: 4, py: 3 }}>
+        <Box flex={1} overflow="auto" sx={{ px: 4, py: 1 }}>
           <Box sx={{ maxWidth: 760, mx: 'auto' }}>
-          {/* New thread — moved out of the header, top-right of the thread area */}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
-            <HeaderBtn
-              icon={<LayersIcon sx={{ fontSize: 12 }} />}
-              label="New thread"
-              onClick={() => createSessionMutation.mutate()}
-            />
-          </Box>
           {activeSessionId ? (
             msgsLoading ? (
               <Box display="flex" justifyContent="center" pt={6}>
@@ -622,13 +580,14 @@ export default function ChatPage() {
               ) : (
                 <Box onClick={handleSend}
                   sx={{ display: 'flex', alignItems: 'center', gap: 0.5,
-                        height: 28, px: 1.5, borderRadius: 1.25, cursor: 'pointer',
-                        bgcolor: input.trim() ? accent : alpha(accent, 0.25),
-                        color: input.trim() ? '#fff' : alpha('#fff', 0.5),
+                        height: 32, px: 1.75, borderRadius: 99, cursor: 'pointer',
+                        background: input.trim() ? BRAND.gradient : 'transparent',
+                        bgcolor: input.trim() ? undefined : alpha(accent, 0.2),
+                        color: input.trim() ? BRAND.onAccent : alpha(BRAND.onAccent, 0.45),
                         transition: 'all 0.12s ease',
-                        '&:hover': input.trim() ? { filter: 'brightness(1.1)' } : {} }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 600 }}>Send</Typography>
-                  <SendIcon sx={{ fontSize: 11 }} />
+                        '&:hover': input.trim() ? { filter: 'brightness(1.08)' } : {} }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>Send</Typography>
+                  <SendIcon sx={{ fontSize: 13 }} />
                 </Box>
               )}
             </Box>
@@ -675,7 +634,7 @@ export default function ChatPage() {
                                 letterSpacing: '0.13em', color: 'text.disabled', mb: 0.5 }}>
                 Sources used · {latestSources.length}
               </Typography>
-              <Typography sx={{ fontFamily: SERIF, fontSize: 20, fontWeight: 400,
+              <Typography sx={{ fontSize: 18, fontWeight: 700,
                                 letterSpacing: '-0.01em', color: 'text.primary' }}>
                 Where this came from
               </Typography>
@@ -774,6 +733,78 @@ function HeaderBtn({ icon, label, onClick }: { icon: React.ReactNode; label: str
             '&:hover': { color: 'text.primary', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
       {icon}
       <Typography sx={{ fontSize: 11 }}>{label}</Typography>
+    </Box>
+  )
+}
+
+// ─── Thread switcher ─────────────────────────────────────────────────────────
+// Chat history lives here (header dropdown), not in a permanent left column.
+
+function ThreadSwitcher({ sessions, activeSessionId, open, setOpen, onSelect, onDelete }: {
+  sessions: ChatSession[]; activeSessionId: string | null
+  open: boolean; setOpen: (v: boolean) => void
+  onSelect: (id: string) => void; onDelete: (id: string) => void
+}) {
+  const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const ref    = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open, setOpen])
+
+  return (
+    <Box sx={{ position: 'relative' }} ref={ref}>
+      <Box onClick={() => setOpen(!open)}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5,
+              height: 26, px: 1.25, borderRadius: 1.25, cursor: 'pointer',
+              border: `1px solid ${theme.palette.divider}`, color: 'text.secondary',
+              userSelect: 'none',
+              '&:hover': { color: 'text.primary', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
+        <MoreHorizIcon sx={{ fontSize: 14 }} />
+        <Typography sx={{ fontSize: 11 }}>History</Typography>
+        <Typography sx={{ fontSize: 10, opacity: 0.7 }}>▾</Typography>
+      </Box>
+
+      {open && (
+        <Box sx={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 280,
+                   maxHeight: 380, display: 'flex', flexDirection: 'column',
+                   borderRadius: 2, bgcolor: 'background.paper',
+                   border: `1px solid ${theme.palette.divider}`,
+                   boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.5)' : '0 8px 32px rgba(0,0,0,0.14)',
+                   zIndex: 100, overflow: 'hidden' }}>
+          <Box sx={{ px: 1.75, py: 1.25, borderBottom: `1px solid ${theme.palette.divider}` }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
+                              letterSpacing: '0.13em', color: 'text.disabled' }}>
+              Conversations · {sessions.length}
+            </Typography>
+          </Box>
+          <Box sx={{ flex: 1, overflow: 'auto', py: 0.5 }}>
+            {sessions.length === 0 ? (
+              <Box sx={{ p: 2, textAlign: 'center' }}>
+                <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>No conversations yet</Typography>
+              </Box>
+            ) : (
+              <List dense disablePadding>
+                {sessions.map(session => (
+                  <SessionItem
+                    key={session.id}
+                    session={session}
+                    active={session.id === activeSessionId}
+                    onClick={() => onSelect(session.id)}
+                    onDelete={() => onDelete(session.id)}
+                  />
+                ))}
+              </List>
+            )}
+          </Box>
+        </Box>
+      )}
     </Box>
   )
 }
@@ -880,8 +911,8 @@ function KBScopeSelector({
         <Box onClick={() => setDropOpen(!dropOpen)}
           sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4,
                 height: 22, px: 0.875, borderRadius: 20, flexShrink: 0,
-                border: `1px solid ${alpha(accent, 0.35)}`, color: accent, cursor: 'pointer',
-                '&:hover': { bgcolor: alpha(accent, 0.08) } }}>
+                border: `1px dashed ${theme.palette.divider}`, color: 'text.secondary', cursor: 'pointer',
+                '&:hover': { borderColor: accent, color: accent } }}>
           <AddIcon sx={{ fontSize: 10 }} />
           <Typography sx={{ fontSize: 11, fontWeight: 500 }}>Add KB</Typography>
           <Typography sx={{ fontSize: 10, ml: 0.2 }}>▾</Typography>
@@ -1068,6 +1099,9 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
   const isUser   = message.role === 'user'
   const navigate = useNavigate()
   const [thumbed, setThumbed] = useState<'up' | 'down' | null>(null)
+  const { settings } = useSettingsStore()
+  const userInitials = initialsOf(settings?.display_name)
+  const userName     = resolveDisplayName(settings?.display_name)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content).then(onCopy).catch(() => {})
@@ -1085,23 +1119,23 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
       {/* Avatar — left gutter for BOTH roles (document transcript, lab style) */}
       {isUser ? (
         <Box sx={{ width: 30, height: 30, borderRadius: 2, flexShrink: 0, mt: 0.25,
-                   bgcolor: alpha(isDark ? '#fff' : '#000', 0.08),
+                   bgcolor: theme.palette.action.hover,
                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: 'text.secondary', userSelect: 'none' }}>You</Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 700, color: 'text.secondary', userSelect: 'none' }}>{userInitials}</Typography>
         </Box>
       ) : (
         <Box sx={{ width: 30, height: 30, borderRadius: 2, flexShrink: 0, mt: 0.25,
                    bgcolor: 'background.default', border: `1px solid ${theme.palette.divider}`,
                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <AutoAwesomeIcon sx={{ fontSize: 14, color: accent }} />
+          <KnovexMark size={18} />
         </Box>
       )}
 
       <Box sx={{ flex: 1, minWidth: 0 }}>
         {/* Role row */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
-            {isUser ? 'You' : 'Knovex'}
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'text.primary' }}>
+            {isUser ? userName : 'Knovex'}
           </Typography>
           {!isUser && message.sources && message.sources.length > 0 && (
             <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled' }}>
@@ -1398,9 +1432,9 @@ function SourceCard({ num, source, isDark }: {
                '&:hover': source.kb_id ? { borderColor: theme.palette.divider } : {} }}>
       {/* Head row: number + file type icon + page */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
-        <Box sx={{ width: 18, height: 18, borderRadius: 0.5, bgcolor: alpha(accent, 0.15),
+        <Box sx={{ width: 18, height: 18, borderRadius: 0.75, background: BRAND.gradient,
                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 9, color: accent, fontWeight: 700 }}>{num}</Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, color: BRAND.onAccent, fontWeight: 700 }}>{num}</Typography>
         </Box>
         <ArticleOutlinedIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
         <Box flex={1} />
@@ -1457,12 +1491,12 @@ function EmptyChat({ onPrompt }: { onPrompt: (p: string) => void }) {
   return (
     <Box sx={{ maxWidth: 520, mx: 'auto', py: 6, px: 2 }}>
       <Box sx={{ textAlign: 'center', mb: 4 }}>
-        <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: alpha(accent, 0.15),
-                   border: `1px solid ${alpha(accent, 0.25)}`, mx: 'auto', mb: 2,
+        <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: 'background.default',
+                   border: `1px solid ${theme.palette.divider}`, mx: 'auto', mb: 2,
                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: accent }}>K</Typography>
+          <KnovexMark size={26} />
         </Box>
-        <Typography sx={{ fontFamily: SERIF, fontSize: 20, fontWeight: 400, color: 'text.primary', mb: 0.5 }}>
+        <Typography sx={{ fontSize: 20, fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
           Start a conversation
         </Typography>
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
