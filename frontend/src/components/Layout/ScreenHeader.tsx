@@ -40,7 +40,7 @@ export default function ScreenHeader({
   titleSuffix,
   sub,
   actions,
-  border = true,
+  border = false,   // lab design: no header bottom-border (flat, edge-to-edge)
 }: ScreenHeaderProps) {
   const theme = useTheme()
 

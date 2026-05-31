@@ -28,7 +28,6 @@ import CloseIcon              from '@mui/icons-material/Close'
 import SystemUpdateAltIcon    from '@mui/icons-material/SystemUpdateAlt'
 import { useQuery }           from '@tanstack/react-query'
 import Sidebar                from './Sidebar'
-import TopBar                 from './TopBar'
 import CommandPalette         from '@/components/CommandPalette'
 import type { Command }       from '@/components/CommandPalette/commands'
 import WelcomeScreen          from '@/components/Onboarding/WelcomeScreen'
@@ -181,10 +180,11 @@ export default function AppShell() {
           </Box>
         </Collapse>
 
-        {/* ── Top bar ── */}
-        <TopBar />
-
-        {/* ── Sidebar + main content ── */}
+        {/* ── Sidebar + main content ──
+           No app TopBar: the lab design is rail + content only, and the Electron
+           window uses the native OS frame (no frame:false / titleBarStyle), so
+           window controls + dragging come from the OS — the old TopBar's macOS
+           dots and drag region were decorative/redundant. */}
         <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           <Sidebar />
           <Box

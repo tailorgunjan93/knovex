@@ -132,7 +132,6 @@ export default function Sidebar() {
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         py: 1.5, gap: 0.5,
         bgcolor: 'background.default',
-        borderRight: `1px solid ${theme.palette.divider}`,
       }}
     >
       {/* Brand mark */}
