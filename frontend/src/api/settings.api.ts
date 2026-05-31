@@ -97,6 +97,8 @@ export const settingsApi = {
     embedding: Partial<EmbeddingSettings>
     theme: string
     kb_storage_path: string
+    display_name: string
+    onboarded: boolean
   }>): Promise<AppSettings> {
     const res = await apiClient.put<AppSettings>('/settings', patch)
     return res.data

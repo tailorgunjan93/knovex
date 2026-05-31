@@ -78,6 +78,8 @@ class AppSettingsResponse(BaseModel):
     theme: str = "dark"                     # light | medium | dark
     kb_storage_path: str = ""
     backend_port: int = 8765
+    display_name: str = ""                  # what the app calls the user; "" → "You"
+    onboarded: bool = False                 # has the first-run welcome been completed
 
 
 class AppSettingsUpdate(BaseModel):
@@ -87,6 +89,8 @@ class AppSettingsUpdate(BaseModel):
     embedding: EmbeddingSettings | None = None
     theme: str | None = None
     kb_storage_path: str | None = None
+    display_name: str | None = None
+    onboarded: bool | None = None
 
 
 class EmbeddingModelStatus(BaseModel):

@@ -41,6 +41,7 @@ export default function AppSettingsTab({ settings }: AppSettingsProps) {
 
   const [theme, setTheme] = useState(settings.theme)
   const [storagePath, setStoragePath] = useState(settings.kb_storage_path || '')
+  const [displayName, setDisplayName] = useState(settings.display_name ?? '')
   const [appVersion, setAppVersion] = useState<string>('—')
 
   // Fetch real app version from Electron IPC (falls back to '—' in browser)
@@ -68,6 +69,15 @@ export default function AppSettingsTab({ settings }: AppSettingsProps) {
     },
   })
 
+  // Display-name mutation — updates the store so the rail avatar reflects it live
+  const nameMutation = useMutation({
+    mutationFn: (name: string) => settingsApi.update({ display_name: name }),
+    onSuccess: (updated) => {
+      setSettings(updated)
+      qc.invalidateQueries({ queryKey: ['settings'] })
+    },
+  })
+
   const handleThemeChange = (_: React.MouseEvent, value: string | null) => {
     if (!value) return
     setTheme(value)
@@ -86,6 +96,35 @@ export default function AppSettingsTab({ settings }: AppSettingsProps) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 520 }}>
+
+      {/* ── Profile ── */}
+      <Box>
+        <Typography variant="h6" fontWeight={600} sx={{ mb: 0.5 }}>Profile</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          What should Knovex call you? Shows in the sidebar and chat. Stays on this machine.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+          <TextField
+            label="Display name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="You"
+            size="small"
+            fullWidth
+          />
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => nameMutation.mutate(displayName.trim())}
+            disabled={nameMutation.isPending || displayName.trim() === (settings.display_name ?? '')}
+            sx={{ whiteSpace: 'nowrap', mt: 0.25 }}
+          >
+            {nameMutation.isPending ? <CircularProgress size={16} /> : nameMutation.isSuccess ? 'Saved ✓' : 'Save'}
+          </Button>
+        </Box>
+      </Box>
+
+      <Divider />
 
       {/* ── Appearance ── */}
       <Box>

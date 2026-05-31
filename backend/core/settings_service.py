@@ -91,6 +91,8 @@ def _default_settings() -> dict[str, Any]:
         "theme": "dark",
         "kb_storage_path": str(app_config.data_dir),
         "backend_port": app_config.backend_port,
+        "display_name": "",
+        "onboarded": False,
     }
 
 
@@ -239,4 +241,6 @@ class SettingsService:
             theme=raw.get("theme", "dark"),
             kb_storage_path=raw.get("kb_storage_path", ""),
             backend_port=raw.get("backend_port", 8765),
+            display_name=raw.get("display_name", ""),
+            onboarded=raw.get("onboarded", False),
         )

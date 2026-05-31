@@ -31,6 +31,7 @@ import Sidebar                from './Sidebar'
 import TopBar                 from './TopBar'
 import CommandPalette         from '@/components/CommandPalette'
 import type { Command }       from '@/components/CommandPalette/commands'
+import WelcomeScreen          from '@/components/Onboarding/WelcomeScreen'
 import { getTheme }           from '@/theme'
 import { useSettingsStore, useThemeMode } from '@/store/settings.store'
 import { settingsApi }        from '@/api/settings.api'
@@ -43,20 +44,34 @@ interface UpdateInfo {
 }
 
 export default function AppShell() {
-  const { setSettings } = useSettingsStore()
+  const { settings, setSettings } = useSettingsStore()
   const themeMode       = useThemeMode()
   const navigate        = useNavigate()
 
   const [updateInfo,    setUpdateInfo]    = useState<UpdateInfo | null>(null)
   const [bannerVisible, setBannerVisible] = useState(false)
+  const [savingName,    setSavingName]    = useState(false)
 
   // ── Load settings on mount ─────────────────────────────────────────────────
-  const { data } = useQuery({
+  const { data, isLoading: settingsLoading } = useQuery({
     queryKey: ['settings'],
     queryFn:  settingsApi.get,
     staleTime: 60_000,
   })
   useEffect(() => { if (data) setSettings(data) }, [data, setSettings])
+
+  // ── First-run onboarding: show Welcome until `onboarded` is true ────────────
+  // Only decide once settings have actually loaded, so we never flash the
+  // welcome screen for an already-onboarded user.
+  const needsOnboarding = !settingsLoading && settings != null && settings.onboarded === false
+
+  const completeOnboarding = (name: string) => {
+    setSavingName(true)
+    settingsApi.update({ display_name: name, onboarded: true })
+      .then(setSettings)
+      .catch(() => {/* keep showing welcome on failure */})
+      .finally(() => setSavingName(false))
+  }
 
   // ── Wire Electron IPC navigation ──────────────────────────────────────────
   useEffect(() => {
@@ -189,6 +204,11 @@ export default function AppShell() {
 
       {/* ── Command palette (Ctrl/Cmd+K) ── */}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+
+      {/* ── First-run onboarding overlay ── */}
+      {needsOnboarding && (
+        <WelcomeScreen onComplete={completeOnboarding} saving={savingName} />
+      )}
     </ThemeProvider>
   )
 }

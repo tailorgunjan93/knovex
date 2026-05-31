@@ -77,6 +77,10 @@ async def update_settings(
         patch["theme"] = body.theme
     if body.kb_storage_path is not None:
         patch["kb_storage_path"] = body.kb_storage_path
+    if body.display_name is not None:
+        patch["display_name"] = body.display_name
+    if body.onboarded is not None:
+        patch["onboarded"] = body.onboarded
 
     if not patch:
         raise HTTPException(status_code=400, detail="No fields provided to update")
