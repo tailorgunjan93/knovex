@@ -324,9 +324,6 @@ export default function ChatPage() {
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const selectedKbs  = kbs.filter(k => selectedKbIds.includes(k.id))
-  const groundedLabel = selectedKbs.length === 0   ? 'all KBs'
-                      : selectedKbs.length === 1   ? selectedKbs[0].name
-                      : `${selectedKbs.length} KBs`
 
   // Which message's sources to show in the Sources panel (default = last AI msg)
   const [pinnedSources, setPinnedSources] = useState<StreamingMessage['sources'] | null>(null)
@@ -335,8 +332,6 @@ export default function ChatPage() {
 
   // Reset pinned sources when messages change
   useEffect(() => { setPinnedSources(null) }, [activeSessionId])
-
-  const divider = `1px solid ${theme.palette.divider}`
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -413,10 +408,10 @@ export default function ChatPage() {
         {/* Toggle pill */}
         <Box onClick={() => setHistoryOpen(v => !v)}
           sx={{ position: 'absolute', right: -12, top: '50%', transform: 'translateY(-50%)',
-                width: 22, height: 44, bgcolor: 'background.paper', border: divider,
-                borderLeft: 'none', borderRadius: '0 8px 8px 0', display: 'flex',
+                width: 22, height: 44, bgcolor: theme.palette.action.hover,
+                borderRadius: '0 8px 8px 0', display: 'flex',
                 alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 30,
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
                              '& svg': { color: accent } } }}>
           {historyOpen
             ? <ChevronLeftIcon  sx={{ fontSize: 13, color: 'text.disabled' }} />
@@ -429,48 +424,18 @@ export default function ChatPage() {
           ══════════════════════════════════════════════════════════════════ */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
 
-        {/* Screen header — always shown */}
-        <Box sx={{ flexShrink: 0, px: 4, pt: 2.5, pb: 1.75, borderBottom: divider,
-                   display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-          <Box flex={1} minWidth={0}>
-            {/* Eyebrow */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled',
-                                textTransform: 'uppercase', letterSpacing: '0.14em', userSelect: 'none' }}>
-                — Ask Knovex
-              </Typography>
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                         px: 1, py: 0.25, borderRadius: 20,
-                         bgcolor: alpha(accent, isDark ? 0.15 : 0.1),
-                         border: `1px solid ${alpha(accent, 0.25)}` }}>
-                <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: accent, flexShrink: 0 }} />
-                <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: accent, letterSpacing: '0.04em' }}>
-                  grounded · <strong>{groundedLabel}</strong>
-                </Typography>
-              </Box>
-            </Box>
-            {/* Title */}
-            <Typography component="h1" sx={{ fontFamily: SERIF, fontSize: 26, fontWeight: 400,
-                                              letterSpacing: '-0.015em', lineHeight: 1.15,
-                                              color: 'text.primary', userSelect: 'none' }}>
-              Conversations that{' '}
-              <Box component="em" sx={{ fontStyle: 'italic', color: accent }}>remember</Box>
-              {' '}what you've read
-            </Typography>
-          </Box>
+        {/* No header — chat-first like the lab. "New thread" lives below, in the thread area. */}
 
-          {/* Header action buttons */}
-          <Box sx={{ display: 'flex', gap: 0.75, pt: 0.5, flexShrink: 0 }}>
+        {/* Messages area */}
+        <Box flex={1} overflow="auto" sx={{ px: 4, py: 3 }}>
+          {/* New thread — moved out of the header, top-right of the thread area */}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             <HeaderBtn
               icon={<LayersIcon sx={{ fontSize: 12 }} />}
               label="New thread"
               onClick={() => createSessionMutation.mutate()}
             />
           </Box>
-        </Box>
-
-        {/* Messages area */}
-        <Box flex={1} overflow="auto" sx={{ px: 4, py: 3 }}>
           {activeSessionId ? (
             msgsLoading ? (
               <Box display="flex" justifyContent="center" pt={6}>
@@ -508,7 +473,7 @@ export default function ChatPage() {
         </Box>
 
         {/* Composer */}
-        <Box sx={{ flexShrink: 0, borderTop: divider, px: 3, pt: 1.5, pb: 2 }}>
+        <Box sx={{ flexShrink: 0, px: 3, pt: 1.5, pb: 2 }}>
 
           {/* KB scope selector */}
           <KBScopeSelector
@@ -568,12 +533,12 @@ export default function ChatPage() {
             </Box>
           )}
 
-          {/* Textarea box — soft elevated surface (lab style), faint border */}
-          <Box sx={{ mt: 1, borderRadius: 3, border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+          {/* Textarea box — soft elevated surface (lab style), no border */}
+          <Box sx={{ mt: 1, borderRadius: 3, border: '1px solid transparent',
                      bgcolor: 'background.paper',
-                     boxShadow: '0 8px 30px -18px rgba(0,0,0,0.5)',
+                     boxShadow: '0 8px 30px -20px rgba(0,0,0,0.55)',
                      transition: 'border-color 0.15s',
-                     '&:focus-within': { borderColor: alpha(accent, 0.5) } }}>
+                     '&:focus-within': { borderColor: alpha(accent, 0.4) } }}>
             <Box
               component="textarea"
               ref={inputRef}
@@ -703,7 +668,7 @@ export default function ChatPage() {
                      opacity: sourcesOpen ? 1 : 0, transition: 'opacity 0.15s ease',
                      pointerEvents: sourcesOpen ? 'auto' : 'none' }}>
             {/* Sources header */}
-            <Box sx={{ px: 2.5, pt: 2, pb: 1.5, borderBottom: divider, flexShrink: 0 }}>
+            <Box sx={{ px: 2.5, pt: 2, pb: 1.5, flexShrink: 0 }}>
               <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
                                 letterSpacing: '0.13em', color: 'text.disabled', mb: 0.5 }}>
                 Sources used · {latestSources.length}
@@ -730,12 +695,12 @@ export default function ChatPage() {
             </Box>
 
             {/* Footer */}
-            <Box sx={{ px: 2, py: 1.5, borderTop: divider, flexShrink: 0 }}>
+            <Box sx={{ px: 2, py: 1.5, flexShrink: 0 }}>
               <Tooltip title="Source graph visualisation — coming soon" placement="top">
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5,
                            height: 30, px: 1.5, borderRadius: 1.25, cursor: 'not-allowed',
-                           border: `1px solid ${theme.palette.divider}`, justifyContent: 'center',
-                           color: 'text.disabled', opacity: 0.5 }}>
+                           bgcolor: theme.palette.action.hover, justifyContent: 'center',
+                           color: 'text.disabled', opacity: 0.6 }}>
                 <AccountTreeOutlinedIcon sx={{ fontSize: 12 }} />
                 <Typography sx={{ fontSize: 12 }}>Visualize source graph</Typography>
               </Box>
@@ -760,10 +725,10 @@ export default function ChatPage() {
         {/* Toggle pill — on the LEFT edge of the right panel */}
         <Box onClick={() => setSourcesOpen(v => !v)}
           sx={{ position: 'absolute', left: -12, top: '50%', transform: 'translateY(-50%)',
-                width: 22, height: 44, bgcolor: 'background.paper', border: divider,
-                borderRight: 'none', borderRadius: '8px 0 0 8px', display: 'flex',
+                width: 22, height: 44, bgcolor: theme.palette.action.hover,
+                borderRadius: '8px 0 0 8px', display: 'flex',
                 alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 30,
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
                              '& svg': { color: accent } } }}>
           {sourcesOpen
             ? <ChevronRightIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
