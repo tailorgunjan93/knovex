@@ -37,7 +37,6 @@ import FileRow from './FileRow'
 import ConfirmDialog from './ConfirmDialog'
 import UpdatePathDialog from './UpdatePathDialog'
 import FileViewer from '../../../components/FileViewer'
-import ScreenHeader from '@/components/Layout/ScreenHeader'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
 
@@ -225,82 +224,85 @@ export default function KBDetail({ kbId, onBack, initialFileId }: Props) {
 
   const accentColor = kb.color || theme.palette.primary.main
 
+  // Deterministic mastered % (mirrors KBCard.kbProgress) for the detail header.
+  const mastered = (() => {
+    let h = 0
+    for (let i = 0; i < kb.id.length; i++) h = (h * 31 + kb.id.charCodeAt(i)) & 0x7fffffff
+    return 10 + (h % 80)
+  })()
+  const glyphChar = /\p{Emoji}/u.test(kb.icon)
+    ? kb.icon
+    : (kb.icon && kb.icon !== '📁' ? kb.icon.trim().charAt(0).toUpperCase() : kb.name.trim().charAt(0).toUpperCase())
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* ── KnovexUI ScreenHeader ────────────────────────────────────────── */}
-      <ScreenHeader
-        eyebrow={`LIBRARY · ${kb.stats.file_count} FILE${kb.stats.file_count !== 1 ? 'S' : ''}`}
-        title={kb.name}
-        sub={
-          kb.stats.total_chunks > 0
-            ? `${kb.stats.total_chunks} chunks indexed${ingestingCount > 0 ? ` · ${ingestingCount} indexing…` : ''}`
-            : ingestingCount > 0
-              ? `${ingestingCount} file${ingestingCount !== 1 ? 's' : ''} indexing…`
-              : 'No files indexed yet — add files to get started'
-        }
-        actions={
-          <>
-            {/* Back */}
-            <Tooltip title="Back to all knowledge bases">
-              <IconButton
-                size="small"
-                onClick={onBack}
-                sx={{ width: 28, height: 28, border: `1px solid ${alpha(theme.palette.divider, 0.8)}`, borderRadius: 1 }}
-              >
-                <ArrowBackIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
+      {/* ── Lab-style detail header ──────────────────────────────────────── */}
+      <Box sx={{ px: { xs: 3, md: 4 }, pt: 3, pb: 2, flexShrink: 0 }}>
+        {/* Back link */}
+        <Box component="button" onClick={onBack} sx={{
+          display: 'inline-flex', alignItems: 'center', gap: 0.6, mb: 2, p: 0,
+          border: 0, background: 'none', cursor: 'pointer',
+          fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, color: 'text.secondary',
+          '&:hover': { color: 'text.primary' },
+        }}>
+          <ArrowBackIcon sx={{ fontSize: 15 }} /> Library
+        </Box>
 
-            {/* KB glyph */}
-            <Box
-              sx={{
-                width: 28, height: 28,
-                borderRadius: 1,
-                bgcolor: alpha(accentColor, 0.15),
-                border: `1px solid ${alpha(accentColor, 0.3)}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1rem',
-                color: accentColor,
-              }}
-            >
-              {kb.icon}
-            </Box>
+        <Stack direction="row" alignItems="flex-start" gap={2.5} flexWrap="wrap">
+          {/* Big glyph tile */}
+          <Box sx={{
+            width: 56, height: 56, borderRadius: 3, flexShrink: 0, display: 'grid', placeItems: 'center',
+            fontSize: 28, fontWeight: 700, color: accentColor,
+            bgcolor: alpha(accentColor, 0.14), border: `1px solid ${alpha(accentColor, 0.5)}`,
+          }}>{glyphChar}</Box>
 
+          <Box sx={{ flex: 1, minWidth: 260 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: 'text.disabled', letterSpacing: '0.12em', mb: 0.5 }}>COLLECTION</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.02em', mb: 1 }}>{kb.name}</Typography>
+            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+              <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 200 }}>
+                <Box sx={{ width: 120, height: 6, borderRadius: 3, bgcolor: alpha(theme.palette.text.primary, 0.08), overflow: 'hidden' }}>
+                  <Box sx={{ width: `${mastered}%`, height: '100%', borderRadius: 3, bgcolor: accentColor }} />
+                </Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: 12, color: 'text.secondary' }}>{mastered}% mastered</Typography>
+              </Stack>
+              <Typography sx={{ fontFamily: MONO, fontSize: 11, color: 'text.disabled', letterSpacing: '0.04em' }}>
+                {kb.stats.file_count} {kb.stats.file_count !== 1 ? 'DOCS' : 'DOC'}
+                {kb.stats.total_chunks > 0 && ` · ${kb.stats.total_chunks} CARDS`}
+                {ingestingCount > 0 && ` · ${ingestingCount} indexing…`}
+              </Typography>
+            </Stack>
+          </Box>
+
+          {/* Actions */}
+          <Stack direction="row" spacing={1} alignItems="center">
             <Tooltip title="Re-index all files">
               <span>
-                <IconButton
-                  size="small"
-                  onClick={() => reindexKBMutation.mutate()}
+                <IconButton size="small" onClick={() => reindexKBMutation.mutate()}
                   disabled={reindexKBMutation.isPending || files.length === 0}
-                  sx={{ width: 28, height: 28, border: `1px solid ${alpha(theme.palette.divider, 0.8)}`, borderRadius: 1 }}
-                >
-                  <RefreshIcon sx={{ fontSize: 14 }} />
+                  sx={{ color: 'text.secondary' }}>
+                  <RefreshIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title="Delete Knowledge Base">
-              <IconButton
-                size="small"
-                color="error"
-                onClick={() => setDeleteOpen(true)}
-                sx={{ width: 28, height: 28, border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`, borderRadius: 1 }}
-              >
-                <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+            <Tooltip title="Delete collection">
+              <IconButton size="small" onClick={() => setDeleteOpen(true)} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
+                <DeleteOutlineIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
             <Button
               variant="contained"
               size="small"
-              startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+              startIcon={<AddIcon sx={{ fontSize: 15 }} />}
               onClick={handleAddFiles}
               disabled={addFileMutation.isPending || uploadFileMutation.isPending}
-              sx={{ height: 32, fontSize: 12 }}
+              sx={{ height: 34, fontSize: 12.5, borderRadius: 99, px: 1.75 }}
             >
-              {uploadFileMutation.isPending ? 'Uploading…' : 'Add Files'}
+              {uploadFileMutation.isPending ? 'Uploading…' : 'Add document'}
             </Button>
-          </>
-        }
-      />
+          </Stack>
+        </Stack>
+      </Box>
 
       {/* ── Error banner ────────────────────────────────────────────────── */}
       {addError && (
@@ -318,7 +320,7 @@ export default function KBDetail({ kbId, onBack, initialFileId }: Props) {
         ) : files.length === 0 ? (
           <EmptyFiles onAdd={handleAddFiles} />
         ) : (
-          <Paper elevation={0} sx={{ m: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Paper elevation={0} sx={{ m: 2, borderRadius: 3, bgcolor: 'background.paper', overflow: 'hidden' }}>
             {/* Summary row */}
             <Stack
               direction="row"
