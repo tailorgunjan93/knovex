@@ -11,11 +11,9 @@
  */
 
 import { Box, Typography, useTheme, alpha } from '@mui/material'
-import FolderIcon from '@mui/icons-material/Folder'
 import type { KB } from '../../../api/kb.api'
 
 const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
-const SERIF = '"Instrument Serif", Georgia, serif'
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -56,17 +54,6 @@ export default function KBCard({ kb, onClick }: Props) {
   const accentColor = kb.color || theme.palette.primary.main
   const progress    = kbProgress(kb.id)
 
-  // surface-2 = slightly elevated above paper: use elevation2 tint or alpha blend
-  // dark/mid: paper + slight white tint | light: paper - slight white tint
-  const glyphBg     = isDark
-    ? alpha(theme.palette.background.paper, 1)   // paper itself is surface; tint up
-    : theme.palette.background.default            // default is slightly darker in light
-  // Accent-tinted border on glyph
-  const glyphBorder = `color-mix(in oklab, ${accentColor} 40%, ${theme.palette.divider})`
-
-  // Hover border
-  const borderStrong = isDark ? alpha('#fff', 0.14) : alpha('#000', 0.18)
-
   // Progress bar track
   const trackBg = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'
 
@@ -76,61 +63,61 @@ export default function KBCard({ kb, onClick }: Props) {
       sx={{
         position:     'relative',
         bgcolor:      'background.paper',
-        border:       `1px solid ${theme.palette.divider}`,
-        borderRadius: '12px',
-        padding:      '16px 16px 14px',
+        border:       '1px solid transparent',
+        borderRadius: '16px',
+        padding:      '18px 18px 16px',
         display:      'flex',
         flexDirection:'column',
-        gap:           '10px',
+        gap:           '12px',
         cursor:       'pointer',
-        minHeight:    174,
+        minHeight:    150,
         overflow:     'hidden',
-        transition:   'border-color 100ms, transform 120ms',
+        transition:   'border-color .15s, transform .15s, box-shadow .15s',
         '&:hover': {
-          borderColor: borderStrong,
-          transform:   'translateY(-1px)',
+          borderColor: theme.palette.divider,
+          transform:   'translateY(-2px)',
+          boxShadow:   '0 18px 40px -24px rgba(0,0,0,0.6)',
         },
       }}
     >
-      {/* Left accent stripe */}
+      {/* Top accent stripe (lab style) */}
       <Box
         sx={{
           position:     'absolute',
           top:           0,
           left:          0,
-          width:         3,
-          height:        '100%',
+          right:         0,
+          height:        3,
           bgcolor:       accentColor,
-          borderRadius: '2px 0 0 2px',
         }}
       />
 
       {/* cc-head: glyph LEFT, more-button RIGHT */}
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
 
-        {/* Glyph — serif italic, neutral bg, accent border+text */}
+        {/* Glyph tile — accent-tinted rounded square (lab style) */}
         <Box
           sx={{
-            width:          32,
-            height:         32,
-            borderRadius:   '8px',
+            width:          38,
+            height:         38,
+            borderRadius:   '10px',
             display:        'flex',
             alignItems:     'center',
             justifyContent: 'center',
-            bgcolor:        glyphBg,
-            border:         `1px solid`,
-            borderColor:    glyphBorder,
+            bgcolor:        alpha(accentColor, 0.14),
+            border:         `1px solid ${alpha(accentColor, 0.4)}`,
             flexShrink:     0,
-            fontSize:       isEmoji ? '1.1rem' : 17,
-            fontFamily:     SERIF,
-            fontStyle:      'italic',
+            fontSize:       isEmoji ? '1.2rem' : 20,
+            fontWeight:     700,
             color:          accentColor,
           }}
         >
           {isEmoji ? kb.icon : (
             kb.icon && kb.icon !== '📁'
-              ? <span style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 17 }}>{kb.icon}</span>
-              : <FolderIcon sx={{ fontSize: 16, color: accentColor }} />
+              /* Non-emoji icons may be words (e.g. "upload") — show the first
+                 letter only so it fits the tile like the lab's single glyphs. */
+              ? <span style={{ fontWeight: 700, fontSize: 20 }}>{kb.icon.trim().charAt(0).toUpperCase()}</span>
+              : <span style={{ fontWeight: 700, fontSize: 20 }}>{kb.name.trim().charAt(0).toUpperCase()}</span>
           )}
         </Box>
 
