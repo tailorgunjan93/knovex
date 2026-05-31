@@ -29,9 +29,13 @@ import SystemUpdateAltIcon    from '@mui/icons-material/SystemUpdateAlt'
 import { useQuery }           from '@tanstack/react-query'
 import Sidebar                from './Sidebar'
 import TopBar                 from './TopBar'
+import CommandPalette         from '@/components/CommandPalette'
+import type { Command }       from '@/components/CommandPalette/commands'
 import { getTheme }           from '@/theme'
 import { useSettingsStore, useThemeMode } from '@/store/settings.store'
 import { settingsApi }        from '@/api/settings.api'
+
+const THEME_CYCLE: Record<string, string> = { dark: 'medium', medium: 'light', light: 'dark' }
 
 interface UpdateInfo {
   version:      string
@@ -60,6 +64,35 @@ export default function AppShell() {
     const cleanup = window.knovex.onNavigate((route) => navigate(route))
     return cleanup
   }, [navigate])
+
+  // ── Command palette (Ctrl/Cmd+K) ───────────────────────────────────────────
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const cycleTheme = () => {
+    const next = THEME_CYCLE[themeMode] ?? 'dark'
+    settingsApi.update({ theme: next }).then(setSettings).catch(() => {})
+  }
+
+  // Command set — extend here to add KB/file/recent-lesson sources (OCP).
+  const commands: Command[] = useMemo(() => [
+    { id: 'nav-library',  title: 'Go to Library',     keywords: 'kb knowledge base collections', kind: 'navigate', hint: 'Go', run: () => navigate('/kb') },
+    { id: 'nav-chat',     title: 'Ask Knovex',         keywords: 'chat question ask',             kind: 'navigate', hint: 'Go', run: () => navigate('/chat') },
+    { id: 'nav-reader',   title: 'Open Reader',        keywords: 'pdf document read file',        kind: 'navigate', hint: 'Go', run: () => navigate('/reader') },
+    { id: 'nav-learn',    title: 'Start Learning',     keywords: 'lesson quiz flashcard guided',  kind: 'navigate', hint: 'Go', run: () => navigate('/learn') },
+    { id: 'nav-progress', title: 'View Progress',      keywords: 'stats streak mastery heatmap',  kind: 'navigate', hint: 'Go', run: () => navigate('/progress') },
+    { id: 'nav-settings', title: 'Open Settings',      keywords: 'preferences keys providers',    kind: 'navigate', hint: 'Go', run: () => navigate('/settings') },
+    { id: 'theme-cycle',  title: 'Cycle theme',        keywords: 'dark light mid appearance',     kind: 'theme',    hint: 'Theme', run: cycleTheme },
+  ], [navigate, themeMode])
 
   // ── Auto-update banner ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -153,6 +186,9 @@ export default function AppShell() {
           </Box>
         </Box>
       </Box>
+
+      {/* ── Command palette (Ctrl/Cmd+K) ── */}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
     </ThemeProvider>
   )
 }

@@ -50,6 +50,11 @@ export interface AppSettings {
   theme: string
   kb_storage_path: string
   backend_port: number
+  /** User's display name (added in the redesign; optional for forward-compat
+   *  until the backend field + onboarding ship). Empty/undefined → "You". */
+  display_name?: string
+  /** Whether first-run onboarding completed. */
+  onboarded?: boolean
 }
 
 export interface TestLLMResult {
