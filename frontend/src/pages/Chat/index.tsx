@@ -346,10 +346,9 @@ export default function ChatPage() {
           ══════════════════════════════════════════════════════════════════ */}
       <Box sx={{ width: historyOpen ? 240 : 28, flexShrink: 0, position: 'relative',
                  transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', zIndex: 10 }}>
-        {/* Inner clip */}
+        {/* Inner clip — flat, no hard border (lab style) */}
         <Box sx={{ position: 'absolute', inset: 0, overflow: 'hidden',
-                   borderRight: divider,
-                   bgcolor: alpha(theme.palette.background.paper, 0.6), display: 'flex' }}>
+                   bgcolor: alpha(theme.palette.background.paper, 0.4), display: 'flex' }}>
 
           {/* Panel content */}
           <Box sx={{ width: 240, flexShrink: 0, height: '100%', display: 'flex',
@@ -568,9 +567,10 @@ export default function ChatPage() {
             </Box>
           )}
 
-          {/* Textarea box */}
-          <Box sx={{ mt: 1, borderRadius: 2, border: `1.5px solid ${theme.palette.divider}`,
-                     bgcolor: alpha(theme.palette.background.paper, 0.8),
+          {/* Textarea box — soft elevated surface (lab style), faint border */}
+          <Box sx={{ mt: 1, borderRadius: 3, border: `1px solid ${alpha(theme.palette.divider, 0.6)}`,
+                     bgcolor: 'background.paper',
+                     boxShadow: '0 8px 30px -18px rgba(0,0,0,0.5)',
                      transition: 'border-color 0.15s',
                      '&:focus-within': { borderColor: alpha(accent, 0.5) } }}>
             <Box
@@ -663,10 +663,9 @@ export default function ChatPage() {
           ══════════════════════════════════════════════════════════════════ */}
       <Box sx={{ width: sourcesOpen ? 340 : 28, flexShrink: 0, position: 'relative',
                  transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', zIndex: 10 }}>
-        {/* Inner clip */}
+        {/* Inner clip — flat sources panel (lab style), no hard border */}
         <Box sx={{ position: 'absolute', inset: 0, overflow: 'hidden',
-                   borderLeft: divider,
-                   bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
+                   bgcolor: alpha(theme.palette.background.paper, 0.55) }}>
 
           {/* Panel content */}
           <Box sx={{ width: 340, height: '100%', display: 'flex', flexDirection: 'column',
@@ -1404,12 +1403,12 @@ function SourceCard({ num, source, isDark }: {
   return (
     <Box
       onClick={handleClick}
-      sx={{ mb: 1.5, p: 1.5, borderRadius: 1.5,
-               bgcolor: alpha(theme.palette.background.default, isDark ? 0.5 : 0.7),
-               border: `1px solid ${theme.palette.divider}`,
+      sx={{ mb: 1.25, p: 1.5, borderRadius: 2.5,
+               bgcolor: theme.palette.action.hover,
+               border: '1px solid transparent',
                cursor: source.kb_id ? 'pointer' : 'default',
-               '&:hover': source.kb_id ? { borderColor: alpha(accent, 0.3),
-                            bgcolor: alpha(theme.palette.background.paper, 0.8) } : {} }}>
+               transition: 'border-color .15s',
+               '&:hover': source.kb_id ? { borderColor: theme.palette.divider } : {} }}>
       {/* Head row: number + file type icon + page */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
         <Box sx={{ width: 18, height: 18, borderRadius: 0.5, bgcolor: alpha(accent, 0.15),
