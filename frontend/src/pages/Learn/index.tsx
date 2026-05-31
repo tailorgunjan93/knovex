@@ -92,7 +92,7 @@ const SERIF = '"Instrument Serif", Georgia, serif'
 // Offered formats (UI). Trimmed to the three core modes; the backend still
 // supports the others so any previously-saved session of another type renders.
 const FORMATS: Array<{ id: LearnFormat; label: string; icon: React.ReactNode; desc: string; color: string }> = [
-  { id: 'guided',     label: 'Guided',      icon: <SchoolIcon />,       desc: 'Personal tutor — learn step by step at your pace', color: '#6366F1' },
+  { id: 'guided',     label: 'Guided',      icon: <SchoolIcon />,       desc: 'Personal tutor — learn step by step at your pace', color: '#DDA76A' },
   { id: 'quiz',       label: 'Quiz',        icon: <QuizIcon />,         desc: 'Test your knowledge with MCQ & earn XP',            color: '#7C3AED' },
   { id: 'flashcard',  label: 'Flashcards',  icon: <StyleIcon />,        desc: 'Spaced repetition for long-term memory',            color: '#0EA5E9' },
 ]
