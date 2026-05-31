@@ -10,14 +10,18 @@
  */
 
 import { createTheme, type Theme, alpha } from '@mui/material/styles'
+import { BRAND as TOKENS } from './tokens'
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
+// Copper family sourced from the shared single-source-of-truth tokens
+// (src/theme/tokens.ts). The MUI-specific semantic colors below are kept local
+// and unchanged to avoid any visual regression to the existing themes.
 
 const BRAND = {
   // Amber accent — matches oklch(0.78 0.13 60) / KnovexUI #dda76a
-  copper:      '#DDA76A',
-  copperDark:  '#B5803E',
-  copperLight: '#EABC8A',
+  copper:      TOKENS.copper,
+  copperDark:  TOKENS.copperDark,
+  copperLight: TOKENS.copperLight,
 
   error:   '#EF4444',
   warning: '#F59E0B',
