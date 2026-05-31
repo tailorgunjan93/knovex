@@ -143,6 +143,21 @@ def get_llm_service() -> LLMService:
     return LLMService()
 
 
+@lru_cache(maxsize=1)
+def get_pdf_adapter():
+    """
+    Provide the process-singleton CachingPDFAdapter.
+
+    The cache (memoised page extraction) lives HERE, not in ReaderService —
+    because ReaderService is built per-request. Sharing one adapter for the
+    whole process means a PDF is parsed once and every subsequent page turn is
+    served from cache (Reader perf fix). Keyed by (path, mtime, size), so an
+    edited file re-parses automatically.
+    """
+    from backend.adapters.document_parsers import CachingPDFAdapter, PyMuPDFAdapter
+    return CachingPDFAdapter(PyMuPDFAdapter())
+
+
 def get_reader_service(
     backend=Depends(get_sqlite_backend),
 ):
@@ -150,8 +165,9 @@ def get_reader_service(
     Provide ReaderService wired with file repository, SQLite backend, LLMService,
     and SearchService (for optional web search in inline Q&A).
 
-    Not cached: ReaderService is stateless; the expensive singletons
-    (LLMService, pdf/para adapters) are cheap to construct (no I/O).
+    Not cached: ReaderService is stateless. The one piece of state that MUST
+    persist across requests — the PDF page cache — is injected as a singleton
+    (get_pdf_adapter), so a per-request ReaderService is correct.
 
     DIP: ReaderService receives IFileRepository + ILLMClient adapters,
          not concrete implementations.
@@ -164,6 +180,7 @@ def get_reader_service(
         file_repo=file_repo,
         backend=backend,
         llm_svc=get_llm_service(),
+        pdf_adapter=get_pdf_adapter(),
         search_svc=get_search_service(),
     )
 

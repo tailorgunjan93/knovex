@@ -90,7 +90,16 @@ class ReaderService:
         # re-parse the whole document each time (Reader perf fix). The wrap is
         # transparent (same IPDFAdapter contract) and applies to injected stubs
         # too, which keeps tests fast and still exercises the cached path.
-        self._pdf_adapter: IPDFAdapter = CachingPDFAdapter(pdf_adapter or PyMuPDFAdapter())
+        #
+        # CRITICAL: do NOT re-wrap an adapter that already caches. ReaderService
+        # is built per-request (see dependencies.get_reader_service), so the
+        # cache only survives across page turns when a *singleton*
+        # CachingPDFAdapter is injected — re-wrapping it here would give each
+        # request a fresh, empty cache and re-parse the whole PDF every turn.
+        if isinstance(pdf_adapter, CachingPDFAdapter):
+            self._pdf_adapter: IPDFAdapter = pdf_adapter
+        else:
+            self._pdf_adapter = CachingPDFAdapter(pdf_adapter or PyMuPDFAdapter())
         self._para_adapter = para_adapter or PythonDocxAdapter()
         self._search_svc = search_svc
 

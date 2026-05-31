@@ -100,3 +100,51 @@ def test_is_a_pdf_adapter(tmp_path: Path):
     """LSP: a CachingPDFAdapter must be usable anywhere an IPDFAdapter is."""
     cached = CachingPDFAdapter(CountingPDFAdapter([]))
     assert isinstance(cached, IPDFAdapter)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Cache LIFETIME — the decorator only helps if its instance survives across
+# requests. ReaderService is built per-request (DI), so the cache must live in a
+# process singleton that is INJECTED, not re-wrapped per instance.
+#
+# Bug being guarded: __init__ unconditionally wrapped pdf_adapter in a NEW
+# CachingPDFAdapter, so an injected singleton cache was discarded and every page
+# turn re-parsed the whole PDF.
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _make_reader(pdf_adapter):
+    """Construct a ReaderService with only the PDF adapter wired (other deps are
+    unused for cache-lifetime assertions)."""
+    from backend.core.reader_service import ReaderService
+    return ReaderService(file_repo=None, backend=None, llm_svc=None, pdf_adapter=pdf_adapter)
+
+
+def test_reader_does_not_rewrap_an_injected_caching_adapter():
+    """A CachingPDFAdapter passed in must be used as-is, so its cache is shared
+    across the per-request ReaderService instances."""
+    shared = CachingPDFAdapter(CountingPDFAdapter([PageContent(page_num=1, text="x")]))
+
+    svc1 = _make_reader(shared)
+    svc2 = _make_reader(shared)
+
+    assert svc1._pdf_adapter is shared
+    assert svc2._pdf_adapter is shared
+
+
+def test_reader_still_wraps_a_raw_adapter():
+    """A raw (non-caching) adapter must still be wrapped so caching is always on
+    (back-compat for injected stubs / default PyMuPDFAdapter)."""
+    raw = CountingPDFAdapter([PageContent(page_num=1, text="x")])
+    svc = _make_reader(raw)
+    assert isinstance(svc._pdf_adapter, CachingPDFAdapter)
+
+
+def test_get_pdf_adapter_is_a_process_singleton():
+    """The DI provider must hand out ONE CachingPDFAdapter for the whole process
+    so the page cache persists across requests."""
+    from backend.core.dependencies import get_pdf_adapter
+    get_pdf_adapter.cache_clear()
+    a = get_pdf_adapter()
+    b = get_pdf_adapter()
+    assert a is b
+    assert isinstance(a, CachingPDFAdapter)

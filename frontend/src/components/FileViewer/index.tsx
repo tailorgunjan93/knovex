@@ -71,6 +71,19 @@ const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
 const SERIF = '"Instrument Serif", Georgia, serif'
 const ACCENT = '#F59E0B'  // amber — chapter numbers, drop caps
 
+/**
+ * Compute the next page for a keyboard arrow press, clamped to [1, totalPages].
+ * Returns `null` when the key is not an arrow or the move would be a no-op
+ * (already at an edge). Pure + exported so page navigation is unit-tested
+ * without rendering the whole viewer.
+ */
+export function pageStep(key: string, page: number, totalPages: number): number | null {
+  const delta = key === 'ArrowRight' ? 1 : key === 'ArrowLeft' ? -1 : 0
+  if (delta === 0) return null
+  const next = Math.min(totalPages, Math.max(1, page + delta))
+  return next === page ? null : next
+}
+
 const FORMAT_LABEL: Record<string, string> = {
   pdf: 'PDF', docx: 'DOCX', txt: 'TXT', md: 'MD', csv: 'CSV', udf: 'UDF',
 }
@@ -896,6 +909,21 @@ export default function FileViewer({
       })
     }
   }, [data, page, totalPages, kbId, fileId, qc])
+
+  // ── Keyboard page turns (← / →) ─────────────────────────────────────────────
+  // Mirrors the design lab. Ignored while typing in a field so it never hijacks
+  // the Q&A composer; paired with the ±1 prefetch above, turns feel instant.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) return
+      if (t && t.isContentEditable) return
+      const next = pageStep(e.key, page, totalPages)
+      if (next !== null) { e.preventDefault(); setPage(next) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [page, totalPages])
 
   // Split mode: auto-open Q&A
   const effectiveQaOpen = qaOpen || readingMode === 'split'
