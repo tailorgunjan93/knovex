@@ -357,7 +357,7 @@ export default function ChatPage() {
 
         {/* Header bar (lab) — title · grounded scope · thread switcher · new thread */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 3, py: 2, flexShrink: 0 }}>
-          <Typography sx={{ fontSize: 22, fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}>
+          <Typography sx={{ fontSize: 24, fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
             Ask Knovex
           </Typography>
           {selectedKbs.length > 0 && (
@@ -726,13 +726,14 @@ function HeaderBtn({ icon, label, onClick }: { icon: React.ReactNode; label: str
   const theme = useTheme()
   return (
     <Box onClick={onClick}
-      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5,
-            height: 26, px: 1.25, borderRadius: 1.25, cursor: 'pointer',
+      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.7,
+            height: 32, px: 1.75, borderRadius: 99, cursor: 'pointer',
             border: `1px solid ${theme.palette.divider}`, color: 'text.secondary',
-            fontSize: 11, userSelect: 'none',
-            '&:hover': { color: 'text.primary', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
+            fontWeight: 600, letterSpacing: '-0.005em', userSelect: 'none',
+            transition: 'background .12s, color .12s, border-color .12s',
+            '&:hover': { color: 'text.primary', borderColor: 'text.disabled', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
       {icon}
-      <Typography sx={{ fontSize: 11 }}>{label}</Typography>
+      <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{label}</Typography>
     </Box>
   )
 }
@@ -761,14 +762,16 @@ function ThreadSwitcher({ sessions, activeSessionId, open, setOpen, onSelect, on
   return (
     <Box sx={{ position: 'relative' }} ref={ref}>
       <Box onClick={() => setOpen(!open)}
-        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5,
-              height: 26, px: 1.25, borderRadius: 1.25, cursor: 'pointer',
-              border: `1px solid ${theme.palette.divider}`, color: 'text.secondary',
-              userSelect: 'none',
-              '&:hover': { color: 'text.primary', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
-        <MoreHorizIcon sx={{ fontSize: 14 }} />
-        <Typography sx={{ fontSize: 11 }}>History</Typography>
-        <Typography sx={{ fontSize: 10, opacity: 0.7 }}>▾</Typography>
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.7,
+              height: 32, px: 1.75, borderRadius: 99, cursor: 'pointer',
+              border: `1px solid ${open ? alpha(theme.palette.primary.main, 0.5) : theme.palette.divider}`,
+              color: open ? 'primary.main' : 'text.secondary',
+              fontWeight: 600, letterSpacing: '-0.005em', userSelect: 'none',
+              transition: 'background .12s, color .12s, border-color .12s',
+              '&:hover': { color: 'text.primary', borderColor: 'text.disabled', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
+        <MoreHorizIcon sx={{ fontSize: 16 }} />
+        <Typography sx={{ fontSize: 13, fontWeight: 600 }}>History</Typography>
+        <Typography sx={{ fontSize: 11, opacity: 0.7 }}>▾</Typography>
       </Box>
 
       {open && (
@@ -1190,7 +1193,7 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
 
           // ── Paragraphs ──────────────────────────────────────────────────
           '& p': {
-            m: 0, mb: 1.25, fontSize: 13.5, lineHeight: 1.8, color: 'text.primary',
+            m: 0, mb: 1.25, fontSize: 15, lineHeight: 1.75, color: 'text.primary',
             '&:last-child': { mb: 0 },
           },
 
@@ -1215,7 +1218,7 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           '& ul': {
             pl: 0, mb: 1, mt: 0.5, listStyle: 'none',
             '& li': {
-              mb: 0.5, fontSize: 13.5, lineHeight: 1.75, color: 'text.primary',
+              mb: 0.5, fontSize: 15, lineHeight: 1.75, color: 'text.primary',
               pl: 2, position: 'relative',
               '&::before': {
                 content: '"▸"', position: 'absolute', left: 0,
@@ -1226,7 +1229,7 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           '& ol': {
             pl: 2.5, mb: 1, mt: 0.5,
             '& li': {
-              mb: 0.5, fontSize: 13.5, lineHeight: 1.75, color: 'text.primary',
+              mb: 0.5, fontSize: 15, lineHeight: 1.75, color: 'text.primary',
               pl: 0.5,
               '&::marker': { color: accent, fontWeight: 700 },
             },
@@ -1312,7 +1315,7 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           },
         }}>
           {isUser ? (
-            <Typography sx={{ fontSize: 13.5, lineHeight: 1.7, color: 'text.primary',
+            <Typography sx={{ fontSize: 15, lineHeight: 1.75, color: 'text.primary',
                               whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {message.content}
             </Typography>
