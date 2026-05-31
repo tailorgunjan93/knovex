@@ -40,6 +40,7 @@ import CancelIcon              from '@mui/icons-material/Cancel'
 import SchoolIcon              from '@mui/icons-material/School'
 import TipsAndUpdatesIcon      from '@mui/icons-material/TipsAndUpdates'
 import type { GuidedContent, QuizCheck } from '../../api/learn.api'
+import AnimatedBeat from './AnimatedBeat'
 
 const SERIF = '"Instrument Serif", Georgia, serif'
 const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
@@ -93,53 +94,7 @@ function ConfettiBurst({ active }: { active: boolean }) {
   )
 }
 
-// ─── Section block ────────────────────────────────────────────────────────────
-
-interface SectionProps {
-  icon:      React.ReactNode
-  label:     string
-  accent:    string
-  children:  React.ReactNode
-  animDelay?: number   // ms stagger delay
-}
-
-function Section({ icon, label, accent, children, animDelay = 0 }: SectionProps) {
-  const theme  = useTheme()
-  const isDark = theme.palette.mode === 'dark'
-
-  return (
-    <Box sx={{
-      display:      'flex',
-      gap:          1.5,
-      p:            2,
-      borderRadius: 2,
-      bgcolor:      isDark ? alpha(accent, 0.07) : alpha(accent, 0.06),
-      border:       `1px solid ${alpha(accent, isDark ? 0.18 : 0.2)}`,
-      '@keyframes fadeInUp': {
-        from: { opacity: 0, transform: 'translateY(14px)' },
-        to:   { opacity: 1, transform: 'translateY(0)' },
-      },
-      animation: `fadeInUp 0.38s ease-out ${animDelay}ms both`,
-    }}>
-      <Box sx={{
-        mt: 0.2, color: accent, flexShrink: 0,
-        display: 'flex', alignItems: 'flex-start',
-        '& .MuiSvgIcon-root': { fontSize: 16 },
-      }}>
-        {icon}
-      </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{
-          fontFamily: MONO, fontSize: 9, textTransform: 'uppercase',
-          letterSpacing: '0.12em', color: accent, mb: 0.6,
-        }}>
-          {label}
-        </Typography>
-        {children}
-      </Box>
-    </Box>
-  )
-}
+// Beat entrance animation lives in ./AnimatedBeat (consumes @/lib/motion).
 
 // ─── MCQ quiz check ───────────────────────────────────────────────────────────
 
@@ -795,9 +750,16 @@ export default function GuidedViewer({ content }: Props) {
           return (
             <Box sx={{ px: 3, pb: 2, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
               {beats.slice(0, shown).map((b, i) => (
-                <Section key={b.label} icon={b.icon} label={b.label} accent={b.accent} animDelay={i === shown - 1 ? 0 : 0}>
+                <AnimatedBeat
+                  key={b.label}
+                  icon={b.icon}
+                  label={b.label}
+                  accent={b.accent}
+                  isLatest={i === shown - 1}
+                  hasNext={i < shown - 1}
+                >
                   {b.node}
-                </Section>
+                </AnimatedBeat>
               ))}
 
               {/* In-step Continue — reveals the next beat instead of dumping all at once */}
