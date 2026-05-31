@@ -54,10 +54,12 @@ import FolderOpenIcon    from '@mui/icons-material/FolderOpen'
 import ExpandMoreIcon    from '@mui/icons-material/ExpandMore'
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined'
 import ChevronLeftIcon   from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon  from '@mui/icons-material/ChevronRight'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { kbApi, type FileRecord, type KB } from '../../api/kb.api'
 import { readerApi } from '../../api/reader.api'
 import FileViewer, { type UploadStatus } from '../../components/FileViewer'
+import { getRecentDocs, recordRecentDoc, type RecentDoc } from '../../lib/recentDocs'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -207,10 +209,12 @@ function KBFileList({
 
 function PickerPanel({
   kbs,
+  recent,
   openFile,
   uploadState,
   onUploadFile,
   onOpenKBFile,
+  onOpenRecent,
   onCollapse,
   isDragging,
   onDragEnter,
@@ -218,10 +222,12 @@ function PickerPanel({
   onDrop,
 }: {
   kbs: KB[]
+  recent: RecentDoc[]
   openFile?: OpenFile
   uploadState: UploadState
   onUploadFile: (file: File) => void
   onOpenKBFile: (f: FileRecord, kb: KB) => void
+  onOpenRecent: (d: RecentDoc) => void
   onCollapse: () => void
   isDragging: boolean
   onDragEnter: (e: React.DragEvent) => void
@@ -245,12 +251,11 @@ function PickerPanel({
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
-        borderRight: `1px solid ${theme.palette.divider}`,
         bgcolor: isDark ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.015)',
         overflow: 'hidden',
       }}
     >
-      {/* ── Panel header: READER label + collapse button ── */}
+      {/* ── Panel header: DOCUMENTS label + collapse button ── */}
       <Stack
         direction="row"
         alignItems="center"
@@ -272,7 +277,7 @@ function PickerPanel({
             flex: 1,
           }}
         >
-          Files
+          Documents
         </Typography>
         <Tooltip title="Collapse panel">
           <IconButton size="small" onClick={onCollapse} sx={{ color: 'text.disabled', '&:hover': { color: 'text.secondary' } }}>
@@ -386,8 +391,47 @@ function PickerPanel({
 
       <Divider sx={{ mx: 1.5, opacity: 0.6 }} />
 
-      {/* ── KB file tree ── */}
+      {/* ── Recent + KB file tree ── */}
       <Box sx={{ flex: 1, overflow: 'auto', pt: 0.5 }}>
+        {/* Recently opened (reader history) */}
+        {recent.length > 0 && (
+          <>
+            <Typography
+              sx={{
+                fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
+                letterSpacing: '0.12em', color: 'text.disabled', px: 2, pt: 1, pb: 0.5,
+              }}
+            >
+              Recent
+            </Typography>
+            {recent.map(d => {
+              const isActive = d.fileId === openFile?.fileId
+              return (
+                <Box
+                  key={d.fileId}
+                  onClick={() => onOpenRecent(d)}
+                  sx={{
+                    display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.75, mx: 0.5,
+                    borderRadius: 1, cursor: 'pointer',
+                    bgcolor: isActive ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                    borderLeft: isActive ? `2px solid ${theme.palette.primary.main}` : '2px solid transparent',
+                    '&:hover': { bgcolor: isActive ? alpha(theme.palette.primary.main, 0.12) : 'action.hover' },
+                    transition: 'background 80ms, border-color 80ms',
+                  }}
+                >
+                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                             bgcolor: FORMAT_COLOR[d.format] ?? '#6B7280' }} />
+                  <Typography noWrap sx={{ flex: 1, fontSize: 12.5,
+                    fontWeight: isActive ? 600 : 400, color: isActive ? 'primary.main' : 'text.secondary' }}>
+                    {d.fileName}
+                  </Typography>
+                </Box>
+              )
+            })}
+            <Divider sx={{ mx: 1.5, my: 0.75, opacity: 0.6 }} />
+          </>
+        )}
+
         <Typography
           sx={{
             fontFamily: MONO,
@@ -533,8 +577,9 @@ function EmptyState({
       <Box sx={{ textAlign: 'center' }}>
         <Typography
           sx={{
-            fontFamily: '"Instrument Serif", Georgia, serif',
-            fontSize: 24,
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: '-0.01em',
             color: isDragging ? 'primary.main' : 'text.secondary',
             lineHeight: 1.3,
             transition: 'color 0.15s',
@@ -614,8 +659,15 @@ export default function ReaderPage() {
   const [uploadState, setUpload]    = useState<UploadState>({ phase: 'idle' })
   const [isDragging, setIsDragging] = useState(false)
   const [pickerVisible, setPicker]  = useState(true)
+  const [recent, setRecent]         = useState<RecentDoc[]>(() => getRecentDocs())
   const mainInputRef = useRef<HTMLInputElement>(null)
   const dragCounter  = useRef(0)
+
+  // Open a document and record it in the "Recent" history (reader history).
+  const openDoc = useCallback((f: OpenFile) => {
+    setOpenFile(f)
+    setRecent(recordRecentDoc({ kbId: f.kbId, fileId: f.fileId, fileName: f.fileName, format: f.format }))
+  }, [])
 
   // ── KBs list ────────────────────────────────────────────────────────────────
   const { data: kbs = [] } = useQuery({
@@ -638,7 +690,7 @@ export default function ReaderPage() {
       kbApi.listFiles(kbParam).then(files => {
         const target = files.find(f => f.id === fileParam)
         if (target) {
-          setOpenFile({ kbId: kbParam, fileId: fileParam, fileName: target.name, format: target.format })
+          openDoc({ kbId: kbParam, fileId: fileParam, fileName: target.name, format: target.format })
         }
       }).catch(() => {})
     }
@@ -660,7 +712,7 @@ export default function ReaderPage() {
     if (resp.status === 'ready') {
       // File was already indexed (duplicate) — open immediately
       setUpload({ phase: 'idle' })
-      setOpenFile({ kbId: resp.kb_id, fileId: resp.file_id, fileName: resp.name, format: resp.format })
+      openDoc({ kbId: resp.kb_id, fileId: resp.file_id, fileName: resp.name, format: resp.format })
       return
     }
 
@@ -675,7 +727,7 @@ export default function ReaderPage() {
           const status = await kbApi.getFileStatus(resp.kb_id, resp.file_id)
           if (status.status === 'ready') {
             setUpload({ phase: 'idle' })
-            setOpenFile({ kbId: resp.kb_id, fileId: resp.file_id, fileName: resp.name, format: resp.format })
+            openDoc({ kbId: resp.kb_id, fileId: resp.file_id, fileName: resp.name, format: resp.format })
             queryClient.invalidateQueries({ queryKey: ['kb', resp.kb_id, 'files'] })
             queryClient.invalidateQueries({ queryKey: ['kbs'] })
             return
@@ -690,7 +742,7 @@ export default function ReaderPage() {
       setUpload({ phase: 'error', message: 'Ingestion timed out after 2 minutes' })
     }
     poll()
-  }, [queryClient])
+  }, [queryClient, openDoc])
 
   // ── Drag & drop ──────────────────────────────────────────────────────────────
 
@@ -720,10 +772,15 @@ export default function ReaderPage() {
   // ── KB file open ─────────────────────────────────────────────────────────────
 
   const openKBFile = useCallback((f: FileRecord, kb: KB) => {
-    setOpenFile({ kbId: kb.id, fileId: f.id, fileName: f.name, format: f.format })
+    openDoc({ kbId: kb.id, fileId: f.id, fileName: f.name, format: f.format })
     // Update URL for shareable deep links (without triggering re-render loop)
     navigate(`/reader?kb=${kb.id}&file=${f.id}`, { replace: true })
-  }, [navigate])
+  }, [navigate, openDoc])
+
+  const openRecent = useCallback((d: RecentDoc) => {
+    openDoc({ kbId: d.kbId, fileId: d.fileId, fileName: d.fileName, format: d.format })
+    navigate(`/reader?kb=${d.kbId}&file=${d.fileId}`, { replace: true })
+  }, [navigate, openDoc])
 
   const closeFile = useCallback(() => {
     setOpenFile(undefined)
@@ -755,10 +812,12 @@ export default function ReaderPage() {
       {pickerVisible ? (
           <PickerPanel
             kbs={kbs}
+            recent={recent}
             openFile={openFile}
             uploadState={uploadState}
             onUploadFile={doUpload}
             onOpenKBFile={openKBFile}
+            onOpenRecent={openRecent}
             onCollapse={() => setPicker(false)}
             isDragging={isDragging}
             onDragEnter={handleDragEnter}
@@ -766,32 +825,36 @@ export default function ReaderPage() {
             onDrop={handleDrop}
           />
         ) : (
-          /* Slim collapsed rail — gives user a visual anchor to expand from */
+          /* Slim collapsed rail — expand chevron + vertical "Documents" label */
           <Box
             sx={{
-              width: 36,
+              width: 44,
               flexShrink: 0,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              borderRight: `1px solid ${theme.palette.divider}`,
               bgcolor: isDark ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.015)',
               pt: 1.5,
+              gap: 1.5,
             }}
           >
-            <Tooltip title="Show file picker" placement="right">
+            <Tooltip title="Show documents" placement="right">
               <IconButton
                 size="small"
                 onClick={() => setPicker(true)}
-                sx={{
-                  color: 'text.disabled',
-                  '&:hover': { color: 'primary.main' },
-                  transition: 'color 0.15s',
-                }}
+                sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main' }, transition: 'color 0.15s' }}
               >
-                <FolderOpenIcon sx={{ fontSize: 14 }} />
+                <ChevronRightIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
+            <Box onClick={() => setPicker(true)}
+                 sx={{ flex: 1, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <Typography sx={{ writingMode: 'vertical-rl', fontFamily: MONO, fontSize: 10,
+                                textTransform: 'uppercase', letterSpacing: '0.14em',
+                                color: 'text.disabled', userSelect: 'none' }}>
+                Documents
+              </Typography>
+            </Box>
           </Box>
         )}
 
