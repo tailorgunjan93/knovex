@@ -782,41 +782,33 @@ function FormatCard({
   onClick: () => void
 }) {
   const theme = useTheme()
+  const accent = theme.palette.primary.main
   return (
     <Box
       data-testid={`format-card-${f.id}`}
       onClick={onClick}
       sx={{
-        flex: '1 1 calc(25% - 12px)',
-        minWidth: 120,
-        maxWidth: 200,
-        border: `1.5px solid`,
-        borderColor: selected ? f.color : 'divider',
-        borderRadius: 2,
-        p: 1.75,
+        textAlign: 'left',
+        border: `1px solid`,
+        borderColor: selected ? accent : 'divider',
+        borderRadius: 3,
+        p: 2,
         cursor: 'pointer',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 0.75,
+        bgcolor: selected ? alpha(accent, theme.palette.mode === 'dark' ? 0.12 : 0.08) : 'background.paper',
         transition: 'all 0.15s',
-        bgcolor: selected
-          ? alpha(f.color, theme.palette.mode === 'dark' ? 0.15 : 0.07)
-          : 'transparent',
         '&:hover': {
-          borderColor: f.color,
-          bgcolor: alpha(f.color, theme.palette.mode === 'dark' ? 0.1 : 0.05),
-          transform: 'translateY(-1px)',
-          boxShadow: `0 4px 16px ${alpha(f.color, 0.15)}`,
+          borderColor: selected ? accent : 'text.disabled',
+          transform: 'translateY(-2px)',
         },
       }}
     >
-      <Box sx={{ color: selected ? f.color : 'text.secondary', display: 'flex' }}>
+      <Box sx={{ color: selected ? accent : 'text.secondary', mb: 1, '& svg': { fontSize: 24 } }}>
         {f.icon}
       </Box>
-      <Typography sx={{ fontSize: 13, fontWeight: 700, color: selected ? f.color : 'text.primary' }}>
+      <Typography sx={{ fontSize: 14, fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
         {f.label}
       </Typography>
-      <Typography sx={{ fontSize: 11, color: 'text.disabled', lineHeight: 1.4 }}>
+      <Typography sx={{ fontSize: 12.5, color: 'text.secondary', lineHeight: 1.5 }}>
         {f.desc}
       </Typography>
     </Box>
@@ -1343,18 +1335,26 @@ export default function LearnPage() {
                 </Box>
               </Box>
             ) : (
-              <Typography component="h1" sx={{
-                fontFamily: SERIF,
-                fontWeight: 400,
-                fontSize: { xs: 24, sm: 28, md: 32 },
-                letterSpacing: '-0.01em',
-                lineHeight: 1.05,
-              }}>
-                Start{' '}
-                <Box component="em" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
-                  learning
-                </Box>
-              </Typography>
+              <Box>
+                <Typography sx={{
+                  fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em',
+                  color: 'text.disabled', mb: 0.75,
+                }}>
+                  — LEARN
+                </Typography>
+                <Typography component="h1" sx={{
+                  fontWeight: 700,
+                  fontSize: { xs: 24, sm: 28, md: 32 },
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.05,
+                }}>
+                  What do you want to{' '}
+                  <Box component="em" sx={{ fontStyle: 'normal', color: 'primary.main' }}>
+                    learn
+                  </Box>
+                  ?
+                </Typography>
+              </Box>
             )}
             {hasContent && !isStreaming && (
               <Button
@@ -1773,71 +1773,51 @@ export default function LearnPage() {
 
           {/* ── EMPTY STATE ─────────────────────────────────────────────────── */}
           {!isStreaming && !hasContent && !streamError && (
-            <Box sx={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', minHeight: '60%', gap: 3,
-            }}>
-              <Box sx={{ textAlign: 'center' }}>
-                <AutoStoriesIcon sx={{ fontSize: 52, color: 'text.disabled', mb: 1 }} />
-                <Typography sx={{ fontSize: 18, fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                  What do you want to learn today?
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5, maxWidth: 860 }}>
+              {/* Format card grid (lab: FORMAT eyebrow + 3-col, left-aligned) */}
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 1.5 }}>
+                  FORMAT
                 </Typography>
-                <Typography sx={{ fontSize: 13.5, color: 'text.secondary', maxWidth: 500, lineHeight: 1.7 }}>
-                  Type a topic, pick a file from your Library, paste a URL, or upload a document.
-                  Choose a format and difficulty above, then hit Generate.
-                  Earn XP and unlock badges as you go.
-                </Typography>
-                {/* Source mode quick-select chips in empty state */}
-                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', mt: 1.5, flexWrap: 'wrap' }}>
-                  {SOURCE_MODES.map(sm => (
-                    <Chip
-                      key={sm.id}
-                      icon={<Box sx={{ fontSize: 14, display: 'flex', lineHeight: 1 }}>{sm.icon}</Box>}
-                      label={sm.label}
-                      size="small"
-                      variant={sourceMode === sm.id ? 'filled' : 'outlined'}
-                      onClick={() => setSourceMode(sm.id)}
-                      color={sourceMode === sm.id ? 'primary' : 'default'}
-                      sx={{ fontSize: 12, cursor: 'pointer' }}
+                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' } }}>
+                  {FORMATS.map(f => (
+                    <FormatCard
+                      key={f.id}
+                      f={f}
+                      selected={format === f.id}
+                      onClick={() => setFormat(f.id)}
                     />
                   ))}
                 </Box>
               </Box>
 
-              {/* Format card grid */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'center', maxWidth: 720 }}>
-                {FORMATS.map(f => (
-                  <FormatCard
-                    key={f.id}
-                    f={f}
-                    selected={format === f.id}
-                    onClick={() => setFormat(f.id)}
-                  />
-                ))}
-              </Box>
-
-              {/* Difficulty row */}
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {DIFFICULTIES.map(d => (
-                  <Box
-                    key={d.id}
-                    onClick={() => setDifficulty(d.id)}
-                    sx={{
-                      px: 1.5, py: 0.6,
-                      borderRadius: 1.5,
-                      border: `1.5px solid`,
-                      borderColor: difficulty === d.id ? d.color : 'divider',
-                      bgcolor: difficulty === d.id ? d.bg : 'transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      '&:hover': { borderColor: d.color },
-                    }}
-                  >
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: difficulty === d.id ? d.color : 'text.secondary' }}>
-                      {d.label}
-                    </Typography>
-                  </Box>
-                ))}
+              {/* Difficulty */}
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 1 }}>
+                  DIFFICULTY
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {DIFFICULTIES.map(d => (
+                    <Box
+                      key={d.id}
+                      onClick={() => setDifficulty(d.id)}
+                      sx={{
+                        px: 1.5, py: 0.6,
+                        borderRadius: 1.5,
+                        border: `1.5px solid`,
+                        borderColor: difficulty === d.id ? d.color : 'divider',
+                        bgcolor: difficulty === d.id ? d.bg : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                        '&:hover': { borderColor: d.color },
+                      }}
+                    >
+                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: difficulty === d.id ? d.color : 'text.secondary' }}>
+                        {d.label}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
               </Box>
             </Box>
           )}
