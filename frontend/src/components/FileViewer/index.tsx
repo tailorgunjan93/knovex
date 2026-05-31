@@ -534,8 +534,6 @@ function IngestPipeline({
     <Box
       sx={{
         px: 2,
-        borderBottom: '1px solid',
-        borderColor: 'divider',
         flexShrink: 0,
         bgcolor: isDark
           ? alpha('#F59E0B', 0.04)
@@ -944,8 +942,6 @@ export default function FileViewer({
           sx={{
             px: 2,
             py: 0.75,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
             flexShrink: 0,
             minHeight: 44,
             bgcolor: isDark
@@ -1283,8 +1279,6 @@ export default function FileViewer({
         sx={{
           px: 2,
           height: 40,
-          borderTop: '1px solid',
-          borderColor: 'divider',
           flexShrink: 0,
           bgcolor: isDark
             ? alpha(theme.palette.background.paper, 0.6)
