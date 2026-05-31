@@ -83,8 +83,11 @@ import {
 import { kbApi } from '../../api/kb.api'
 import { readerApi } from '../../api/reader.api'
 import GuidedViewer from './GuidedViewer'
+import { BRAND } from '@/theme/tokens'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
+// Generic active/hover accent fill — brand copper (paired with primary.main borders).
+const ACCENT = BRAND.copper
 const SERIF = '"Instrument Serif", Georgia, serif'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -397,7 +400,7 @@ function QuizView({
                       transition: 'all 0.15s',
                       '&:hover': showResult ? {} : {
                         borderColor: 'primary.main',
-                        bgcolor: alpha('#7C3AED', 0.06),
+                        bgcolor: alpha(ACCENT, 0.06),
                       },
                     }}
                   >
@@ -1382,13 +1385,13 @@ export default function LearnPage() {
                         borderRadius: 1,
                         border: '1px solid',
                         borderColor: active ? 'primary.main' : 'divider',
-                        bgcolor: active ? alpha('#7C3AED', theme.palette.mode === 'dark' ? 0.18 : 0.08) : 'transparent',
+                        bgcolor: active ? alpha(ACCENT, theme.palette.mode === 'dark' ? 0.18 : 0.08) : 'transparent',
                         cursor: isStreaming ? 'default' : 'pointer',
                         transition: 'all 0.15s',
                         fontSize: 13,
                         '&:hover': isStreaming ? {} : {
                           borderColor: 'primary.main',
-                          bgcolor: alpha('#7C3AED', theme.palette.mode === 'dark' ? 0.12 : 0.05),
+                          bgcolor: alpha(ACCENT, theme.palette.mode === 'dark' ? 0.12 : 0.05),
                         },
                       }}
                     >
@@ -1544,13 +1547,13 @@ export default function LearnPage() {
                         cursor: isStreaming ? 'default' : 'pointer',
                         transition: 'all 0.15s',
                         bgcolor: isDragOver
-                          ? alpha('#7C3AED', 0.06)
+                          ? alpha(ACCENT, 0.06)
                           : uploadFile
                           ? alpha('#10B981', 0.05)
                           : 'transparent',
                         '&:hover': isStreaming ? {} : {
                           borderColor: 'primary.main',
-                          bgcolor: alpha('#7C3AED', 0.04),
+                          bgcolor: alpha(ACCENT, 0.04),
                         },
                       }}
                     >
