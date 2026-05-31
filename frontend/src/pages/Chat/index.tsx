@@ -426,8 +426,9 @@ export default function ChatPage() {
 
         {/* No header — chat-first like the lab. "New thread" lives below, in the thread area. */}
 
-        {/* Messages area */}
+        {/* Messages area — centered reading column (lab document style) */}
         <Box flex={1} overflow="auto" sx={{ px: 4, py: 3 }}>
+          <Box sx={{ maxWidth: 760, mx: 'auto' }}>
           {/* New thread — moved out of the header, top-right of the thread area */}
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
             <HeaderBtn
@@ -470,6 +471,7 @@ export default function ChatPage() {
             </Box>
           )}
           <div ref={bottomRef} />
+          </Box>
         </Box>
 
         {/* Composer */}
@@ -1078,24 +1080,26 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
   }
 
   return (
-    <Box sx={{ mb: 3, display: 'flex', gap: 1.5, alignItems: 'flex-start',
-               justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+    <Box sx={{ mb: 3, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
 
-      {/* Avatar — AI only on left: round circle with sparkle */}
-      {!isUser && (
-        <Box sx={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                   background: `linear-gradient(135deg, ${theme.palette.primary.light}, ${accent})`,
-                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                   boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 4px rgba(0,0,0,0.35)`,
-                   mt: 0.25 }}>
-          <AutoAwesomeIcon sx={{ fontSize: 13, color: '#fff' }} />
+      {/* Avatar — left gutter for BOTH roles (document transcript, lab style) */}
+      {isUser ? (
+        <Box sx={{ width: 30, height: 30, borderRadius: 2, flexShrink: 0, mt: 0.25,
+                   bgcolor: alpha(isDark ? '#fff' : '#000', 0.08),
+                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: 'text.secondary', userSelect: 'none' }}>You</Typography>
+        </Box>
+      ) : (
+        <Box sx={{ width: 30, height: 30, borderRadius: 2, flexShrink: 0, mt: 0.25,
+                   bgcolor: 'background.default', border: `1px solid ${theme.palette.divider}`,
+                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <AutoAwesomeIcon sx={{ fontSize: 14, color: accent }} />
         </Box>
       )}
 
-      <Box sx={{ maxWidth: '78%', minWidth: 0 }}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
         {/* Role row */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5,
-                   justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
           <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
             {isUser ? 'You' : 'Knovex'}
           </Typography>
@@ -1143,14 +1147,12 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           </Box>
         )}
 
-        {/* Bubble */}
+        {/* Content — full-width document transcript (no bubble, lab style) */}
         <Box sx={{
-          px: 1.75, py: 1.25, borderRadius: isUser ? '12px 12px 4px 12px' : '4px 12px 12px 12px',
-          bgcolor: isUser
-            ? alpha(accent, isDark ? 0.2 : 0.12)
-            : alpha(theme.palette.background.paper, isDark ? 1 : 0.8),
-          border: `1px solid ${isUser ? alpha(accent, 0.3) : theme.palette.divider}`,
-          display: 'inline-block', maxWidth: '100%',
+          px: 0, py: 0,
+          // user text gets a subtle warm tint to distinguish it without a box
+          color: isUser ? 'text.primary' : 'text.primary',
+          display: 'block', maxWidth: '100%',
 
           // ── Paragraphs ──────────────────────────────────────────────────
           '& p': {
@@ -1344,17 +1346,6 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           </Box>
         )}
       </Box>
-
-      {/* Avatar — user on right */}
-      {isUser && (
-        <Box sx={{ width: 30, height: 30, borderRadius: 1.5, flexShrink: 0,
-                   bgcolor: alpha(isDark ? '#fff' : '#000', 0.1),
-                   border: `1px solid ${theme.palette.divider}`,
-                   display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 0.25 }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: 'text.secondary',
-                            userSelect: 'none' }}>You</Typography>
-        </Box>
-      )}
     </Box>
   )
 }
