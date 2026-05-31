@@ -618,7 +618,7 @@ export default function ChatPage() {
       {/* ══════════════════════════════════════════════════════════════════
           RIGHT: collapsible sources panel
           ══════════════════════════════════════════════════════════════════ */}
-      <Box sx={{ width: sourcesOpen ? 340 : 28, flexShrink: 0, position: 'relative',
+      <Box sx={{ width: sourcesOpen ? 340 : 44, flexShrink: 0, position: 'relative',
                  transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', zIndex: 10 }}>
         {/* Inner clip — flat sources panel (lab style), no hard border */}
         <Box sx={{ position: 'absolute', inset: 0, overflow: 'hidden',
@@ -628,16 +628,24 @@ export default function ChatPage() {
           <Box sx={{ width: 340, height: '100%', display: 'flex', flexDirection: 'column',
                      opacity: sourcesOpen ? 1 : 0, transition: 'opacity 0.15s ease',
                      pointerEvents: sourcesOpen ? 'auto' : 'none' }}>
-            {/* Sources header */}
-            <Box sx={{ px: 2.5, pt: 2, pb: 1.5, flexShrink: 0 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
-                                letterSpacing: '0.13em', color: 'text.disabled', mb: 0.5 }}>
-                Sources used · {latestSources.length}
-              </Typography>
-              <Typography sx={{ fontSize: 18, fontWeight: 700,
-                                letterSpacing: '-0.01em', color: 'text.primary' }}>
-                Where this came from
-              </Typography>
+            {/* Sources header — collapse chevron on the right (lab) */}
+            <Box sx={{ px: 2.5, pt: 2, pb: 1.5, flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
+                                  letterSpacing: '0.13em', color: 'text.disabled', mb: 0.5 }}>
+                  Sources used · {latestSources.length}
+                </Typography>
+                <Typography sx={{ fontSize: 18, fontWeight: 700,
+                                  letterSpacing: '-0.01em', color: 'text.primary' }}>
+                  Where this came from
+                </Typography>
+              </Box>
+              <Tooltip title="Collapse panel" placement="left" arrow>
+                <IconButton size="small" onClick={() => setSourcesOpen(false)}
+                  sx={{ color: 'text.disabled', mt: -0.25, '&:hover': { color: 'text.primary' } }}>
+                  <ChevronRightIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
             </Box>
 
             {/* Sources list */}
@@ -669,31 +677,25 @@ export default function ChatPage() {
             </Box>
           </Box>
 
-          {/* Collapsed strip */}
+          {/* Collapsed rail — expand chevron + vertical label (lab) */}
           {!sourcesOpen && (
-            <Box onClick={() => setSourcesOpen(true)} sx={{ position: 'absolute', inset: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                  '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } }}>
-              <Typography sx={{ transform: 'rotate(90deg)', fontFamily: MONO, fontSize: 9,
-                                textTransform: 'uppercase', letterSpacing: '0.14em',
-                                color: 'text.disabled', whiteSpace: 'nowrap', userSelect: 'none' }}>
-                Sources
-              </Typography>
+            <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                       alignItems: 'center', pt: 1.5, gap: 1.5 }}>
+              <Tooltip title="Show sources" placement="left" arrow>
+                <IconButton size="small" onClick={() => setSourcesOpen(true)} sx={{ color: 'text.secondary' }}>
+                  <ChevronLeftIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Box onClick={() => setSourcesOpen(true)}
+                   sx={{ flex: 1, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <Typography sx={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+                                  fontFamily: MONO, fontSize: 10, textTransform: 'uppercase',
+                                  letterSpacing: '0.14em', color: 'text.disabled', userSelect: 'none' }}>
+                  Sources · {latestSources.length}
+                </Typography>
+              </Box>
             </Box>
           )}
-        </Box>
-
-        {/* Toggle pill — on the LEFT edge of the right panel */}
-        <Box onClick={() => setSourcesOpen(v => !v)}
-          sx={{ position: 'absolute', left: -12, top: '50%', transform: 'translateY(-50%)',
-                width: 22, height: 44, bgcolor: theme.palette.action.hover,
-                borderRadius: '8px 0 0 8px', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 30,
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
-                             '& svg': { color: accent } } }}>
-          {sourcesOpen
-            ? <ChevronRightIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-            : <ChevronLeftIcon  sx={{ fontSize: 13, color: 'text.disabled' }} />}
         </Box>
       </Box>
 
