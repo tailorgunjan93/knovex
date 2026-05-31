@@ -12,9 +12,15 @@
  */
 
 import { Box, Typography, useTheme, alpha } from '@mui/material'
-import { Motion, MOTION, usePrefersReducedMotion } from '@/lib/motion'
+import { Motion, usePrefersReducedMotion } from '@/lib/motion'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
+
+// "Smooth & cinematic" feel — softer spring, longer travel, graceful glide.
+// Tuned locally (not the shared MOTION token) so this is the beat's signature
+// motion while the global spring default stays available for other consumers.
+const BEAT_SPRING = { type: 'spring' as const, stiffness: 210, damping: 26, mass: 1 }
+const EASE_OUT = [0.22, 1, 0.36, 1] as const
 
 interface AnimatedBeatProps {
   icon: React.ReactNode
@@ -37,18 +43,18 @@ export default function AnimatedBeat({ icon, label, accent, isLatest, hasNext, c
 
   return (
     <Motion.div
-      initial={animate ? { opacity: 0, y: 16, scale: 0.985 } : false}
+      initial={animate ? { opacity: 0, y: 24, scale: 0.97 } : false}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ ...MOTION.spring }}
+      transition={BEAT_SPRING}
       style={{ position: 'relative' }}
     >
-      {/* Gutter connector — draws downward toward the next beat */}
+      {/* Gutter connector — draws downward toward the next beat (slow, staggered) */}
       {hasNext && (
         <Motion.div
           aria-hidden
           initial={animate ? { scaleY: 0 } : false}
           animate={{ scaleY: 1 }}
-          transition={{ duration: MOTION.duration.reveal, ease: [0.22, 1, 0.36, 1], delay: 0.05 }}
+          transition={{ duration: 0.55, ease: EASE_OUT, delay: 0.12 }}
           style={{
             position: 'absolute',
             left: 19, top: 40, bottom: -14, width: 2,
@@ -66,9 +72,9 @@ export default function AnimatedBeat({ icon, label, accent, isLatest, hasNext, c
       }}>
         {/* Icon chip — pops in slightly after the card */}
         <Motion.div
-          initial={animate ? { scale: 0.4, opacity: 0 } : false}
+          initial={animate ? { scale: 0.7, opacity: 0 } : false}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 420, damping: 18, delay: 0.08 }}
+          transition={{ type: 'spring', stiffness: 240, damping: 24, delay: 0.14 }}
           style={{
             flexShrink: 0, width: 24, height: 24, borderRadius: 7,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
