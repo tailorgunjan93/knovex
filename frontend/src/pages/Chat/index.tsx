@@ -89,7 +89,8 @@ export default function ChatPage() {
   const [isStreaming,     setIsStreaming]       = useState(false)
   const [webSearch,       setWebSearch]        = useState(false)
   const [error,           setError]            = useState<string | null>(null)
-  const [historyOpen,     setHistoryOpen]      = useState(true)
+  // Collapsed by default — chat-first like the lab (toggle to reveal history).
+  const [historyOpen,     setHistoryOpen]      = useState(false)
   const [sourcesOpen,     setSourcesOpen]      = useState(true)
   const [selectedKbIds,   setSelectedKbIds]    = useState<string[]>([])
   const [kbDropOpen,      setKbDropOpen]       = useState(false)
@@ -618,6 +619,16 @@ export default function ChatPage() {
                   />
                 </span>
               </Tooltip>
+              <Tooltip title={webSearch ? 'Wikipedia grounding ON' : 'Ground answers with Wikipedia (web search)'} placement="top">
+                <span>
+                  <ComposerTool
+                    icon={<Box component="span" sx={{ fontFamily: 'serif', fontWeight: 700, fontSize: 13, lineHeight: 1 }}>W</Box>}
+                    label="Wikipedia"
+                    active={webSearch}
+                    onClick={() => setWebSearch(v => !v)}
+                  />
+                </span>
+              </Tooltip>
               {webSearch && (
                 <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: accent,
                                   bgcolor: alpha(accent, 0.1), px: 0.75, py: 0.2,
@@ -654,6 +665,26 @@ export default function ChatPage() {
                 </Box>
               )}
             </Box>
+          </Box>
+
+          {/* Quick prompts (lab) — one-tap starters */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1.25 }}>
+            {['Explain a concept', 'Quiz me', 'Summarize a doc', 'Make flashcards', 'Connect ideas'].map(q => (
+              <Box
+                key={q}
+                onClick={() => !isStreaming && streamQuestion(q)}
+                sx={{
+                  display: 'inline-flex', alignItems: 'center', height: 28, px: 1.25,
+                  borderRadius: 99, cursor: isStreaming ? 'default' : 'pointer',
+                  fontSize: 12, color: 'text.secondary',
+                  border: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent',
+                  transition: 'all 0.12s',
+                  '&:hover': isStreaming ? {} : { borderColor: alpha(accent, 0.5), color: 'text.primary', bgcolor: alpha(accent, 0.06) },
+                }}
+              >
+                {q}
+              </Box>
+            ))}
           </Box>
         </Box>
       </Box>
