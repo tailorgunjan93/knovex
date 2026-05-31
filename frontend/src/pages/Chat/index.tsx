@@ -526,8 +526,8 @@ export default function ChatPage() {
                 <span>
                   <ComposerTool
                     icon={isAttaching
-                      ? <CircularProgress size={10} sx={{ color: 'inherit' }} />
-                      : <AttachFileIcon sx={{ fontSize: 12 }} />}
+                      ? <CircularProgress size={12} sx={{ color: 'inherit' }} />
+                      : <AttachFileIcon sx={{ fontSize: 14 }} />}
                     label="Attach"
                     active={attachedFiles.length > 0}
                     onClick={handleAttach}
@@ -537,7 +537,7 @@ export default function ChatPage() {
               <Tooltip title={webSearch ? 'Web search ON — click to disable' : 'Enable web search'} placement="top">
                 <span>
                   <ComposerTool
-                    icon={<SearchIcon sx={{ fontSize: 12 }} />}
+                    icon={<SearchIcon sx={{ fontSize: 14 }} />}
                     label="Web"
                     active={webSearch}
                     onClick={() => setWebSearch(v => !v)}
@@ -547,7 +547,7 @@ export default function ChatPage() {
               <Tooltip title={webSearch ? 'Wikipedia grounding ON' : 'Ground answers with Wikipedia (web search)'} placement="top">
                 <span>
                   <ComposerTool
-                    icon={<Box component="span" sx={{ fontFamily: 'serif', fontWeight: 700, fontSize: 13, lineHeight: 1 }}>W</Box>}
+                    icon={<Box component="span" sx={{ fontFamily: 'serif', fontWeight: 700, fontSize: 15, lineHeight: 1 }}>W</Box>}
                     label="Wikipedia"
                     active={webSearch}
                     onClick={() => setWebSearch(v => !v)}
@@ -635,7 +635,7 @@ export default function ChatPage() {
                                   letterSpacing: '0.13em', color: 'text.disabled', mb: 0.5 }}>
                   Sources used · {latestSources.length}
                 </Typography>
-                <Typography sx={{ fontSize: 18, fontWeight: 700,
+                <Typography sx={{ fontSize: 20, fontWeight: 700,
                                   letterSpacing: '-0.01em', color: 'text.primary' }}>
                   Where this came from
                 </Typography>
@@ -658,7 +658,8 @@ export default function ChatPage() {
                 </Box>
               ) : (
                 latestSources.map((s, i) => (
-                  <SourceCard key={i} num={i + 1} source={s} isDark={isDark} />
+                  <SourceCard key={i} num={i + 1} source={s} isDark={isDark}
+                    kbName={kbs.find(k => k.id === s.kb_id)?.name} />
                 ))
               )}
             </Box>
@@ -821,15 +822,16 @@ function ComposerTool({ icon, label, active, onClick }: {
   const accent = theme.palette.primary.main
   return (
     <Box onClick={onClick}
-      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4,
-            height: 24, px: 0.875, borderRadius: 1, cursor: 'pointer',
-            color:   active ? accent : 'text.disabled',
+      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, height: 30, px: 1.25,
+            borderRadius: 99, cursor: 'pointer',
+            color:   active ? accent : 'text.secondary',
             bgcolor: active ? alpha(accent, 0.1) : 'transparent',
             border:  active ? `1px solid ${alpha(accent, 0.35)}` : '1px solid transparent',
-            '&:hover': { color: active ? accent : 'text.secondary',
+            transition: 'background .12s, color .12s',
+            '&:hover': { color: active ? accent : 'text.primary',
                          bgcolor: active ? alpha(accent, 0.15) : alpha(theme.palette.divider, 0.5) } }}>
       {icon}
-      <Typography sx={{ fontSize: 11 }}>{label}</Typography>
+      <Typography sx={{ fontSize: 12.5 }}>{label}</Typography>
     </Box>
   )
 }
@@ -1107,6 +1109,7 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
   const { settings } = useSettingsStore()
   const userInitials = initialsOf(settings?.display_name)
   const userName     = resolveDisplayName(settings?.display_name)
+  const model        = settings?.llm?.model
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content).then(onCopy).catch(() => {})
@@ -1152,8 +1155,8 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
                        px: 0.875, py: 0.15, borderRadius: 10,
                        bgcolor: alpha(isDark ? '#fff' : '#000', 0.05),
                        border: `1px solid ${theme.palette.divider}` }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 9, color: 'text.disabled' }}>
-                grounded
+              <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: 'text.disabled' }}>
+                {model ? `${model} · grounded` : 'grounded'}
               </Typography>
             </Box>
           )}
@@ -1199,21 +1202,19 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
             '&:last-child': { mb: 0 },
           },
 
-          // ── Headings ────────────────────────────────────────────────────
+          // ── Headings — quiet, bold, no rules/accent (lab document style) ──
           '& h1': {
-            mt: 2, mb: 1, fontSize: 20, fontWeight: 700, color: 'text.primary',
-            borderBottom: `2px solid ${alpha(accent, 0.3)}`, pb: 0.5, lineHeight: 1.3,
+            mt: 2, mb: 0.75, fontSize: 18, fontWeight: 700, color: 'text.primary', lineHeight: 1.35,
           },
           '& h2': {
-            mt: 1.75, mb: 0.875, fontSize: 17, fontWeight: 700, color: 'text.primary',
-            borderBottom: `1px solid ${alpha(theme.palette.divider, 0.8)}`, pb: 0.4, lineHeight: 1.3,
+            mt: 1.75, mb: 0.5, fontSize: 16, fontWeight: 700, color: 'text.primary', lineHeight: 1.35,
           },
           '& h3': {
-            mt: 1.5, mb: 0.75, fontSize: 15, fontWeight: 600, color: accent, lineHeight: 1.3,
+            mt: 1.5, mb: 0.5, fontSize: 15, fontWeight: 700, color: 'text.primary', lineHeight: 1.35,
           },
           '& h4': {
-            mt: 1.25, mb: 0.5, fontSize: 13.5, fontWeight: 600,
-            color: isDark ? alpha('#fff', 0.8) : alpha('#000', 0.7), lineHeight: 1.3,
+            mt: 1.25, mb: 0.4, fontSize: 14, fontWeight: 700,
+            color: isDark ? alpha('#fff', 0.82) : alpha('#000', 0.74), lineHeight: 1.35,
           },
 
           // ── Lists ────────────────────────────────────────────────────────
@@ -1237,13 +1238,12 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
             },
           },
 
-          // ── Inline code ──────────────────────────────────────────────────
+          // ── Inline code — neutral chip (lab style), not accent-tinted ─────
           '& code': {
-            fontFamily: MONO, fontSize: 12,
-            bgcolor: isDark ? alpha(accent, 0.12) : alpha(accent, 0.08),
-            color: isDark ? alpha(accent, 0.95) : accent,
-            px: 0.625, py: 0.15, borderRadius: 0.75,
-            border: `1px solid ${alpha(accent, 0.2)}`,
+            fontFamily: MONO, fontSize: 13,
+            bgcolor: theme.palette.action.hover,
+            color: 'text.primary',
+            px: 0.6, py: 0.15, borderRadius: 0.75,
           },
 
           // ── Code blocks ──────────────────────────────────────────────────
@@ -1411,11 +1411,10 @@ function MsgAction({ icon, label, onClick, active }: {
 
 // ─── Source card ───────────────────────────────────────────────────────────────
 
-function SourceCard({ num, source, isDark }: {
-  num: number; source: SourceCitation; isDark: boolean
+function SourceCard({ num, source, isDark, kbName }: {
+  num: number; source: SourceCitation; isDark: boolean; kbName?: string
 }) {
   const theme    = useTheme()
-  const accent   = theme.palette.primary.main
   const navigate = useNavigate()
 
   const handleClick = () => {
@@ -1451,14 +1450,14 @@ function SourceCard({ num, source, isDark }: {
       </Box>
 
       {/* File name */}
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary', mb: 0.5,
+      <Typography sx={{ fontSize: 13, fontWeight: 600, color: 'text.primary', mb: 0.5, lineHeight: 1.35,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {source.file}
       </Typography>
 
       {/* Section as excerpt */}
       {source.section && (
-        <Typography sx={{ fontSize: 11, color: 'text.secondary', lineHeight: 1.5,
+        <Typography sx={{ fontSize: 11.5, color: 'text.secondary', lineHeight: 1.5,
                           fontStyle: 'italic', mb: 0.75,
                           display: '-webkit-box', WebkitLineClamp: 2,
                           WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -1466,14 +1465,14 @@ function SourceCard({ num, source, isDark }: {
         </Typography>
       )}
 
-      {/* Footer */}
+      {/* Footer — collection (KB) name, not the file again */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
         <FolderOutlinedIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
-        <Typography sx={{ fontSize: 10.5, color: 'text.disabled', flex: 1,
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled', flex: 1,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {source.file}
+          {kbName ?? 'Knowledge base'}
         </Typography>
-        <ChevronRightIcon sx={{ fontSize: 12, color: 'text.disabled', flexShrink: 0 }} />
+        {source.kb_id && <ChevronRightIcon sx={{ fontSize: 12, color: 'text.disabled', flexShrink: 0 }} />}
       </Box>
     </Box>
   )
