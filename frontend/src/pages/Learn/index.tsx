@@ -89,16 +89,12 @@ const SERIF = '"Instrument Serif", Georgia, serif'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// Offered formats (UI). Trimmed to the three core modes; the backend still
+// supports the others so any previously-saved session of another type renders.
 const FORMATS: Array<{ id: LearnFormat; label: string; icon: React.ReactNode; desc: string; color: string }> = [
   { id: 'guided',     label: 'Guided',      icon: <SchoolIcon />,       desc: 'Personal tutor — learn step by step at your pace', color: '#6366F1' },
   { id: 'quiz',       label: 'Quiz',        icon: <QuizIcon />,         desc: 'Test your knowledge with MCQ & earn XP',            color: '#7C3AED' },
   { id: 'flashcard',  label: 'Flashcards',  icon: <StyleIcon />,        desc: 'Spaced repetition for long-term memory',            color: '#0EA5E9' },
-  { id: 'mindmap',    label: 'Mind Map',    icon: <AccountTreeIcon />,  desc: 'Visual hierarchy of connected concepts',            color: '#10B981' },
-  { id: 'timeline',   label: 'Timeline',    icon: <TimelineIcon />,     desc: 'Key events in chronological order',                 color: '#F59E0B' },
-  { id: 'story',      label: 'Story',       icon: <MenuBookIcon />,     desc: 'Engaging narrative explanation',                    color: '#EC4899' },
-  { id: 'eli5',       label: 'ELI5',        icon: <ChildCareIcon />,    desc: "Explain Like I'm 5 — simple & clear",               color: '#06B6D4' },
-  { id: 'speedlearn', label: 'Speed Learn', icon: <BoltIcon />,         desc: 'Rapid bullet-point key-concept reference',          color: '#F97316' },
-  { id: 'brainstorm', label: 'Brainstorm',  icon: <EmojiObjectsIcon />, desc: 'Creative connections & surprising facts',           color: '#8B5CF6' },
 ]
 
 const DIFFICULTIES: Array<{ id: Difficulty; label: string; color: string; bg: string }> = [

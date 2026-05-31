@@ -153,11 +153,18 @@ beforeEach(() => {
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
 describe('Empty state', () => {
-  it('renders all 9 format cards in the empty state grid (including Guided)', async () => {
+  it('renders the three core format cards in the empty state grid', async () => {
     renderLearn()
-    const expected = ['Guided', 'Quiz', 'Flashcards', 'Mind Map', 'Timeline', 'Story', 'ELI5', 'Speed Learn', 'Brainstorm']
+    const expected = ['Guided', 'Quiz', 'Flashcards']
     for (const label of expected) {
       await waitFor(() => expect(screen.getAllByText(label).length).toBeGreaterThan(0))
+    }
+  })
+
+  it('no longer offers the removed formats (Mind Map / Timeline / Story / ELI5 / Speed Learn / Brainstorm)', () => {
+    renderLearn()
+    for (const label of ['Mind Map', 'Timeline', 'Story', 'ELI5', 'Speed Learn', 'Brainstorm']) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
     }
   })
 
@@ -303,17 +310,14 @@ describe('Generate and streaming', () => {
     const input = await screen.findByPlaceholderText('What do you want to learn?')
     await userEvent.type(input, 'Machine Learning')
 
-    // Select "Story" format
-    const storyLabel = screen.getAllByText('Story')
-    fireEvent.click(storyLabel[0])
-
+    // Default format is Quiz (one of the three offered formats).
     const genBtn = screen.getByRole('button', { name: /Generate/i })
     await userEvent.click(genBtn)
 
     await waitFor(() =>
       expect(learnApi.streamSession).toHaveBeenCalledWith(
         'Machine Learning',
-        'story',
+        'quiz',
         expect.any(String),    // difficulty
         expect.any(Function),  // onEvent
         expect.anything(),     // AbortSignal
@@ -344,17 +348,7 @@ describe('Generate and streaming', () => {
     const input = await screen.findByPlaceholderText('What do you want to learn?')
     await userEvent.type(input, 'Gravity')
 
-    // Pick "Story" format in header selector — use getAllByText and pick the header row one
-    const storyButtons = await screen.findAllByText('Story')
-    // Click the one in the header format row (should be index 0 or 1 depending on render order)
-    for (const btn of storyButtons) {
-      // Only click ones that are in the format selector (not inside a card description)
-      if (btn.tagName === 'P' || btn.tagName === 'SPAN' || btn.tagName === 'H6') {
-        fireEvent.click(btn)
-        break
-      }
-    }
-
+    // Format is irrelevant to the XP-alert behavior; use the default (Quiz).
     const genBtn = screen.getByRole('button', { name: /Generate/i })
     await userEvent.click(genBtn)
 
