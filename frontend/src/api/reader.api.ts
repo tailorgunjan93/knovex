@@ -39,6 +39,27 @@ export interface ReaderUploadResponse {
   status: string   // pending | ingesting | ready | error
 }
 
+// User-created highlights (persisted, reload with the document)
+export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'purple'
+
+export interface Highlight {
+  id: string
+  kb_id: string
+  file_id: string
+  page: number
+  text: string
+  color: HighlightColor
+  note: string
+  created_at: string
+}
+
+export interface HighlightCreate {
+  page: number
+  text: string
+  color: HighlightColor
+  note?: string
+}
+
 // ─── API module ───────────────────────────────────────────────────────────────
 
 export const readerApi = {
@@ -49,6 +70,27 @@ export const readerApi = {
     return apiClient
       .get<FileContentResponse>(`/kb/${kbId}/files/${fileId}/content`, { params: { page } })
       .then(r => r.data)
+  },
+
+  /** List all saved highlights for a file (ordered page → created). */
+  listHighlights(kbId: string, fileId: string): Promise<Highlight[]> {
+    return apiClient
+      .get<{ highlights: Highlight[] }>(`/kb/${kbId}/files/${fileId}/highlights`)
+      .then(r => r.data.highlights)
+  },
+
+  /** Create (persist) a highlight on a page of a file. */
+  createHighlight(kbId: string, fileId: string, body: HighlightCreate): Promise<Highlight> {
+    return apiClient
+      .post<Highlight>(`/kb/${kbId}/files/${fileId}/highlights`, body)
+      .then(r => r.data)
+  },
+
+  /** Delete a highlight by id. */
+  deleteHighlight(kbId: string, fileId: string, highlightId: string): Promise<void> {
+    return apiClient
+      .delete(`/kb/${kbId}/files/${fileId}/highlights/${highlightId}`)
+      .then(() => undefined)
   },
 
   /**

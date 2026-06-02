@@ -26,7 +26,7 @@
  *   uploadStatus         — shows upload progress strip below breadcrumb
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
@@ -59,10 +59,16 @@ import ChatBubbleOutlineIcon  from '@mui/icons-material/ChatBubbleOutline'
 import AutoAwesomeIcon        from '@mui/icons-material/AutoAwesome'
 import MenuBookIcon           from '@mui/icons-material/MenuBook'
 import LanguageIcon           from '@mui/icons-material/Language'
-import PushPinOutlinedIcon    from '@mui/icons-material/PushPinOutlined'
 import TravelExploreIcon      from '@mui/icons-material/TravelExplore'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { readerApi, type ContentBlock } from '../../api/reader.api'
+import BorderColorOutlinedIcon from '@mui/icons-material/BorderColorOutlined'
+import DeleteOutlineIcon      from '@mui/icons-material/DeleteOutline'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  readerApi,
+  type ContentBlock,
+  type Highlight,
+  type HighlightColor,
+} from '../../api/reader.api'
 import InlineQA               from '../../pages/KnowledgeBase/components/InlineQA'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -142,8 +148,65 @@ interface Props {
   uploadStatus?: UploadStatus
 }
 
-type ReaderTab    = 'page' | 'outline'
+type ReaderTab    = 'page' | 'outline' | 'highlights'
 type ReadingMode  = 'normal' | 'focus' | 'split'
+
+// Translucent tints per highlight color — legible over both light & dark text.
+const HL_TINT: Record<HighlightColor, string> = {
+  yellow: 'rgba(245,200,66,0.40)',
+  green:  'rgba(58,141,122,0.34)',
+  blue:   'rgba(96,165,250,0.32)',
+  pink:   'rgba(184,109,118,0.34)',
+  purple: 'rgba(139,92,246,0.32)',
+}
+// Solid swatch colors for the picker / list dots.
+const HL_SWATCH: Record<HighlightColor, string> = {
+  yellow: '#F5C842', green: '#3A8D7A', blue: '#60A5FA', pink: '#B86D76', purple: '#8B5CF6',
+}
+const HL_ORDER: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'purple']
+
+interface PageMark { text: string; color: HighlightColor }
+
+/**
+ * Wrap occurrences of each highlight's text in <mark> tints. Pure + exported so
+ * the matching logic is unit-tested without rendering the viewer. Longer needles
+ * are applied first so an overlapping shorter phrase can't pre-split them.
+ */
+export function markText(text: string, marks?: PageMark[]): ReactNode {
+  if (!marks || marks.length === 0) return text
+  const needles = marks
+    .map(m => ({ needle: m.text.trim(), color: m.color }))
+    .filter(m => m.needle.length >= 2)
+    .sort((a, b) => b.needle.length - a.needle.length)
+  if (needles.length === 0) return text
+
+  let segments: ReactNode[] = [text]
+  for (const { needle, color } of needles) {
+    segments = segments.flatMap((seg) => {
+      if (typeof seg !== 'string') return [seg]
+      const out: ReactNode[] = []
+      let rest = seg
+      let idx = rest.indexOf(needle)
+      let k = 0
+      while (idx !== -1) {
+        if (idx > 0) out.push(rest.slice(0, idx))
+        out.push(
+          <mark
+            key={`${needle}-${k++}`}
+            style={{ background: HL_TINT[color], color: 'inherit', borderRadius: 2, padding: '0 1px' }}
+          >
+            {rest.slice(idx, idx + needle.length)}
+          </mark>,
+        )
+        rest = rest.slice(idx + needle.length)
+        idx = rest.indexOf(needle)
+      }
+      if (rest) out.push(rest)
+      return out
+    })
+  }
+  return segments
+}
 
 // ─── Block renderers ──────────────────────────────────────────────────────────
 
@@ -151,11 +214,14 @@ export function RenderBlock({
   block,
   dropCap,
   sectionNum,
+  marks,
 }: {
   block: ContentBlock
   dropCap?: boolean
   /** Ordinal of this heading among all level-1/2 headings on the page (drives section label) */
   sectionNum?: number
+  /** Current-page highlights to render as inline <mark> tints over matching text. */
+  marks?: PageMark[]
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -199,7 +265,7 @@ export function RenderBlock({
               color: isTop ? (isDark ? '#E8DCC8' : '#1A1410') : 'text.primary',
             }}
           >
-            {content}
+            {markText(content, marks)}
           </Typography>
         </Box>
       )
@@ -230,7 +296,7 @@ export function RenderBlock({
             }),
           }}
         >
-          {String(block.content)}
+          {markText(String(block.content), marks)}
         </Typography>
       )
 
@@ -647,7 +713,6 @@ const SELECTION_ACTIONS = [
   { id: 'simplify',  label: 'Simplify',   color: '#FCD34D', Icon: AutoAwesomeIcon       },
   { id: 'define',    label: 'Define',     color: '#60A5FA', Icon: MenuBookIcon          },
   { id: 'web',       label: 'Web',        color: '#34D399', Icon: LanguageIcon          },
-  { id: 'save',      label: 'Save',       color: '#F87171', Icon: PushPinOutlinedIcon   },
   { id: 'findInKB',  label: 'Find in KB', color: '#94A3B8', Icon: TravelExploreIcon     },
 ] as const
 
@@ -656,9 +721,11 @@ type SelectionActionId = (typeof SELECTION_ACTIONS)[number]['id']
 function SelectionToolbar({
   sel,
   onAction,
+  onHighlight,
 }: {
   sel: SelectionState
   onAction: (id: SelectionActionId, text: string) => void
+  onHighlight: (color: HighlightColor, text: string) => void
 }) {
   if (!sel.visible) return null
 
@@ -734,6 +801,94 @@ function SelectionToolbar({
             </Box>
             {label}
           </Box>
+        </Box>
+      ))}
+
+      {/* Highlight color swatches — click to save a colored highlight */}
+      <Box sx={{ width: 1, height: 18, bgcolor: 'rgba(255,255,255,0.08)', mx: 0.25, flexShrink: 0 }} />
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6 }}>
+        <BorderColorOutlinedIcon sx={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', mr: 0.1 }} />
+        {HL_ORDER.map(color => (
+          <Box
+            key={color}
+            component="button"
+            aria-label={`Highlight ${color}`}
+            data-testid={`hl-swatch-${color}`}
+            onClick={() => onHighlight(color, sel.text)}
+            sx={{
+              width: 14, height: 14, borderRadius: '50%', p: 0, cursor: 'pointer',
+              border: '1px solid rgba(255,255,255,0.25)', bgcolor: HL_SWATCH[color],
+              transition: 'transform 0.1s',
+              '&:hover': { transform: 'scale(1.2)' },
+            }}
+          />
+        ))}
+      </Box>
+    </Box>
+  )
+}
+
+// ─── Highlights tab ─────────────────────────────────────────────────────────
+
+function HighlightsTab({
+  highlights,
+  currentPage,
+  onJump,
+  onDelete,
+}: {
+  highlights: Highlight[]
+  currentPage: number
+  onJump: (page: number) => void
+  onDelete: (id: string) => void
+}) {
+  if (highlights.length === 0) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 1.25 }}>
+        <BorderColorOutlinedIcon sx={{ fontSize: 30, color: 'text.disabled' }} />
+        <Typography sx={{ fontSize: 14, fontWeight: 600, color: 'text.secondary' }}>No highlights yet</Typography>
+        <Typography sx={{ fontSize: 12.5, color: 'text.disabled', textAlign: 'center', maxWidth: 320, lineHeight: 1.6 }}>
+          Select any text in the page, then pick a colour from the toolbar to save a highlight. It'll be here every time you open this document.
+        </Typography>
+      </Box>
+    )
+  }
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 0.5 }}>
+        {highlights.length} HIGHLIGHT{highlights.length === 1 ? '' : 'S'}
+      </Typography>
+      {highlights.map(h => (
+        <Box
+          key={h.id}
+          onClick={() => onJump(h.page)}
+          sx={{
+            display: 'flex', gap: 1.25, alignItems: 'flex-start', p: 1.5, borderRadius: 2,
+            cursor: 'pointer', bgcolor: h.page === currentPage ? 'action.selected' : 'transparent',
+            border: '1px solid', borderColor: 'divider', transition: 'background 0.15s',
+            '&:hover': { bgcolor: 'action.hover', '& .hl-del': { opacity: 1 } },
+          }}
+        >
+          <Box sx={{ width: 4, alignSelf: 'stretch', borderRadius: 2, bgcolor: HL_SWATCH[h.color], flexShrink: 0 }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.5,
+              display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {h.text}
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled', mt: 0.5 }}>
+              p. {h.page}
+            </Typography>
+          </Box>
+          <Tooltip title="Delete highlight" arrow>
+            <IconButton
+              className="hl-del"
+              size="small"
+              aria-label="Delete highlight"
+              onClick={(e) => { e.stopPropagation(); onDelete(h.id) }}
+              sx={{ opacity: 0, transition: 'opacity 0.15s', color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+            >
+              <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       ))}
     </Box>
@@ -820,9 +975,6 @@ export default function FileViewer({
       case 'web':
         window.open(`https://www.google.com/search?q=${encodeURIComponent(text)}`, '_blank', 'noopener')
         break
-      case 'save':
-        // Annotation storage — coming soon; show visual feedback for now
-        break
       case 'findInKB':
         setQaInitialQ(`Search the knowledge base for everything related to: "${text}"`)
         setQaOpen(true)
@@ -839,6 +991,26 @@ export default function FileViewer({
 
   const totalPages = data?.total_pages ?? 1
   const blocks     = data?.content.blocks ?? []
+
+  // ── Highlights (user-created, persisted) ────────────────────────────────────
+  const { data: highlights = [] } = useQuery({
+    queryKey: ['highlights', kbId, fileId],
+    queryFn:  () => readerApi.listHighlights(kbId, fileId),
+    staleTime: 30_000,
+  })
+  const pageMarks: PageMark[] = highlights
+    .filter(h => h.page === page)
+    .map(h => ({ text: h.text, color: h.color }))
+
+  const createHighlight = useMutation({
+    mutationFn: (vars: { text: string; color: HighlightColor }) =>
+      readerApi.createHighlight(kbId, fileId, { page, text: vars.text, color: vars.color }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['highlights', kbId, fileId] }),
+  })
+  const deleteHighlight = useMutation({
+    mutationFn: (id: string) => readerApi.deleteHighlight(kbId, fileId, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['highlights', kbId, fileId] }),
+  })
 
   // ── Prefetch adjacent pages (±1) ───────────────────────────────────────────
   // Pairs with the backend page cache so a page turn is served from memory and
@@ -1107,9 +1279,9 @@ export default function FileViewer({
 
           <Divider orientation="vertical" flexItem sx={{ mx: 0.5, opacity: 0.5 }} />
 
-          {/* Tabs: Page | Outline */}
+          {/* Tabs: Page | Outline | Highlights */}
           <Stack direction="row" spacing={0} sx={{ flex: 1 }}>
-            {(['page', 'outline'] as ReaderTab[]).map(tab => (
+            {(['page', 'outline', 'highlights'] as ReaderTab[]).map(tab => (
               <Box
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1128,7 +1300,9 @@ export default function FileViewer({
                   userSelect: 'none',
                 }}
               >
-                {tab === 'page' ? 'Page' : 'Outline'}
+                {tab === 'page' ? 'Page'
+                  : tab === 'outline' ? 'Outline'
+                  : `Highlights${highlights.length ? ` · ${highlights.length}` : ''}`}
               </Box>
             ))}
           </Stack>
@@ -1183,7 +1357,14 @@ export default function FileViewer({
               </Box>
             )}
 
-            {activeTab === 'outline' ? (
+            {activeTab === 'highlights' ? (
+              <HighlightsTab
+                highlights={highlights}
+                currentPage={page}
+                onJump={(p) => { setPage(p); setActiveTab('page') }}
+                onDelete={(id) => deleteHighlight.mutate(id)}
+              />
+            ) : activeTab === 'outline' ? (
               <OutlineTab blocks={blocks} />
             ) : isLoading ? (
               <ContentSkeleton />
@@ -1218,6 +1399,7 @@ export default function FileViewer({
                       block={block}
                       dropCap={i === dropCapIndex}
                       sectionNum={sectionNum}
+                      marks={pageMarks}
                     />
                   )
                 })
@@ -1243,7 +1425,15 @@ export default function FileViewer({
       </Box>
 
       {/* ── Selection toolbar (fixed, floats above selected text) ────────────── */}
-      <SelectionToolbar sel={selState} onAction={handleSelectionAction} />
+      <SelectionToolbar
+        sel={selState}
+        onAction={handleSelectionAction}
+        onHighlight={(color, text) => {
+          setSelState(s => ({ ...s, visible: false }))
+          window.getSelection()?.removeAllRanges()
+          if (text.trim().length >= 2) createHighlight.mutate({ text: text.trim(), color })
+        }}
+      />
 
       {/* ── Row 4: Bottom bar ─────────────────────────────────────────────── */}
       <Stack
