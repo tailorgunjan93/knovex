@@ -533,6 +533,24 @@ class TestUnescapedInnerQuoteRepair:
         assert data["y"] == 2
         assert data["x"] == 'say "hi" and "bye" now'
 
+    def test_handles_inner_quoted_term_followed_by_comma(self):
+        # The hard case: a quoted term inside a value, immediately followed by a
+        # comma that is part of the prose (NOT a field separator). A real field
+        # separator is followed by another key/value (a quote); prose is not.
+        bad = '{"intro": "देखें "प्रभाव", और जानें", "n": 1}'
+        data = json.loads(_escape_inner_quotes(bad))
+        assert data["n"] == 1
+        assert data["intro"] == 'देखें "प्रभाव", और जानें'
+
+    def test_treats_adjacent_strings_with_missing_comma_as_separate(self):
+        # Two strings with only whitespace between = a missing comma, not an
+        # inner quote — the closing quote must NOT be escaped (else fields merge).
+        bad = '{"a": "first" "b": "second"}'
+        # after escaping, the first string still closes cleanly (then a comma
+        # repair elsewhere would handle the gap); the value must equal "first".
+        fixed = _escape_inner_quotes(bad)
+        assert '"a": "first"' in fixed
+
     # -- _parse_llm_json (combined strategy chain) ---------------------------
 
     def test_parse_clean_json(self):

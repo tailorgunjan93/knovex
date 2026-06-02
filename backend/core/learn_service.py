@@ -191,6 +191,13 @@ class LearnService:
                             format, topic, len(cleaned),
                         )
                     except json.JSONDecodeError as exc:
+                        # Log the FULL raw payload so a genuinely novel malformation
+                        # can be diagnosed precisely (the user-facing error truncates).
+                        logger.error(
+                            "Unrepairable LLM JSON for format=%s topic=%r: %s\n"
+                            "FULL RAW (len=%d):\n%s",
+                            format, topic, exc, len(raw), raw,
+                        )
                         raise ValueError(
                             f"LLM returned invalid JSON: {exc}\n\nRaw response:\n{raw[:200]}"
                         ) from exc
@@ -519,8 +526,26 @@ def _escape_inner_quotes(text: str) -> str:
                 j = i + 1
                 while j < n and text[j] in " \t\r\n":
                     j += 1
-                nxt = text[j] if j < n else ""
-                if nxt in (",", ":", "}", "]", ""):
+                c1 = text[j] if j < n else ""
+
+                if c1 in (":", "}", "]", '"', ""):
+                    # A real closing quote is followed by a structural delimiter,
+                    # by another string (adjacent ", treated as a missing comma —
+                    # don't merge the fields), or by end-of-input.
+                    closing = True
+                elif c1 == ",":
+                    # A comma is ambiguous: a *field separator* is followed by the
+                    # next key/value (a quote, a container, or a literal); a comma
+                    # that is part of prose is followed by ordinary text.
+                    k = j + 1
+                    while k < n and text[k] in " \t\r\n":
+                        k += 1
+                    c2 = text[k] if k < n else ""
+                    closing = c2 in ('"', "{", "[", "-", "t", "f", "n", "") or c2.isdigit()
+                else:
+                    closing = False
+
+                if closing:
                     in_string = False
                     out.append(ch)
                 else:
