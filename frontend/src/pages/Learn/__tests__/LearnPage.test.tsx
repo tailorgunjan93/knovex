@@ -40,7 +40,7 @@
 // jsdom does not implement scrollIntoView — stub it globally
 window.HTMLElement.prototype.scrollIntoView = vi.fn()
 
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider, createTheme } from '@mui/material'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -413,8 +413,10 @@ describe('QuizView', () => {
 
   it('renders the question text', async () => {
     await renderWithQuiz()
+    // The stem also appears in the outline rail (table of contents); scope to the
+    // main lesson stage so we assert the question card specifically.
     await waitFor(() =>
-      expect(screen.getByText('What is a black hole?')).toBeInTheDocument()
+      expect(within(screen.getByTestId('lesson-stage')).getByText('What is a black hole?')).toBeInTheDocument()
     )
   })
 
@@ -478,8 +480,9 @@ describe('FlashcardView', () => {
 
   it('shows the front face (question) of the first card', async () => {
     await loadFlashcards()
+    // Card fronts also appear in the outline rail; scope to the stage.
     await waitFor(() =>
-      expect(screen.getByText('What is ATP?')).toBeInTheDocument()
+      expect(within(screen.getByTestId('lesson-stage')).getByText('What is ATP?')).toBeInTheDocument()
     )
   })
 
@@ -492,7 +495,8 @@ describe('FlashcardView', () => {
 
   it('reveals rating buttons after clicking the card (flip)', async () => {
     await loadFlashcards()
-    const card = await screen.findByText('What is ATP?')
+    const stage = await screen.findByTestId('lesson-stage')
+    const card = await within(stage).findByText('What is ATP?')
     // The 3D card is the perspective container — find the card's Box
     const cardContainer = card.closest('[style]') ?? card.parentElement!
     fireEvent.click(cardContainer)
@@ -508,7 +512,8 @@ describe('FlashcardView', () => {
 
   it('calls reviewFlashcard when a rating button is clicked', async () => {
     await loadFlashcards()
-    const card = await screen.findByText('What is ATP?')
+    const stage = await screen.findByTestId('lesson-stage')
+    const card = await within(stage).findByText('What is ATP?')
     const cardContainer = card.closest('[style]') ?? card.parentElement!
     fireEvent.click(cardContainer)
 
@@ -613,8 +618,9 @@ describe('Guided Learning — UI/UX Expert', () => {
     const item = await screen.findByText('Photosynthesis')
     fireEvent.click(item)
 
+    // Step titles also list in the outline rail; scope to the lesson stage.
     await waitFor(() =>
-      expect(screen.getByText('What is Photosynthesis?')).toBeInTheDocument()
+      expect(within(screen.getByTestId('lesson-stage')).getByText('What is Photosynthesis?')).toBeInTheDocument()
     )
   })
 
@@ -734,5 +740,69 @@ describe('Guided Learning — Business Analyst', () => {
     await waitFor(() =>
       expect(learnApi.deleteSession).toHaveBeenCalledWith(GUIDED_SESSION.id)
     )
+  })
+})
+
+// ─── Stage B.2 — in-lesson format tabs + derived rails ────────────────────────
+
+describe('Lesson tabs + rails (Stage B.2)', () => {
+  const loadQuiz = async () => {
+    ;(learnApi.listSessions as Mock).mockResolvedValue([SESSION_QUIZ])
+    ;(learnApi.getSession as Mock).mockResolvedValue(SESSION_QUIZ)
+    renderLearn()
+    fireEvent.click(await screen.findByText('Black Holes'))
+    // wait until the lesson stage is mounted
+    await screen.findByTestId('lesson-stage')
+  }
+
+  it('renders the four in-lesson format tabs once a lesson is open', async () => {
+    await loadQuiz()
+    for (const id of ['guided', 'animated', 'flashcard', 'quiz']) {
+      expect(screen.getByTestId(`lesson-tab-${id}`)).toBeInTheDocument()
+    }
+  })
+
+  it('marks the active format tab as pressed', async () => {
+    await loadQuiz()
+    expect(screen.getByTestId('lesson-tab-quiz')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('lesson-tab-guided')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('re-generates in the picked format (same topic) when a different tab is clicked', async () => {
+    await loadQuiz()
+    fireEvent.click(screen.getByTestId('lesson-tab-guided'))
+    await waitFor(() =>
+      expect(learnApi.streamSession).toHaveBeenCalledWith(
+        'Black Holes',          // topic preserved
+        'guided',               // new format
+        'intermediate',
+        expect.any(Function),
+        expect.anything(),
+        'topic',
+        undefined,
+        '',
+        'English',
+      )
+    )
+  })
+
+  it('does not re-generate when the already-active tab is clicked', async () => {
+    await loadQuiz()
+    fireEvent.click(screen.getByTestId('lesson-tab-quiz'))
+    // give any (incorrect) async call a chance to fire
+    await new Promise(r => setTimeout(r, 30))
+    expect(learnApi.streamSession).not.toHaveBeenCalled()
+  })
+
+  it('shows the derived outline rail (question stems repeat outside the stage)', async () => {
+    await loadQuiz()
+    // appears in both the outline rail and the quiz card → at least 2 nodes
+    expect(screen.getAllByText('What is a black hole?').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText(/OUTLINE ·/)).toBeInTheDocument()
+  })
+
+  it('shows the connected-concepts rail derived from the lesson', async () => {
+    await loadQuiz()
+    expect(screen.getByText('CONNECTED CONCEPTS')).toBeInTheDocument()
   })
 })

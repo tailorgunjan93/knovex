@@ -7,7 +7,7 @@
  * Formats: guided · quiz · flashcard · mindmap · timeline · story · eli5 · speedlearn · brainstorm
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Alert,
@@ -85,6 +85,7 @@ import { kbApi } from '../../api/kb.api'
 import { readerApi } from '../../api/reader.api'
 import GuidedViewer from './GuidedViewer'
 import AnimatedView from './AnimatedView'
+import { lessonOutline, lessonConcepts, type OutlineItem } from './lessonStructure'
 import { BRAND } from '@/theme/tokens'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
@@ -832,6 +833,152 @@ function FormatCard({
   )
 }
 
+/** In-lesson format tabs — switch the learning mode in place (re-generates). */
+function LessonTabs({ active, disabled, onPick }: {
+  active: UIFormat
+  disabled: boolean
+  onPick: (f: UIFormat) => void
+}) {
+  return (
+    <Box sx={{ display: 'inline-flex', gap: 0.25, p: 0.4, borderRadius: 2.5, bgcolor: 'action.hover' }}>
+      {FORMATS.map(f => {
+        const on = active === f.id
+        return (
+          <Box
+            key={f.id}
+            component="button"
+            data-testid={`lesson-tab-${f.id}`}
+            aria-pressed={on}
+            disabled={disabled}
+            onClick={() => !on && !disabled && onPick(f.id)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 0.5,
+              height: 28, px: 1.25, borderRadius: 1.5, border: 0,
+              fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+              cursor: disabled || on ? 'default' : 'pointer',
+              bgcolor: on ? 'background.paper' : 'transparent',
+              color: on ? 'text.primary' : 'text.secondary',
+              boxShadow: on ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+              opacity: disabled && !on ? 0.5 : 1,
+              transition: 'background 0.15s, color 0.15s',
+              '&:hover': disabled || on ? {} : { color: 'text.primary' },
+            }}
+          >
+            <Box sx={{ display: 'flex', '& svg': { fontSize: 15 } }}>{f.icon}</Box>
+            {f.label}
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
+
+/** Collapsed 44px strip for a lesson side-rail (vertical label + expand). */
+function CollapsedRail({ label, side, onOpen }: {
+  label: string; side: 'left' | 'right'; onOpen: () => void
+}) {
+  return (
+    <Box sx={{
+      width: 44, flexShrink: 0, display: { xs: 'none', md: 'flex' },
+      flexDirection: 'column', alignItems: 'center', py: 1.5, gap: 1.5,
+    }}>
+      <Tooltip title="Expand panel" placement={side === 'left' ? 'right' : 'left'} arrow>
+        <IconButton size="small" onClick={onOpen} sx={{ color: 'text.secondary' }}>
+          {side === 'left' ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+        </IconButton>
+      </Tooltip>
+      <Typography sx={{
+        writingMode: 'vertical-rl', transform: side === 'right' ? 'rotate(180deg)' : 'none',
+        fontFamily: MONO, fontSize: 10, color: 'text.disabled', letterSpacing: '0.14em', textTransform: 'uppercase',
+      }}>
+        {label}
+      </Typography>
+    </Box>
+  )
+}
+
+/** Left rail — the derived lesson outline (structural map / table of contents). */
+function OutlineRail({ items, format, onCollapse }: {
+  items: OutlineItem[]; format: UIFormat; onCollapse: () => void
+}) {
+  const noun = format === 'quiz' ? 'questions'
+    : format === 'flashcard' ? 'cards'
+    : format === 'timeline' ? 'events'
+    : format === 'mindmap' ? 'branches'
+    : 'steps'
+  return (
+    <Box sx={{ width: 256, flexShrink: 0, overflowY: 'auto', p: 2.25, display: { xs: 'none', md: 'block' } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.25 }}>
+        <Typography sx={{ flex: 1, fontFamily: MONO, fontSize: 10.5, color: 'text.disabled', letterSpacing: '0.12em' }}>
+          OUTLINE · {items.length} {noun.toUpperCase()}
+        </Typography>
+        <Tooltip title="Collapse" arrow>
+          <IconButton size="small" onClick={onCollapse} sx={{ color: 'text.disabled' }}>
+            <ChevronLeftIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Stack spacing={0.25}>
+        {items.map((it) => (
+          <Box key={it.index} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start', p: 1, borderRadius: 2 }}>
+            <Box sx={{
+              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+              display: 'grid', placeItems: 'center',
+              fontFamily: MONO, fontSize: 10, fontWeight: 700,
+              bgcolor: 'action.hover', color: 'text.secondary',
+            }}>
+              {String(it.index + 1).padStart(2, '0')}
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{
+                fontSize: 13, fontWeight: 500, color: 'text.secondary', lineHeight: 1.35,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              }}>
+                {it.label}
+              </Typography>
+              {it.sub && (
+                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: 'text.disabled' }}>{it.sub}</Typography>
+              )}
+            </Box>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
+  )
+}
+
+/** Right rail — connected concepts derived from the lesson's recurring terms. */
+function ConceptsRail({ concepts, onCollapse }: {
+  concepts: string[]; onCollapse: () => void
+}) {
+  const dotColors = ['#7E8FB0', '#3A8D7A', '#C0905C', '#9AA56A', '#B86D76', '#7C8DB5']
+  return (
+    <Box sx={{ width: 256, flexShrink: 0, overflowY: 'auto', p: 2.25, display: { xs: 'none', lg: 'block' } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.25 }}>
+        <Typography sx={{ flex: 1, fontFamily: MONO, fontSize: 10.5, color: 'text.disabled', letterSpacing: '0.12em' }}>
+          CONNECTED CONCEPTS
+        </Typography>
+        <Tooltip title="Collapse" arrow>
+          <IconButton size="small" onClick={onCollapse} sx={{ color: 'text.disabled' }}>
+            <ChevronRightIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Typography sx={{ fontSize: 12.5, color: 'text.secondary', lineHeight: 1.6, mb: 1.75 }}>
+        Recurring ideas pulled from this lesson.
+      </Typography>
+      <Stack spacing={0.25}>
+        {concepts.map((c, i) => (
+          <Box key={c} sx={{ display: 'flex', gap: 1.25, alignItems: 'center', p: 1, borderRadius: 2 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: dotColors[i % dotColors.length] }} />
+            <Typography sx={{ fontSize: 13, color: 'text.primary', textTransform: 'capitalize' }}>{c}</Typography>
+          </Box>
+        ))}
+      </Stack>
+    </Box>
+  )
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Extract plain text from a KB file (reads up to 3 pages, max 8 000 chars). */
@@ -892,6 +1039,10 @@ export default function LearnPage() {
   const [selectedFileId, setSelectedFileId]       = useState('')
   const [isDragOver, setIsDragOver]               = useState(false)
   const [sidebarOpen, setSidebarOpen]             = useState(true)
+
+  // ── Lesson side-rails (Stage B.2) — collapsible outline + connected concepts ─
+  const [outlineOpen, setOutlineOpen]   = useState(true)
+  const [conceptsOpen, setConceptsOpen] = useState(true)
 
   const abortRef    = useRef<AbortController | null>(null)
   const bottomRef   = useRef<HTMLDivElement>(null)
@@ -970,8 +1121,13 @@ export default function LearnPage() {
   }
 
   // ── Stream handler ──────────────────────────────────────────────────────────
-  const handleGenerate = async () => {
+  // `overrideFormat` lets the in-lesson format tabs re-generate the SAME topic /
+  // source / difficulty / language in a different format, switching the stage in
+  // place (Stage B.2) — without re-opening the setup screen.
+  const handleGenerate = async (overrideFormat?: UIFormat) => {
     if (isStreaming) return
+    const genUIFormat: UIFormat = overrideFormat ?? format
+    if (overrideFormat && overrideFormat !== format) setFormat(overrideFormat)
 
     // ── Resolve effective topic + source params ───────────────────────────────
     let effectiveTopic = topic.trim()
@@ -1026,14 +1182,14 @@ export default function LearnPage() {
     setLastXP(null)
     setNewBadges([])
     setActiveSessionId(null)
-    setActiveFormat(format)
+    setActiveFormat(genUIFormat)
 
     const controller  = new AbortController()
     abortRef.current  = controller
     let accumulatedText = ''
     let accumulatedJson = ''
     // 'animated' generates guided content; only the presentation differs.
-    const genFormat = backendFormatFor(format)
+    const genFormat = backendFormatFor(genUIFormat)
     const isJson = isObjectFormat(genFormat)
 
     try {
@@ -1122,6 +1278,11 @@ export default function LearnPage() {
   const isJsonFormat   = isObjectFormat(displayFormat)
   const hasContent     = !!(displayContent || streamingText)
   const selectedDiff   = DIFFICULTIES.find(d => d.id === difficulty)!
+  const lessonActive   = hasContent && !isStreaming
+
+  // Derived lesson rails — structural outline + recurring concepts (no fake data).
+  const outline  = useMemo(() => lessonOutline(displayFormat, displayContent), [displayFormat, displayContent])
+  const concepts = useMemo(() => lessonConcepts(displayFormat, displayContent), [displayFormat, displayContent])
 
   const isGenerateEnabled = !isStreaming && (() => {
     switch (sourceMode) {
@@ -1387,6 +1548,13 @@ export default function LearnPage() {
             )}
           </Box>
 
+          {/* In-lesson format tabs — switch the mode in place (re-generates) */}
+          {lessonActive && (
+            <Box sx={{ mt: 1 }}>
+              <LessonTabs active={displayFormat} disabled={isStreaming} onPick={handleGenerate} />
+            </Box>
+          )}
+
           {/* ── Source mode selector + input ──────────────────────────────────── */}
           {/* Hidden when content is showing — frees vertical space for the learning panel */}
           {!(hasContent && !isStreaming) && <Box sx={{ mb: 1.25 }}>
@@ -1635,7 +1803,7 @@ export default function LearnPage() {
                     variant="contained"
                     size="small"
                     disabled={!isGenerateEnabled}
-                    onClick={handleGenerate}
+                    onClick={() => handleGenerate()}
                     endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
                     sx={{ height: 36, fontSize: 12, px: 1.75 }}
                   >
@@ -1744,8 +1912,18 @@ export default function LearnPage() {
           </Box>}
         </Box>
 
-        {/* ─── Content area ───────────────────────────────────────────────────── */}
-        <Box sx={{ flex: 1, overflowY: 'auto', p: hasContent && !isStreaming ? 2 : 3 }}>
+        {/* ─── Content area (+ lesson rails) ──────────────────────────────────── */}
+        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+
+          {/* Left rail — derived lesson outline */}
+          {lessonActive && outline.length > 0 && (
+            outlineOpen
+              ? <OutlineRail items={outline} format={displayFormat} onCollapse={() => setOutlineOpen(false)} />
+              : <CollapsedRail label={`Outline · ${outline.length}`} side="left" onOpen={() => setOutlineOpen(true)} />
+          )}
+
+          {/* Center — streaming / error / content views */}
+          <Box data-testid="lesson-stage" sx={{ flex: 1, overflowY: 'auto', p: hasContent && !isStreaming ? 2 : 3 }}>
 
           {/* Streaming indicator */}
           {isStreaming && (
@@ -1920,6 +2098,14 @@ export default function LearnPage() {
           )}
 
           <Box ref={bottomRef} />
+          </Box>
+
+          {/* Right rail — connected concepts derived from the lesson */}
+          {lessonActive && concepts.length > 0 && (
+            conceptsOpen
+              ? <ConceptsRail concepts={concepts} onCollapse={() => setConceptsOpen(false)} />
+              : <CollapsedRail label="Concepts" side="right" onOpen={() => setConceptsOpen(true)} />
+          )}
         </Box>
       </Box>
     </Box>
