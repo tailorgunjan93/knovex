@@ -1099,7 +1099,9 @@ export default function LearnPage() {
   const [selectedKbId, setSelectedKbId]           = useState('')
   const [selectedFileId, setSelectedFileId]       = useState('')
   const [isDragOver, setIsDragOver]               = useState(false)
-  const [sidebarOpen, setSidebarOpen]             = useState(true)
+  // Collapsed by default so the setup screen matches the lab's clean canvas
+  // (icon rail + centered form); history is one click away via the expand chevron.
+  const [sidebarOpen, setSidebarOpen]             = useState(false)
 
   // ── Lesson side-rails (Stage B.2) — collapsible outline + connected concepts ─
   const [outlineOpen, setOutlineOpen]   = useState(true)
