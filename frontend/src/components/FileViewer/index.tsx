@@ -1190,7 +1190,7 @@ export default function FileViewer({
             )}
 
             {/* Q&A toggle */}
-            <Tooltip title={effectiveQaOpen ? 'Close Q&A' : 'Ask about this file'}>
+            <Tooltip title={effectiveQaOpen ? 'Close Q&A' : 'Ask about this page'}>
               <IconButton
                 size="small"
                 color={effectiveQaOpen ? 'primary' : 'default'}
