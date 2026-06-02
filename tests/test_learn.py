@@ -25,7 +25,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from backend.core.domain.learn import LearnSession, UserStats
-from backend.core.learn_service import LearnService, _repair_truncated_json
+from backend.core.learn_service import (
+    LearnService,
+    _escape_inner_quotes,
+    _parse_llm_json,
+    _repair_truncated_json,
+)
 from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.learn_repository import ILearnRepository
 
@@ -485,6 +490,101 @@ class TestTruncatedJsonRepair:
         assert len(error_events) == 1
         data = json.loads(error_events[0][len("data: "):])
         assert "invalid JSON" in data["error"].lower() or "json" in data["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Unescaped inner-quote repair (_escape_inner_quotes + _parse_llm_json)
+# ---------------------------------------------------------------------------
+
+class TestUnescapedInnerQuoteRepair:
+    """
+    Regression tests for the "Expecting ',' delimiter" bug.
+
+    Root cause: the LLM emits a double-quote *inside* a string value without
+    escaping it (e.g. quoting a term mid-sentence: the "boundary" layer). The
+    string terminates early and json.loads fails with "Expecting ',' delimiter".
+    _repair_truncated_json only fixes truncation at the END, so it could not
+    recover these. _escape_inner_quotes() escapes stray inner quotes; the
+    combined _parse_llm_json() chains both repairs.
+    """
+
+    # -- _escape_inner_quotes ------------------------------------------------
+
+    def test_escapes_inner_quote_in_value(self):
+        bad = '{"a": "the "boundary" layer"}'
+        data = json.loads(_escape_inner_quotes(bad))
+        assert data["a"] == 'the "boundary" layer'
+
+    def test_valid_json_is_left_intact(self):
+        good = '{"questions": [{"q": "Q?", "options": ["A","B"], "correct": 0, "explanation": "exp"}]}'
+        # idempotent: escaping must not corrupt already-valid JSON
+        assert json.loads(_escape_inner_quotes(good)) == json.loads(good)
+
+    def test_handles_inner_quote_in_devanagari_value(self):
+        # Mirrors the Hindi 'animated'/'guided' failure from the bug report.
+        bad = '{"intro": "कोरिओलिस "प्रभाव" को समझें", "total_steps": 1}'
+        data = json.loads(_escape_inner_quotes(bad))
+        assert data["total_steps"] == 1
+        assert '"प्रभाव"' in data["intro"]
+
+    def test_handles_multiple_inner_quotes(self):
+        bad = '{"x": "say "hi" and "bye" now", "y": 2}'
+        data = json.loads(_escape_inner_quotes(bad))
+        assert data["y"] == 2
+        assert data["x"] == 'say "hi" and "bye" now'
+
+    # -- _parse_llm_json (combined strategy chain) ---------------------------
+
+    def test_parse_clean_json(self):
+        assert _parse_llm_json('{"a": 1}') == {"a": 1}
+
+    def test_parse_recovers_inner_quote(self):
+        data = _parse_llm_json('{"explanation": "the "weight" matrix"}')
+        assert data["explanation"] == 'the "weight" matrix'
+
+    def test_parse_recovers_truncated(self):
+        data = _parse_llm_json('{"questions": [{"q": "What is gravity')
+        assert isinstance(data, dict)
+
+    def test_parse_recovers_inner_quote_and_truncation_combo(self):
+        # an inner quote earlier in the string AND truncated at the end
+        data = _parse_llm_json('{"steps": [{"title": "the "core" idea", "explanation": "it begins')
+        assert "steps" in data
+
+    def test_parse_raises_on_hopeless_input(self):
+        with pytest.raises(json.JSONDecodeError):
+            _parse_llm_json("not json at all {{{{")
+
+    # -- Integration: LearnService recovers from inner-quote JSON ------------
+
+    @pytest.mark.asyncio
+    async def test_guided_recovers_from_unescaped_inner_quote(self):
+        """guided/animated content with an unescaped inner quote → done, not error."""
+        bad = (
+            '{"topic":"Portfolio","intro":"Your portfolio is a "gateway" to opportunities.",'
+            '"total_steps":1,"steps":[{"step":1,"title":"Define goals",'
+            '"explanation":"Decide what the "portal" should show.","example":"A projects page.",'
+            '"analogy":null,"key_insight":"Clarity first.","check_in":"What is your goal?",'
+            '"quiz_check":null}]}'
+        )
+        svc, _ = _make_svc(complete_text=bad)
+        events = await _drain(svc.stream_session(
+            topic="Portfolio", format="guided", source_type="topic",
+            difficulty="intermediate", source_ref=None,
+            provider="openai", model="gpt-4o-mini", credentials=_creds(),
+        ))
+        error_events = [e for e in events if '"type": "error"' in e]
+        done_events  = [e for e in events if '"type": "done"'  in e]
+        assert len(error_events) == 0, f"Unexpected error: {error_events}"
+        assert len(done_events)  == 1
+
+        # the repaired content must keep the quoted term as literal text
+        token_events = [e for e in events if '"type": "token"' in e]
+        reassembled = "".join(
+            json.loads(e[len("data: "):])["content"] for e in token_events
+        )
+        content = json.loads(reassembled)
+        assert content["intro"] == 'Your portfolio is a "gateway" to opportunities.'
 
 
 # ---------------------------------------------------------------------------

@@ -181,15 +181,14 @@ class LearnService:
                 try:
                     new_content = json.loads(cleaned)
                 except json.JSONDecodeError:
-                    # LLM hit token limit mid-JSON — attempt repair by truncating
-                    # to the last complete top-level closing brace.
-                    repaired = _repair_truncated_json(cleaned)
+                    # Malformed LLM JSON — most often an unescaped quote inside a
+                    # string value ("Expecting ',' delimiter") or truncation by a
+                    # token limit. _parse_llm_json chains both repairs.
                     try:
-                        new_content = json.loads(repaired)
+                        new_content = _parse_llm_json(cleaned)
                         logger.warning(
-                            "Repaired truncated JSON for format=%s topic=%r "
-                            "(original len=%d repaired len=%d)",
-                            format, topic, len(cleaned), len(repaired),
+                            "Repaired malformed LLM JSON for format=%s topic=%r (len=%d)",
+                            format, topic, len(cleaned),
                         )
                     except json.JSONDecodeError as exc:
                         raise ValueError(
@@ -475,6 +474,85 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         ']}}'
     ),
 }
+
+
+def _escape_inner_quotes(text: str) -> str:
+    """
+    Escape double-quotes that appear *inside* a JSON string value where the model
+    forgot to escape them (e.g. quoting a term mid-sentence: the "boundary" layer).
+
+    This is the root cause of "Expecting ',' delimiter" parse failures: the stray
+    quote terminates the string early. We distinguish a *genuine* closing quote —
+    which in valid JSON is always followed (after optional whitespace) by a
+    structural delimiter (``, : } ]``) or end-of-input — from a stray content
+    quote, which is followed by anything else and is therefore escaped.
+
+    Valid JSON is returned unchanged (the lookahead never misfires), so this is
+    safe to run on every response. Known limitation: a quoted phrase immediately
+    followed by a comma inside a value (``"yes", he said``) is ambiguous and may
+    still be misread; such cases fall through to the truncation repair / error.
+    """
+    out: list[str] = []
+    in_string = False
+    escape_next = False
+    n = len(text)
+    i = 0
+
+    while i < n:
+        ch = text[i]
+        if escape_next:
+            out.append(ch)
+            escape_next = False
+            i += 1
+            continue
+        if ch == "\\":
+            out.append(ch)
+            escape_next = True
+            i += 1
+            continue
+        if ch == '"':
+            if not in_string:
+                in_string = True
+                out.append(ch)
+            else:
+                # Closing quote, or stray inner quote? Look ahead past whitespace.
+                j = i + 1
+                while j < n and text[j] in " \t\r\n":
+                    j += 1
+                nxt = text[j] if j < n else ""
+                if nxt in (",", ":", "}", "]", ""):
+                    in_string = False
+                    out.append(ch)
+                else:
+                    out.append('\\"')  # literal content quote → escape it
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+
+    return "".join(out)
+
+
+def _parse_llm_json(text: str) -> dict:
+    """
+    Parse possibly-malformed LLM JSON, applying best-effort repairs in order:
+    as-is → escape stray inner quotes → close truncation → both. Returns the
+    parsed object, or re-raises the last JSONDecodeError if nothing works.
+    """
+    candidates = (
+        text,
+        _escape_inner_quotes(text),
+        _repair_truncated_json(text),
+        _repair_truncated_json(_escape_inner_quotes(text)),
+    )
+    last_exc: json.JSONDecodeError | None = None
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+    assert last_exc is not None  # candidates is non-empty
+    raise last_exc
 
 
 def _repair_truncated_json(text: str) -> str:
