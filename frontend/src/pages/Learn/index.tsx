@@ -904,21 +904,56 @@ function CollapsedRail({ label, side, onOpen }: {
   )
 }
 
-/** Left rail — the derived lesson outline (structural map / table of contents). */
-function OutlineRail({ items, format, onCollapse }: {
-  items: OutlineItem[]; format: UIFormat; onCollapse: () => void
+/**
+ * Left rail — the derived lesson outline.
+ *
+ * For step-based formats (guided/animated) the parent passes `activeIndex` +
+ * `onSelect`, turning the rail into a live table-of-contents: completed steps
+ * show a check, the active step is highlighted, and clicking navigates. For
+ * other formats it stays a read-only structural map.
+ */
+function OutlineRail({ items, format, activeIndex, onSelect, title, subtitle, onCollapse }: {
+  items: OutlineItem[]
+  format: UIFormat
+  activeIndex?: number
+  onSelect?: (index: number) => void
+  title?: string
+  subtitle?: string
+  onCollapse: () => void
 }) {
   const noun = format === 'quiz' ? 'questions'
     : format === 'flashcard' ? 'cards'
     : format === 'timeline' ? 'events'
     : format === 'mindmap' ? 'branches'
     : 'steps'
+  const interactive = activeIndex !== undefined
+  const doneCount = interactive ? Math.max(0, Math.min(activeIndex!, items.length)) : 0
+  const TEAL = '#3A8D7A'
+
   return (
-    <Box sx={{ width: 256, flexShrink: 0, overflowY: 'auto', p: 2.25, display: { xs: 'none', md: 'block' } }}>
+    <Box sx={{ width: 270, flexShrink: 0, overflowY: 'auto', p: 2.25, display: { xs: 'none', md: 'block' } }}>
+      {title && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.25, color: 'text.primary' }}>
+            {title}
+          </Typography>
+          {subtitle && (
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', lineHeight: 1.5, mt: 0.5,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
+      )}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.25 }}>
         <Typography sx={{ flex: 1, fontFamily: MONO, fontSize: 10.5, color: 'text.disabled', letterSpacing: '0.12em' }}>
           OUTLINE · {items.length} {noun.toUpperCase()}
         </Typography>
+        {interactive && (
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled', mr: 0.5 }}>
+            {doneCount}/{items.length}
+          </Typography>
+        )}
         <Tooltip title="Collapse" arrow>
           <IconButton size="small" onClick={onCollapse} sx={{ color: 'text.disabled' }}>
             <ChevronLeftIcon fontSize="small" />
@@ -926,29 +961,48 @@ function OutlineRail({ items, format, onCollapse }: {
         </Tooltip>
       </Box>
       <Stack spacing={0.25}>
-        {items.map((it) => (
-          <Box key={it.index} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start', p: 1, borderRadius: 2 }}>
-            <Box sx={{
-              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-              display: 'grid', placeItems: 'center',
-              fontFamily: MONO, fontSize: 10, fontWeight: 700,
-              bgcolor: 'action.hover', color: 'text.secondary',
-            }}>
-              {String(it.index + 1).padStart(2, '0')}
-            </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{
-                fontSize: 13, fontWeight: 500, color: 'text.secondary', lineHeight: 1.35,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        {items.map((it) => {
+          const done   = interactive && it.index < activeIndex!
+          const active = interactive && it.index === activeIndex!
+          return (
+            <Box
+              key={it.index}
+              data-testid={`outline-item-${it.index}`}
+              aria-current={active ? 'step' : undefined}
+              onClick={interactive ? () => onSelect?.(it.index) : undefined}
+              sx={{
+                display: 'flex', gap: 1.25, alignItems: 'flex-start', p: 1, borderRadius: 2,
+                cursor: interactive ? 'pointer' : 'default',
+                bgcolor: active ? 'action.selected' : 'transparent',
+                transition: 'background 0.15s',
+                '&:hover': interactive ? { bgcolor: active ? 'action.selected' : 'action.hover' } : {},
+              }}
+            >
+              <Box sx={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                display: 'grid', placeItems: 'center',
+                fontFamily: MONO, fontSize: 10, fontWeight: 700,
+                bgcolor: done ? TEAL : active ? alpha(ACCENT, 0.15) : 'action.hover',
+                color:   done ? '#fff' : active ? ACCENT : 'text.secondary',
+                border:  active ? `1px solid ${ACCENT}` : 'none',
               }}>
-                {it.label}
-              </Typography>
-              {it.sub && (
-                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: 'text.disabled' }}>{it.sub}</Typography>
-              )}
+                {done ? <CheckCircleIcon sx={{ fontSize: 13 }} /> : String(it.index + 1).padStart(2, '0')}
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{
+                  fontSize: 13, fontWeight: active ? 600 : 500,
+                  color: active ? 'text.primary' : 'text.secondary', lineHeight: 1.35,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}>
+                  {it.label}
+                </Typography>
+                {it.sub && (
+                  <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: 'text.disabled' }}>{it.sub}</Typography>
+                )}
+              </Box>
             </Box>
-          </Box>
-        ))}
+          )
+        })}
       </Stack>
     </Box>
   )
@@ -1050,6 +1104,9 @@ export default function LearnPage() {
   // ── Lesson side-rails (Stage B.2) — collapsible outline + connected concepts ─
   const [outlineOpen, setOutlineOpen]   = useState(true)
   const [conceptsOpen, setConceptsOpen] = useState(true)
+  // Active step for step-based formats (guided/animated) — lifted so the outline
+  // rail can show done/active marks and navigate. Reset on new content.
+  const [lessonStep, setLessonStep]     = useState(0)
 
   const abortRef    = useRef<AbortController | null>(null)
   const bottomRef   = useRef<HTMLDivElement>(null)
@@ -1197,6 +1254,7 @@ export default function LearnPage() {
     setNewBadges([])
     setActiveSessionId(null)
     setActiveFormat(genUIFormat)
+    setLessonStep(0)
 
     const controller  = new AbortController()
     abortRef.current  = controller
@@ -1254,6 +1312,7 @@ export default function LearnPage() {
   const handleLoadSession = (session: LearnSession) => {
     setActiveSessionId(session.id)
     setActiveFormat(session.format)
+    setLessonStep(0)
     setTopic(session.topic)
     setFormat(session.format)
     setDifficulty(session.difficulty)
@@ -1277,6 +1336,7 @@ export default function LearnPage() {
     setStreamError(null)
     setLastXP(null)
     setNewBadges([])
+    setLessonStep(0)
     setTopic('')
     setWebUrl('')
     setUploadFile(null)
@@ -1297,6 +1357,9 @@ export default function LearnPage() {
   // Derived lesson rails — structural outline + recurring concepts (no fake data).
   const outline  = useMemo(() => lessonOutline(displayFormat, displayContent), [displayFormat, displayContent])
   const concepts = useMemo(() => lessonConcepts(displayFormat, displayContent), [displayFormat, displayContent])
+  // Step-based formats get a live, navigable outline (active/done states).
+  const isStepFormat = displayFormat === 'guided' || displayFormat === 'animated'
+  const lessonIntro  = isStepFormat ? (displayContent as GuidedContent | undefined)?.intro : undefined
 
   const isGenerateEnabled = !isStreaming && (() => {
     switch (sourceMode) {
@@ -1848,7 +1911,15 @@ export default function LearnPage() {
           {/* Left rail — derived lesson outline */}
           {lessonActive && outline.length > 0 && (
             outlineOpen
-              ? <OutlineRail items={outline} format={displayFormat} onCollapse={() => setOutlineOpen(false)} />
+              ? <OutlineRail
+                  items={outline}
+                  format={displayFormat}
+                  activeIndex={isStepFormat ? Math.min(lessonStep, outline.length - 1) : undefined}
+                  onSelect={isStepFormat ? setLessonStep : undefined}
+                  title={topic || undefined}
+                  subtitle={lessonIntro}
+                  onCollapse={() => setOutlineOpen(false)}
+                />
               : <CollapsedRail label={`Outline · ${outline.length}`} side="left" onOpen={() => setOutlineOpen(true)} />
           )}
 
@@ -2038,10 +2109,10 @@ export default function LearnPage() {
                 </Paper>
               )}
               {displayFormat === 'guided' && (
-                <GuidedViewer content={displayContent as GuidedContent} />
+                <GuidedViewer content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
               )}
               {displayFormat === 'animated' && (
-                <AnimatedView content={displayContent as GuidedContent} />
+                <AnimatedView content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
               )}
             </Box>
           )}

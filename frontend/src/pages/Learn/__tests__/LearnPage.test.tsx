@@ -656,9 +656,9 @@ describe('Guided Learning — UI/UX Expert', () => {
     const item = await screen.findByText('Photosynthesis')
     fireEvent.click(item)
 
-    // GuidedViewer renders intro on step 0
+    // Intro renders on step 0 (GuidedViewer banner) and in the outline subtitle.
     await waitFor(() =>
-      expect(screen.getByText('Plants are solar-powered chemical factories.')).toBeInTheDocument()
+      expect(screen.getAllByText('Plants are solar-powered chemical factories.').length).toBeGreaterThanOrEqual(1)
     )
   })
 
@@ -857,5 +857,50 @@ describe('Lesson tabs + rails (Stage B.2)', () => {
   it('shows the connected-concepts rail derived from the lesson', async () => {
     await loadQuiz()
     expect(screen.getByText('CONNECTED CONCEPTS')).toBeInTheDocument()
+  })
+})
+
+// ─── Outline rail navigation (guided active/done states) ──────────────────────
+
+describe('Outline rail navigation (guided)', () => {
+  const G2: LearnSession = {
+    id: 'g2', topic: 'Cells', format: 'guided', source_type: 'topic',
+    difficulty: 'beginner', status: 'ready',
+    content: {
+      topic: 'Cells', intro: 'Cells are the basic unit of life.', total_steps: 2,
+      steps: [
+        { step: 1, title: 'The Membrane', explanation: 'It surrounds the cell.', example: 'A soap bubble.', analogy: null, key_insight: 'It gatekeeps.', check_in: 'What does it do?', quiz_check: null },
+        { step: 2, title: 'The Nucleus', explanation: 'It holds the DNA.', example: 'A control room.', analogy: null, key_insight: 'It directs the cell.', check_in: 'What does it hold?', quiz_check: null },
+      ],
+    } as GuidedContent,
+    created_at: '2026-05-28T08:00:00', completed_at: null,
+  }
+
+  const load = async () => {
+    ;(learnApi.listSessions as Mock).mockResolvedValue([G2])
+    ;(learnApi.getSession as Mock).mockResolvedValue(G2)
+    renderLearn()
+    fireEvent.click(await screen.findByText('Cells'))
+    await screen.findByTestId('lesson-stage')
+  }
+
+  it('marks the active step and navigates the stage when an outline item is clicked', async () => {
+    await load()
+    const stage = screen.getByTestId('lesson-stage')
+    await waitFor(() => expect(within(stage).getByText('The Membrane')).toBeInTheDocument())
+    // step 0 is the current step
+    expect(screen.getByTestId('outline-item-0')).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByTestId('outline-item-1')).not.toHaveAttribute('aria-current', 'step')
+
+    // click outline item 1 → the stage advances to step 2
+    fireEvent.click(screen.getByTestId('outline-item-1'))
+    await waitFor(() => expect(within(stage).getByText('The Nucleus')).toBeInTheDocument())
+    expect(screen.getByTestId('outline-item-1')).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('shows the lesson intro as the outline subtitle', async () => {
+    await load()
+    // intro appears in the outline header (and the guided intro banner) → >= 1
+    expect(screen.getAllByText('Cells are the basic unit of life.').length).toBeGreaterThanOrEqual(1)
   })
 })

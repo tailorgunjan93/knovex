@@ -16,7 +16,7 @@
  *   confettiBurst                — confetti particles on correct / completion
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -432,13 +432,22 @@ type Phase = 'reading' | 'checking' | 'pacing' | 'done'
 
 interface Props {
   content: GuidedContent
+  /** Controlled active step index (lifted so an outline rail can drive/track it). */
+  activeStep?: number
+  /** Called when the viewer navigates; when provided, `activeStep` is the source of truth. */
+  onStepChange?: (idx: number) => void
 }
 
-export default function GuidedViewer({ content }: Props) {
+export default function GuidedViewer({ content, activeStep, onStepChange }: Props) {
   const theme   = useTheme()
   const isDark  = theme.palette.mode === 'dark'
 
-  const [stepIdx,    setStepIdx]    = useState(0)
+  // Controllable step index: use the `activeStep` prop when provided (the parent
+  // owns it and an outline rail can navigate), else fall back to internal state.
+  const [internalStep, setInternalStep] = useState(0)
+  const stepIdx = activeStep ?? internalStep
+  const setStepIdx = (idx: number) => { onStepChange ? onStepChange(idx) : setInternalStep(idx) }
+
   const [phase,      setPhase]      = useState<Phase>('reading')
   const [completed,  setCompleted]  = useState(false)
   const [seen,       setSeen]       = useState<Set<number>>(new Set([0]))
@@ -470,10 +479,17 @@ export default function GuidedViewer({ content }: Props) {
   function goTo(idx: number) {
     setDirection(idx > stepIdx ? 'forward' : 'back')
     setStepIdx(idx)
-    setPhase('reading')
-    setRevealed(1)   // restart the conversational reveal for the new step
-    setSeen(prev => new Set([...prev, idx]))
+    // phase/reveal reset happens in the effect below, so it also fires when the
+    // step is changed externally (e.g. clicking an outline-rail item).
   }
+
+  // Reset the per-step UI whenever the active step changes (internal nav OR an
+  // external/controlled change from the outline rail).
+  useEffect(() => {
+    setPhase('reading')
+    setRevealed(1)
+    setSeen(prev => (prev.has(stepIdx) ? prev : new Set([...prev, stepIdx])))
+  }, [stepIdx])
 
   // After reading: if beats remain, reveal them all first; otherwise advance.
   function handleGotIt() {

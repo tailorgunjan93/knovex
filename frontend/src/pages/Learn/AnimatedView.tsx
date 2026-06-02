@@ -32,7 +32,13 @@ export function clampStep(idx: number, total: number): number {
   return Math.min(total - 1, Math.max(0, idx))
 }
 
-export default function AnimatedView({ content }: { content: GuidedContent }) {
+export default function AnimatedView({ content, activeStep, onStepChange }: {
+  content: GuidedContent
+  /** Controlled active step index (lifted so an outline rail can drive/track it). */
+  activeStep?: number
+  /** Called when the view advances; when provided, `activeStep` is the source of truth. */
+  onStepChange?: (idx: number) => void
+}) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const reduce = usePrefersReducedMotion()
@@ -40,7 +46,10 @@ export default function AnimatedView({ content }: { content: GuidedContent }) {
 
   const steps = content.steps ?? []
   const total = steps.length
-  const [idx, setIdx]       = useState(0)
+  // Controllable step index (see GuidedViewer for the same pattern).
+  const [internalIdx, setInternalIdx] = useState(0)
+  const idx = activeStep ?? internalIdx
+  const setIdx = (v: number) => { onStepChange ? onStepChange(v) : setInternalIdx(v) }
   const [playing, setPlaying] = useState(!reduce)   // autoplay unless reduced-motion
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -51,7 +60,7 @@ export default function AnimatedView({ content }: { content: GuidedContent }) {
   useEffect(() => {
     if (!playing || total === 0) return
     if (atEnd) { setPlaying(false); return }
-    timer.current = setTimeout(() => setIdx(i => clampStep(i + 1, total)), STEP_MS)
+    timer.current = setTimeout(() => setIdx(clampStep(idx + 1, total)), STEP_MS)
     return () => { if (timer.current) clearTimeout(timer.current) }
   }, [playing, idx, atEnd, total])
 
