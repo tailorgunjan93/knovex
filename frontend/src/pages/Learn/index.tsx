@@ -156,14 +156,21 @@ const BADGE_LABELS: Record<string, string> = {
 
 // ─── Source mode ──────────────────────────────────────────────────────────────
 
-type SourceMode = 'topic' | 'kb' | 'web' | 'upload'
+type SourceMode = 'topic' | 'kb' | 'web' | 'wikipedia' | 'upload'
 
 const SOURCE_MODES: Array<{ id: SourceMode; label: string; icon: React.ReactNode; tip: string }> = [
-  { id: 'topic',  label: 'Topic',   icon: <SubjectIcon fontSize="inherit" />,       tip: 'Learn about any topic using AI knowledge' },
-  { id: 'kb',     label: 'Library', icon: <LibraryBooksIcon fontSize="inherit" />,  tip: 'Learn from a file in your Knowledge Base' },
-  { id: 'web',    label: 'Web',     icon: <LanguageIcon fontSize="inherit" />,       tip: 'Learn from any web page by URL' },
-  { id: 'upload', label: 'Upload',  icon: <UploadFileIcon fontSize="inherit" />,     tip: 'Upload a text file (.txt, .md, .json, .csv)' },
+  { id: 'topic',     label: 'Topic',     icon: <SubjectIcon fontSize="inherit" />,       tip: 'Learn about any topic using AI knowledge' },
+  { id: 'kb',        label: 'Library',   icon: <LibraryBooksIcon fontSize="inherit" />,  tip: 'Learn from a file in your Knowledge Base' },
+  { id: 'web',       label: 'Web',       icon: <LanguageIcon fontSize="inherit" />,      tip: 'Learn from any web page by URL' },
+  { id: 'wikipedia', label: 'Wikipedia', icon: <MenuBookIcon fontSize="inherit" />,      tip: 'Learn from the Wikipedia article on a topic' },
+  { id: 'upload',    label: 'Upload',    icon: <UploadFileIcon fontSize="inherit" />,    tip: 'Upload a text file (.txt, .md, .json, .csv)' },
 ]
+
+/** Build the Wikipedia article URL for a topic (used by the 'wikipedia' source). */
+export function wikipediaUrlFor(topic: string): string {
+  const slug = encodeURIComponent(topic.trim().replace(/\s+/g, '_'))
+  return `https://en.wikipedia.org/wiki/${slug}`
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -1157,6 +1164,13 @@ export default function LearnPage() {
       }
       // context_text left empty — backend will fetch the URL
 
+    } else if (sourceMode === 'wikipedia') {
+      if (!effectiveTopic) return
+      // Wikipedia = the article URL for the topic, fetched by the backend.
+      sourceType = 'url'
+      sourceRef  = wikipediaUrlFor(effectiveTopic)
+      // context_text left empty — backend will fetch the article
+
     } else if (sourceMode === 'upload') {
       if (!uploadText || uploadText === '__UNSUPPORTED__') return
       sourceType  = 'upload'
@@ -1286,10 +1300,11 @@ export default function LearnPage() {
 
   const isGenerateEnabled = !isStreaming && (() => {
     switch (sourceMode) {
-      case 'topic':  return !!topic.trim()
-      case 'web':    return !!webUrl.trim()
-      case 'kb':     return !!selectedKbId && !!selectedFileId
-      case 'upload': return !!uploadText && uploadText !== '__UNSUPPORTED__'
+      case 'topic':     return !!topic.trim()
+      case 'web':       return !!webUrl.trim()
+      case 'wikipedia': return !!topic.trim()
+      case 'kb':        return !!selectedKbId && !!selectedFileId
+      case 'upload':    return !!uploadText && uploadText !== '__UNSUPPORTED__'
       default:       return false
     }
   })()
@@ -1468,20 +1483,8 @@ export default function LearnPage() {
           pb: hasContent && !isStreaming ? 0.75 : 1.5,
           borderBottom: `1px solid ${theme.palette.divider}`,
         }}>
-          {/* Eyebrow — hidden when content is active to save vertical space */}
-          {!(hasContent && !isStreaming) && (
-            <Typography sx={{
-              fontFamily: MONO,
-              fontSize: 10,
-              color: 'text.disabled',
-              textTransform: 'uppercase',
-              letterSpacing: '0.14em',
-              mb: 0.75,
-            }}>
-              — LEARN · GROW · RETAIN
-            </Typography>
-          )}
-
+          {/* Center the setup form to a readable column (lab); full-width in a lesson. */}
+          <Box sx={{ maxWidth: lessonActive ? 'none' : 880, mx: lessonActive ? 0 : 'auto' }}>
           {/* Title row */}
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: hasContent && !isStreaming ? 0 : 1, flexWrap: 'wrap' }}>
             {hasContent ? (
@@ -1610,6 +1613,27 @@ export default function LearnPage() {
                     size="small"
                     disabled={isStreaming}
                     fullWidth
+                    sx={{ '& .MuiOutlinedInput-root': { fontSize: 13 } }}
+                  />
+                )}
+
+                {/* WIKIPEDIA mode — fetches the article via the URL source */}
+                {sourceMode === 'wikipedia' && (
+                  <TextField
+                    placeholder="Wikipedia article or topic (e.g. Photosynthesis)"
+                    value={topic}
+                    onChange={e => setTopic(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && isGenerateEnabled && handleGenerate()}
+                    size="small"
+                    disabled={isStreaming}
+                    fullWidth
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <MenuBookIcon sx={{ fontSize: 15, color: 'text.disabled' }} />
+                        </InputAdornment>
+                      ),
+                    }}
                     sx={{ '& .MuiOutlinedInput-root': { fontSize: 13 } }}
                   />
                 )}
@@ -1814,102 +1838,8 @@ export default function LearnPage() {
 
             </Box>
           </Box>}
+          </Box>{/* end centered setup column */}
 
-          {/* Format selector row — hidden when content is showing */}
-          {!(hasContent && !isStreaming) && <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-            {FORMATS.map(f => {
-              const active = format === f.id
-              return (
-                <Box
-                  key={f.id}
-                  onClick={() => !isStreaming && setFormat(f.id)}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.6,
-                    px: 1.1, py: 0.5,
-                    borderRadius: 1.25,
-                    border: `1px solid`,
-                    borderColor: active ? f.color : 'transparent',
-                    bgcolor: active ? alpha(f.color, 0.1) : 'transparent',
-                    cursor: isStreaming ? 'default' : 'pointer',
-                    transition: 'all 0.15s',
-                    '&:hover': isStreaming ? {} : {
-                      borderColor: f.color,
-                      bgcolor: alpha(f.color, 0.06),
-                    },
-                  }}
-                >
-                  <Box sx={{ fontSize: 14, color: active ? f.color : 'text.disabled', display: 'flex' }}>
-                    {f.icon}
-                  </Box>
-                  <Typography sx={{
-                    fontSize: 12,
-                    fontWeight: active ? 700 : 400,
-                    color: active ? f.color : 'text.secondary',
-                  }}>
-                    {f.label}
-                  </Typography>
-                </Box>
-              )
-            })}
-
-            <Box sx={{ width: 1, height: 20, bgcolor: 'divider', mx: 0.5 }} />
-
-            {/* Difficulty */}
-            {DIFFICULTIES.map(d => {
-              const active = difficulty === d.id
-              return (
-                <Box
-                  key={d.id}
-                  onClick={() => !isStreaming && setDifficulty(d.id)}
-                  sx={{
-                    px: 1.1, py: 0.5,
-                    borderRadius: 1.25,
-                    border: `1px solid`,
-                    borderColor: active ? d.color : 'transparent',
-                    bgcolor: active ? d.bg : 'transparent',
-                    cursor: isStreaming ? 'default' : 'pointer',
-                    transition: 'all 0.15s',
-                    '&:hover': isStreaming ? {} : { borderColor: d.color },
-                  }}
-                >
-                  <Typography sx={{
-                    fontSize: 12,
-                    fontWeight: active ? 700 : 400,
-                    color: active ? d.color : 'text.secondary',
-                  }}>
-                    {d.label}
-                  </Typography>
-                </Box>
-              )
-            })}
-
-            <Box sx={{ width: 1, height: 20, bgcolor: 'divider', mx: 0.5 }} />
-
-            {/* Language (generate-in-language) */}
-            <Select
-              value={language}
-              onChange={(e) => !isStreaming && setLanguage(e.target.value)}
-              disabled={isStreaming}
-              variant="standard"
-              disableUnderline
-              startAdornment={<TranslateIcon sx={{ fontSize: 15, color: 'text.disabled', mr: 0.5 }} />}
-              sx={{
-                fontSize: 12,
-                px: 1.1, py: 0.25,
-                borderRadius: 1.25,
-                border: '1px solid',
-                borderColor: language !== 'English' ? 'primary.main' : 'transparent',
-                color: language !== 'English' ? 'primary.main' : 'text.secondary',
-                '& .MuiSelect-select': { py: 0.25, pr: '20px !important' },
-                '&:hover': { borderColor: 'primary.main' },
-              }}
-              MenuProps={{ PaperProps: { sx: { maxHeight: 320 } } }}
-            >
-              {LANGUAGES.map(l => (
-                <MenuItem key={l} value={l} sx={{ fontSize: 13 }}>{l}</MenuItem>
-              ))}
-            </Select>
-          </Box>}
         </Box>
 
         {/* ─── Content area (+ lesson rails) ──────────────────────────────────── */}
@@ -1970,7 +1900,7 @@ export default function LearnPage() {
 
           {/* ── EMPTY STATE ─────────────────────────────────────────────────── */}
           {!isStreaming && !hasContent && !streamError && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5, maxWidth: 860 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5, maxWidth: 860, mx: 'auto', width: '100%' }}>
               {/* Format card grid (lab: FORMAT eyebrow + 3-col, left-aligned) */}
               <Box>
                 <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 1.5 }}>
@@ -2014,6 +1944,38 @@ export default function LearnPage() {
                       </Typography>
                     </Box>
                   ))}
+                </Box>
+              </Box>
+
+              {/* Language (generate-in-language) — pills, matching the lab */}
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 1, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <TranslateIcon sx={{ fontSize: 13 }} /> LANGUAGE
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {LANGUAGES.map(l => {
+                    const active = language === l
+                    return (
+                      <Box
+                        key={l}
+                        onClick={() => setLanguage(l)}
+                        sx={{
+                          px: 1.5, py: 0.6,
+                          borderRadius: 1.5,
+                          border: '1.5px solid',
+                          borderColor: active ? 'primary.main' : 'divider',
+                          bgcolor: active ? alpha(ACCENT, theme.palette.mode === 'dark' ? 0.16 : 0.08) : 'transparent',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                          '&:hover': { borderColor: 'primary.main' },
+                        }}
+                      >
+                        <Typography sx={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? 'primary.main' : 'text.secondary' }}>
+                          {l}
+                        </Typography>
+                      </Box>
+                    )
+                  })}
                 </Box>
               </Box>
             </Box>

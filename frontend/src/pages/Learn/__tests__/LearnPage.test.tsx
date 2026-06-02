@@ -47,7 +47,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import type { ReactNode } from 'react'
-import LearnPage from '../index'
+import LearnPage, { wikipediaUrlFor } from '../index'
 import { learnApi } from '@/api/learn.api'
 import type { LearnSession, UserStats, QuizContent, FlashcardContent, GuidedContent } from '@/api/learn.api'
 
@@ -191,6 +191,59 @@ describe('Empty state', () => {
     await userEvent.type(input, 'Photosynthesis')
     const btn = screen.getByRole('button', { name: /Generate/i })
     expect(btn).toBeEnabled()
+  })
+
+  it('shows each format and difficulty control only ONCE (no header/body duplication)', async () => {
+    renderLearn()
+    // Previously the format + difficulty selectors rendered twice (a header pill
+    // row AND the body cards/segmented). Setup should now show each label once.
+    await waitFor(() => expect(screen.getAllByText('Guided')).toHaveLength(1))
+    expect(screen.getAllByText('Animated')).toHaveLength(1)
+    expect(screen.getAllByText('Quiz')).toHaveLength(1)
+    expect(screen.getAllByText('Beginner')).toHaveLength(1)
+    expect(screen.getAllByText('Expert')).toHaveLength(1)
+  })
+
+  it('renders the Wikipedia source pill and a body LANGUAGE picker', async () => {
+    renderLearn()
+    await waitFor(() => expect(screen.getByText('Wikipedia')).toBeInTheDocument())
+    expect(screen.getByText('LANGUAGE')).toBeInTheDocument()
+    expect(screen.getByText('हिन्दी')).toBeInTheDocument()
+  })
+
+  it('does not render the redundant "GROW · RETAIN" eyebrow', () => {
+    renderLearn()
+    expect(screen.queryByText(/GROW · RETAIN/)).not.toBeInTheDocument()
+  })
+})
+
+// ─── Wikipedia source ─────────────────────────────────────────────────────────
+
+describe('Wikipedia source', () => {
+  it('wikipediaUrlFor builds an article URL (spaces → underscores, encoded)', () => {
+    expect(wikipediaUrlFor('Photosynthesis')).toBe('https://en.wikipedia.org/wiki/Photosynthesis')
+    expect(wikipediaUrlFor('  Black Holes ')).toBe('https://en.wikipedia.org/wiki/Black_Holes')
+  })
+
+  it('generates via the URL source for the Wikipedia article', async () => {
+    renderLearn()
+    fireEvent.click(await screen.findByText('Wikipedia'))
+    const input = await screen.findByPlaceholderText(/Wikipedia article/i)
+    await userEvent.type(input, 'Coriolis effect')
+    await userEvent.click(screen.getByRole('button', { name: /Generate/i }))
+    await waitFor(() =>
+      expect(learnApi.streamSession).toHaveBeenCalledWith(
+        'Coriolis effect',
+        'guided',
+        expect.any(String),
+        expect.any(Function),
+        expect.anything(),
+        'url',
+        'https://en.wikipedia.org/wiki/Coriolis_effect',
+        '',
+        'English',
+      )
+    )
   })
 })
 
