@@ -160,7 +160,7 @@ type SourceMode = 'topic' | 'kb' | 'web' | 'wikipedia' | 'upload'
 
 const SOURCE_MODES: Array<{ id: SourceMode; label: string; icon: React.ReactNode; tip: string }> = [
   { id: 'topic',     label: 'Topic',     icon: <SubjectIcon fontSize="inherit" />,       tip: 'Learn about any topic using AI knowledge' },
-  { id: 'kb',        label: 'Library',   icon: <LibraryBooksIcon fontSize="inherit" />,  tip: 'Learn from a file in your Knowledge Base' },
+  { id: 'kb',        label: 'From Library', icon: <LibraryBooksIcon fontSize="inherit" />, tip: 'Learn from a file in your Knowledge Base' },
   { id: 'web',       label: 'Web',       icon: <LanguageIcon fontSize="inherit" />,      tip: 'Learn from any web page by URL' },
   { id: 'wikipedia', label: 'Wikipedia', icon: <MenuBookIcon fontSize="inherit" />,      tip: 'Learn from the Wikipedia article on a topic' },
   { id: 'upload',    label: 'Upload',    icon: <UploadFileIcon fontSize="inherit" />,    tip: 'Upload a text file (.txt, .md, .json, .csv)' },
@@ -1374,6 +1374,10 @@ export default function LearnPage() {
     }
   })()
 
+  // Single-field source modes get the lab's unified rounded input bar; the
+  // multi-field modes (web/kb/upload) keep their stacked inputs.
+  const isBarMode = sourceMode === 'topic' || sourceMode === 'wikipedia'
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -1546,7 +1550,9 @@ export default function LearnPage() {
           px: 2.5,
           pt: hasContent && !isStreaming ? 1.25 : 2,
           pb: hasContent && !isStreaming ? 0.75 : 1.5,
-          borderBottom: `1px solid ${theme.palette.divider}`,
+          // Seamless canvas on the setup screen (matches the lab); only the
+          // in-lesson header keeps a separator above the 3-pane stage.
+          borderBottom: lessonActive ? `1px solid ${theme.palette.divider}` : 'none',
         }}>
           {/* Center the setup form to a readable column (lab); full-width in a lesson. */}
           <Box sx={{ maxWidth: lessonActive ? 'none' : 880, mx: lessonActive ? 0 : 'auto' }}>
@@ -1625,9 +1631,9 @@ export default function LearnPage() {
 
           {/* ── Source mode selector + input ──────────────────────────────────── */}
           {/* Hidden when content is showing — frees vertical space for the learning panel */}
-          {!(hasContent && !isStreaming) && <Box sx={{ mb: 1.25 }}>
-            {/* Source mode pills */}
-            <Box sx={{ display: 'flex', gap: 0.5, mb: 0.75, flexWrap: 'wrap' }}>
+          {!(hasContent && !isStreaming) && <Box sx={{ mb: 1.25, display: 'flex', flexDirection: 'column-reverse', gap: 1.5 }}>
+            {/* Source mode pills — rendered BELOW the input bar (column-reverse), lab order */}
+            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
               {SOURCE_MODES.map(sm => {
                 const active = sourceMode === sm.id
                 return (
@@ -1662,23 +1668,39 @@ export default function LearnPage() {
               })}
             </Box>
 
-            {/* Source input + action button */}
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {/* Source input + action button — unified rounded bar for single-field modes (lab) */}
+            <Box sx={{
+              display: 'flex', gap: isBarMode ? 1.5 : 1,
+              alignItems: isBarMode ? 'center' : 'flex-start', flexWrap: 'wrap',
+              ...(isBarMode && {
+                p: 1, pl: 2, borderRadius: 3, bgcolor: 'background.paper',
+                border: '1px solid', borderColor: 'divider',
+                transition: 'border-color 0.15s', '&:focus-within': { borderColor: 'primary.main' },
+              }),
+            }}>
+
+              {/* Leading icon (single-field bar only) */}
+              {isBarMode && (
+                <Box sx={{ color: 'text.disabled', display: 'flex', flexShrink: 0, '& svg': { fontSize: 20 } }}>
+                  {sourceMode === 'wikipedia' ? <MenuBookIcon /> : <SchoolIcon />}
+                </Box>
+              )}
 
               {/* ── Input area (changes per source mode) ── */}
-              <Box sx={{ flex: 1, minWidth: 200 }}>
+              <Box sx={{ flex: 1, minWidth: isBarMode ? 0 : 200 }}>
 
-                {/* TOPIC mode */}
+                {/* TOPIC mode — borderless input inside the unified bar */}
                 {sourceMode === 'topic' && (
                   <TextField
-                    placeholder="What do you want to learn?"
+                    placeholder="Type a topic, or pick a source…"
                     value={topic}
                     onChange={e => setTopic(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && !e.shiftKey && isGenerateEnabled && handleGenerate()}
-                    size="small"
                     disabled={isStreaming}
                     fullWidth
-                    sx={{ '& .MuiOutlinedInput-root': { fontSize: 13 } }}
+                    variant="standard"
+                    InputProps={{ disableUnderline: true }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: 15, p: 0, color: 'text.primary' } }}
                   />
                 )}
 
@@ -1689,17 +1711,11 @@ export default function LearnPage() {
                     value={topic}
                     onChange={e => setTopic(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && !e.shiftKey && isGenerateEnabled && handleGenerate()}
-                    size="small"
                     disabled={isStreaming}
                     fullWidth
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <MenuBookIcon sx={{ fontSize: 15, color: 'text.disabled' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{ '& .MuiOutlinedInput-root': { fontSize: 13 } }}
+                    variant="standard"
+                    InputProps={{ disableUnderline: true }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: 15, p: 0, color: 'text.primary' } }}
                   />
                 )}
 
@@ -1874,8 +1890,8 @@ export default function LearnPage() {
                 )}
               </Box>
 
-              {/* ── Generate / Stop button ── */}
-              <Box sx={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {/* ── Generate / Stop button (gradient pill, lab) ── */}
+              <Box sx={{ flexShrink: 0 }}>
                 {isStreaming ? (
                   <Button
                     variant="outlined"
@@ -1883,18 +1899,23 @@ export default function LearnPage() {
                     size="small"
                     startIcon={<StopIcon sx={{ fontSize: 14 }} />}
                     onClick={() => abortRef.current?.abort()}
-                    sx={{ height: 36, fontSize: 12 }}
+                    sx={{ height: 40, fontSize: 13, borderRadius: 99, px: 2, textTransform: 'none' }}
                   >
                     Stop
                   </Button>
                 ) : (
                   <Button
-                    variant="contained"
                     size="small"
+                    disableElevation
                     disabled={!isGenerateEnabled}
                     onClick={() => handleGenerate()}
-                    endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
-                    sx={{ height: 36, fontSize: 12, px: 1.75 }}
+                    endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      height: 40, fontSize: 13, fontWeight: 700, borderRadius: 99, px: 2.5,
+                      textTransform: 'none', background: BRAND.gradient, color: BRAND.onAccent,
+                      '&:hover': { background: BRAND.gradient, filter: 'brightness(1.05)' },
+                      '&.Mui-disabled': { background: 'action.disabledBackground', color: 'text.disabled' },
+                    }}
                   >
                     Generate
                   </Button>

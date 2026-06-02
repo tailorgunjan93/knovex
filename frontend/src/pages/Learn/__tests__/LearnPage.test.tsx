@@ -187,7 +187,7 @@ describe('Empty state', () => {
 
   it('Generate button becomes enabled after typing a topic', async () => {
     renderLearn()
-    const input = await screen.findByPlaceholderText('What do you want to learn?')
+    const input = await screen.findByPlaceholderText('Type a topic, or pick a source…')
     await userEvent.type(input, 'Photosynthesis')
     const btn = screen.getByRole('button', { name: /Generate/i })
     expect(btn).toBeEnabled()
@@ -360,7 +360,7 @@ describe('Generate and streaming', () => {
 
     renderLearn()
 
-    const input = await screen.findByPlaceholderText('What do you want to learn?')
+    const input = await screen.findByPlaceholderText('Type a topic, or pick a source…')
     await userEvent.type(input, 'Machine Learning')
 
     // Default format is Guided (first lab card).
@@ -398,7 +398,7 @@ describe('Generate and streaming', () => {
 
     renderLearn()
 
-    const input = await screen.findByPlaceholderText('What do you want to learn?')
+    const input = await screen.findByPlaceholderText('Type a topic, or pick a source…')
     await userEvent.type(input, 'Gravity')
 
     // Format is irrelevant to the XP-alert behavior; use the default (Quiz).
@@ -420,7 +420,7 @@ describe('Generate and streaming', () => {
 
     renderLearn()
 
-    const input = await screen.findByPlaceholderText('What do you want to learn?')
+    const input = await screen.findByPlaceholderText('Type a topic, or pick a source…')
     await userEvent.type(input, 'Relativity')
 
     const genBtn = screen.getByRole('button', { name: /Generate/i })
@@ -687,7 +687,7 @@ describe('Guided Learning — UI/UX Expert', () => {
 
     renderLearn()
 
-    const input = await screen.findByPlaceholderText('What do you want to learn?')
+    const input = await screen.findByPlaceholderText('Type a topic, or pick a source…')
     await userEvent.type(input, 'Photosynthesis')
 
     // Select Guided format from header format row
