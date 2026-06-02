@@ -606,6 +606,49 @@ class TestUnescapedInnerQuoteRepair:
 
 
 # ---------------------------------------------------------------------------
+# Structural JSON repair (missing braces between array elements) via json_repair
+# ---------------------------------------------------------------------------
+
+class TestStructuralJsonRepair:
+    """
+    Regression tests for the "flattened steps array" malformation.
+
+    Root cause: a small local model serialised the `steps` array without
+    wrapping each element after the first in braces, producing
+    [ {step 1}, "step":2, ... ] — the parser reads "step" as a string element
+    then chokes on the following ':' ("Expecting ',' delimiter"). This is a
+    STRUCTURAL break that the hand-rolled quote/truncation repairs cannot fix;
+    _parse_llm_json now falls back to the wrapped json_repair library.
+    """
+
+    FLATTENED = (
+        '{"topic":"AI","total_steps":2,"steps":['
+        '{"step":1,"title":"What is AI","explanation":"AI mimics human thinking."},'
+        '"step":2,"title":"Machine Learning","explanation":"ML learns from data."}]}'
+    )
+
+    def test_parse_recovers_flattened_steps_array(self):
+        data = _parse_llm_json(self.FLATTENED)
+        assert isinstance(data, dict)
+        assert data["topic"] == "AI"
+        assert isinstance(data["steps"], list)
+        assert len(data["steps"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_guided_recovers_from_flattened_steps(self):
+        svc, _ = _make_svc(complete_text=self.FLATTENED)
+        events = await _drain(svc.stream_session(
+            topic="AI", format="guided", source_type="topic",
+            difficulty="beginner", source_ref=None,
+            provider="openai", model="gpt-4o-mini", credentials=_creds(),
+        ))
+        error_events = [e for e in events if '"type": "error"' in e]
+        done_events  = [e for e in events if '"type": "done"'  in e]
+        assert len(error_events) == 0, f"Unexpected error: {error_events}"
+        assert len(done_events)  == 1
+
+
+# ---------------------------------------------------------------------------
 # submit_quiz_answer
 # ---------------------------------------------------------------------------
 

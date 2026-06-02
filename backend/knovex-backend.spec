@@ -71,6 +71,8 @@ a = Analysis(
         "starlette.middleware.cors",
         # ── aiosqlite ─────────────────────────────────────────────────────
         "aiosqlite",
+        # ── json_repair (LLM JSON recovery — see json_repair_adapter) ─────
+        "json_repair",
         # ── Knovex backend top-level ─────────────────────────────────────
         # backend.main is NOT imported directly in backend_entry.py at the
         # module level in older builds — list it explicitly as a safety net.

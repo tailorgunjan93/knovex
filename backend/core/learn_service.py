@@ -39,6 +39,7 @@ from backend.core.domain.learn import (
     LearnSession,
     UserStats,
 )
+from backend.adapters.json_repair_adapter import repair_json_object
 from backend.core.llm_service import LLMService
 from backend.core.providers.base import ProviderCredentials
 from backend.storage.repositories.base import EntityNotFoundError
@@ -560,9 +561,14 @@ def _escape_inner_quotes(text: str) -> str:
 
 def _parse_llm_json(text: str) -> dict:
     """
-    Parse possibly-malformed LLM JSON, applying best-effort repairs in order:
-    as-is → escape stray inner quotes → close truncation → both. Returns the
-    parsed object, or re-raises the last JSONDecodeError if nothing works.
+    Parse possibly-malformed LLM JSON. Cheap, content-preserving repairs run
+    first (escape stray inner quotes → close truncation → both); if those still
+    fail — typically a STRUCTURAL break the model introduced, e.g. a flattened
+    array missing per-element braces — fall back to the wrapped json_repair
+    library, which recovers a usable object from badly broken JSON.
+
+    Returns the parsed dict, or raises json.JSONDecodeError if nothing recovers
+    a non-empty object (so callers can surface a clean error event).
     """
     candidates = (
         text,
@@ -570,14 +576,19 @@ def _parse_llm_json(text: str) -> dict:
         _repair_truncated_json(text),
         _repair_truncated_json(_escape_inner_quotes(text)),
     )
-    last_exc: json.JSONDecodeError | None = None
     for candidate in candidates:
         try:
             return json.loads(candidate)
-        except json.JSONDecodeError as exc:
-            last_exc = exc
-    assert last_exc is not None  # candidates is non-empty
-    raise last_exc
+        except json.JSONDecodeError:
+            continue
+
+    # Robust structural repair via the anti-corruption wrapper. json_repair
+    # never raises; it returns an empty value for hopeless input, so validate.
+    repaired = repair_json_object(text)
+    if isinstance(repaired, dict) and repaired:
+        return repaired
+
+    raise json.JSONDecodeError("Could not repair malformed JSON", text, 0)
 
 
 def _repair_truncated_json(text: str) -> str:

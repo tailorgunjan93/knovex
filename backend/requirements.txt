@@ -36,6 +36,7 @@ cryptography>=43.0          # Fernet symmetric encryption for API keys
 
 # ─── LLM layer ────────────────────────────────────────────────────────────────
 litellm>=1.50               # Unified multi-provider LLM (OpenAI, Anthropic, Groq, Gemini, Bedrock, Ollama)
+json-repair>=0.30           # Repair malformed LLM JSON (missing braces/commas, unescaped quotes, truncation)
 
 # ─── Agent tools ──────────────────────────────────────────────────────────────
 langchain-core>=0.3         # BaseTool interface for agent-ready tools
