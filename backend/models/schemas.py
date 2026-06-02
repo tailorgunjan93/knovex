@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # Shared / primitive models
@@ -231,6 +231,43 @@ class FileContentResponse(BaseModel):
 class FileAskRequest(BaseModel):
     question: str = Field(..., min_length=1)
     use_web_search: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Reader highlights (user-created, persisted)
+# ---------------------------------------------------------------------------
+
+# Allowed highlight colors (named — the frontend maps them to theme tints).
+HIGHLIGHT_COLORS = ("yellow", "green", "blue", "pink", "purple")
+
+
+class HighlightCreate(BaseModel):
+    """Payload to create a highlight on a page of a file."""
+    page: int = Field(default=1, ge=1)
+    text: str = Field(..., min_length=1, max_length=4000)
+    color: str = Field(default="yellow")
+    note: str = Field(default="", max_length=2000)
+
+    @field_validator("color")
+    @classmethod
+    def _valid_color(cls, v: str) -> str:
+        return v if v in HIGHLIGHT_COLORS else "yellow"
+
+
+class Highlight(BaseModel):
+    """A persisted highlight, returned by the API."""
+    id: str
+    kb_id: str
+    file_id: str
+    page: int
+    text: str
+    color: str
+    note: str
+    created_at: str
+
+
+class HighlightListResponse(BaseModel):
+    highlights: list[Highlight]
 
 
 # ---------------------------------------------------------------------------

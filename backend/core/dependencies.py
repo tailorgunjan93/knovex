@@ -337,11 +337,20 @@ def get_watcher_service():
     )
 
 
+def get_highlight_repository(backend=Depends(get_sqlite_backend)):
+    """Provide the reader-highlights repository (per-request, cheap)."""
+    from backend.storage.repositories.highlight_repository import SQLiteHighlightRepository
+    return SQLiteHighlightRepository(backend)
+
+
 # ---------------------------------------------------------------------------
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------
 
 from backend.adapters.http_client import IHttpClient  # noqa: E402
+from backend.storage.repositories.highlight_repository import (  # noqa: E402
+    SQLiteHighlightRepository,
+)
 from backend.core.chat_service import ChatService  # noqa: E402
 from backend.core.kb_service import KBService  # noqa: E402
 from backend.core.learn_service import LearnService  # noqa: E402
@@ -358,3 +367,4 @@ SummariserServiceDep = Annotated[SummariserService,   Depends(get_summariser_ser
 SearchServiceDep     = Annotated[SearchService,       Depends(get_search_service)]
 LearnServiceDep      = Annotated[LearnService,        Depends(get_learn_service)]
 HttpClientDep        = Annotated[IHttpClient,         Depends(get_http_client)]
+HighlightRepoDep     = Annotated[SQLiteHighlightRepository, Depends(get_highlight_repository)]

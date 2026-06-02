@@ -30,11 +30,19 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from backend.core.config import settings as app_config
-from backend.core.dependencies import KBServiceDep, ReaderServiceDep, SettingsServiceDep
+from backend.core.dependencies import (
+    HighlightRepoDep,
+    KBServiceDep,
+    ReaderServiceDep,
+    SettingsServiceDep,
+)
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
     FileAskRequest,
     FileContentResponse,
+    Highlight,
+    HighlightCreate,
+    HighlightListResponse,
     KBCreate,
     ReaderUploadResponse,
 )
@@ -163,6 +171,62 @@ async def ask_file(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Reader highlights — user-created, persisted, reload with the document
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/kb/{kb_id}/files/{file_id}/highlights",
+    response_model=HighlightListResponse,
+    summary="List highlights for a file",
+)
+async def list_highlights(
+    kb_id: str,
+    file_id: str,
+    highlights: HighlightRepoDep,
+) -> HighlightListResponse:
+    """All saved highlights for a file, ordered by page then creation time."""
+    items = await highlights.list_for_file(kb_id, file_id)
+    return HighlightListResponse(highlights=items)
+
+
+@router.post(
+    "/kb/{kb_id}/files/{file_id}/highlights",
+    response_model=Highlight,
+    summary="Create a highlight",
+)
+async def create_highlight(
+    kb_id: str,
+    file_id: str,
+    body: HighlightCreate,
+    highlights: HighlightRepoDep,
+    reader_svc: ReaderServiceDep,
+) -> Highlight:
+    """Persist a highlight on a page of a file. 404 if the file doesn't exist."""
+    try:
+        await reader_svc._require_file(kb_id, file_id)  # noqa: SLF001
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await highlights.create(kb_id, file_id, body)
+
+
+@router.delete(
+    "/kb/{kb_id}/files/{file_id}/highlights/{highlight_id}",
+    status_code=204,
+    summary="Delete a highlight",
+)
+async def delete_highlight(
+    kb_id: str,
+    file_id: str,
+    highlight_id: str,
+    highlights: HighlightRepoDep,
+) -> None:
+    """Delete a highlight by id (idempotent — 204 even if already gone)."""
+    await highlights.delete(highlight_id)
 
 
 # ---------------------------------------------------------------------------
