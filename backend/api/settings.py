@@ -15,10 +15,12 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.core.dependencies import LLMServiceDep, SettingsServiceDep
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
+    ActivateProviderRequest,
     AppSettingsResponse,
     AppSettingsUpdate,
     EmbeddingModelStatus,
     LLMModelsResponse,
+    LLMProviderUpdate,
     OllamaDetectResponse,
     TestLLMResponse,
 )
@@ -121,6 +123,74 @@ async def test_llm(
     return await llm_svc.test_connection(
         provider=llm.provider,
         model=llm.model,
+        credentials=credentials,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Multi-provider — save / activate / test a specific provider
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/settings/llm/providers/{provider_id}",
+    response_model=AppSettingsResponse,
+    summary="Save one provider's config (key / model / base_url)",
+)
+async def set_llm_provider(
+    provider_id: str,
+    body: LLMProviderUpdate,
+    settings_svc: SettingsServiceDep,
+) -> AppSettingsResponse:
+    """
+    Persist a single provider's config without changing the active provider
+    (unless *provider_id* IS the active one). Send the real key; only the
+    fields you include are changed. Response is masked.
+    """
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise HTTPException(status_code=400, detail="No fields provided to update")
+    return await settings_svc.set_provider(provider_id, patch)
+
+
+@router.post(
+    "/settings/llm/activate",
+    response_model=AppSettingsResponse,
+    summary="Make a saved provider the active one",
+)
+async def activate_llm_provider(
+    body: ActivateProviderRequest,
+    settings_svc: SettingsServiceDep,
+) -> AppSettingsResponse:
+    """Switch the active LLM provider; its saved config is copied into ``llm``."""
+    return await settings_svc.activate_provider(body.provider)
+
+
+@router.post(
+    "/settings/llm/providers/{provider_id}/test",
+    response_model=TestLLMResponse,
+    summary="Test a specific provider (does not change the active provider)",
+)
+async def test_llm_provider(
+    provider_id: str,
+    settings_svc: SettingsServiceDep,
+    llm_svc: LLMServiceDep,
+) -> TestLLMResponse:
+    """Test a provider using its saved config, leaving the active provider unchanged."""
+    current = await settings_svc.get()  # plaintext for internal use
+    cfg = current.llm_providers.get(provider_id)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' is not configured")
+
+    credentials = ProviderCredentials(
+        api_key=cfg.api_key,
+        base_url=cfg.base_url,
+        aws_region=cfg.aws_region,
+        aws_access_key_id=cfg.aws_access_key_id,
+        aws_secret_access_key=cfg.aws_secret_access_key,
+    )
+    return await llm_svc.test_connection(
+        provider=provider_id,
+        model=cfg.model or current.llm.model,
         credentials=credentials,
     )
 

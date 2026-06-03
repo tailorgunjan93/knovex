@@ -40,6 +40,7 @@ from backend.core.settings_store import ISettingsStore
 from backend.models.schemas import (
     AppSettingsResponse,
     EmbeddingSettings,
+    LLMProviderConfig,
     LLMSettings,
     SearchSettings,
 )
@@ -65,6 +66,25 @@ def _mask(value: str) -> str:
     return value[:4] + "..." + "****" if len(value) > 8 else "****"
 
 
+# Secret sub-keys encrypted within each per-provider config.
+_PROVIDER_SECRET_SUBKEYS = ("api_key", "aws_access_key_id", "aws_secret_access_key")
+# Config fields copied between `llm` and a provider entry.
+_PROVIDER_FIELDS = (
+    "model", "api_key", "base_url", "aws_region", "aws_access_key_id", "aws_secret_access_key",
+)
+
+
+def _provider_configured(provider_id: str, cfg: dict[str, Any]) -> bool:
+    """True if a provider has usable credentials (plaintext cfg)."""
+    if cfg.get("api_key"):
+        return True
+    if provider_id == "ollama" and cfg.get("base_url"):
+        return True
+    if provider_id == "bedrock" and cfg.get("aws_access_key_id") and cfg.get("aws_secret_access_key"):
+        return True
+    return False
+
+
 def _default_settings() -> dict[str, Any]:
     """Factory function for default settings dict. Avoids mutable class-level state."""
     from backend.core.config import settings as app_config
@@ -78,6 +98,9 @@ def _default_settings() -> dict[str, Any]:
             "aws_access_key_id": "",
             "aws_secret_access_key": "",
         },
+        # Per-provider saved configs (multi-provider). The active provider's
+        # config is mirrored here from `llm` so keys persist when switching.
+        "llm_providers": {},
         "search": {
             "engine": "duckduckgo",
             "api_key": "",
@@ -154,6 +177,50 @@ class SettingsService:
         return self._to_model(raw, masked=True)
 
     # ------------------------------------------------------------------
+    # Multi-provider operations
+    # ------------------------------------------------------------------
+
+    async def set_provider(self, provider_id: str, patch: dict[str, Any]) -> AppSettingsResponse:
+        """
+        Save one provider's config (model / key / base_url / aws_*). Only the
+        provided (non-None) fields change. If it's the active provider, the
+        change is mirrored into ``llm`` too.
+        """
+        raw = self._load()
+        providers = raw.setdefault("llm_providers", {})
+        cfg = dict(providers.get(provider_id, {}))
+        for key, value in patch.items():
+            if value is not None:
+                cfg[key] = value
+        providers[provider_id] = cfg
+
+        if raw.get("llm", {}).get("provider") == provider_id:
+            llm = raw.setdefault("llm", {})
+            for key, value in patch.items():
+                if value is not None:
+                    llm[key] = value
+
+        self._save(raw)
+        logger.info("Saved provider config: %s", provider_id)
+        return self._to_model(self._load(), masked=True)
+
+    async def activate_provider(self, provider_id: str) -> AppSettingsResponse:
+        """
+        Make *provider_id* the active provider — copies its saved config into
+        ``llm`` so chat / reader / learn use it immediately.
+        """
+        raw = self._load()
+        cfg = (raw.get("llm_providers") or {}).get(provider_id, {})
+        llm = raw.setdefault("llm", {})
+        llm["provider"] = provider_id
+        for field in _PROVIDER_FIELDS:
+            if field in cfg:
+                llm[field] = cfg[field]
+        self._save(raw)
+        logger.info("Activated provider: %s", provider_id)
+        return self._to_model(self._load(), masked=True)
+
+    # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
@@ -179,6 +246,15 @@ class SettingsService:
             if self._encryptor.is_encrypted(value):
                 raw[top][sub] = self._encryptor.decrypt(value)
 
+        # Decrypt per-provider secrets (llm_providers.<id>.<secret>)
+        for cfg in (raw.get("llm_providers") or {}).values():
+            if not isinstance(cfg, dict):
+                continue
+            for sub in _PROVIDER_SECRET_SUBKEYS:
+                value = cfg.get(sub, "")
+                if self._encryptor.is_encrypted(value):
+                    cfg[sub] = self._encryptor.decrypt(value)
+
         self._cache = raw
         return raw
 
@@ -186,11 +262,28 @@ class SettingsService:
         """Encrypt sensitive fields and delegate persistence to the store."""
         to_write = copy.deepcopy(raw)
 
+        # Mirror the active provider's config into the per-provider store so its
+        # key persists when the user switches providers (llm is the source of truth).
+        llm = to_write.get("llm", {})
+        active = llm.get("provider")
+        if active:
+            providers = to_write.setdefault("llm_providers", {})
+            providers[active] = {f: llm.get(f, "") for f in _PROVIDER_FIELDS}
+
         for field_path in SENSITIVE_FIELDS:
             top, _, sub = field_path.partition(".")
             plaintext = to_write.get(top, {}).get(sub, "")
             if plaintext and not self._encryptor.is_encrypted(plaintext):
                 to_write[top][sub] = self._encryptor.encrypt(plaintext)
+
+        # Encrypt per-provider secrets.
+        for cfg in (to_write.get("llm_providers") or {}).values():
+            if not isinstance(cfg, dict):
+                continue
+            for sub in _PROVIDER_SECRET_SUBKEYS:
+                plaintext = cfg.get(sub, "")
+                if plaintext and not self._encryptor.is_encrypted(plaintext):
+                    cfg[sub] = self._encryptor.encrypt(plaintext)
 
         self._store.save(to_write)
         self._cache = None  # invalidate cache
@@ -234,8 +327,30 @@ class SettingsService:
             search_display = search_raw
             embedding_display = embedding_raw
 
+        # ── Per-provider grid configs ────────────────────────────────────────
+        # Start from the stored providers, then force the active provider to
+        # mirror `llm` (so it always appears configured even on legacy data).
+        providers_src: dict[str, dict[str, Any]] = dict(raw.get("llm_providers") or {})
+        active = llm_raw.get("provider")
+        if active:
+            providers_src[active] = {f: llm_raw.get(f, "") for f in _PROVIDER_FIELDS}
+
+        providers_out: dict[str, LLMProviderConfig] = {}
+        for pid, cfg in providers_src.items():
+            if not isinstance(cfg, dict):
+                continue
+            configured = _provider_configured(pid, cfg)  # plaintext check, pre-mask
+            fields = {k: v for k, v in cfg.items() if k in LLMProviderConfig.model_fields}
+            if masked:
+                for sub in _PROVIDER_SECRET_SUBKEYS:
+                    if sub in fields:
+                        fields[sub] = _mask(fields.get(sub, ""))
+            fields["configured"] = configured
+            providers_out[pid] = LLMProviderConfig(**fields)
+
         return AppSettingsResponse(
             llm=LLMSettings(**llm_display),
+            llm_providers=providers_out,
             search=SearchSettings(**search_display),
             embedding=EmbeddingSettings(**embedding_display),
             theme=raw.get("theme", "dark"),

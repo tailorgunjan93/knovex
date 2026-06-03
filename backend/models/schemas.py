@@ -47,6 +47,21 @@ class LLMSettings(BaseModel):
     aws_secret_access_key: str = ""
 
 
+class LLMProviderConfig(BaseModel):
+    """
+    Per-provider saved config (multi-provider store). The active provider's
+    config is also mirrored into the top-level ``llm`` field for consumers.
+    Keys are masked in API responses.
+    """
+    model: str = ""
+    api_key: str = ""
+    base_url: str = ""
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    configured: bool = False     # derived: has a usable key / credentials
+
+
 class SearchSettings(BaseModel):
     """Web search engine configuration."""
     engine: str = "duckduckgo"  # duckduckgo | serper | brave
@@ -73,6 +88,8 @@ class EmbeddingSettings(BaseModel):
 class AppSettingsResponse(BaseModel):
     """Full settings payload returned by GET /api/settings."""
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    # Per-provider saved configs (multi-provider). Keyed by provider id.
+    llm_providers: dict[str, LLMProviderConfig] = Field(default_factory=dict)
     search: SearchSettings = Field(default_factory=SearchSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     theme: str = "dark"                     # light | medium | dark
@@ -91,6 +108,21 @@ class AppSettingsUpdate(BaseModel):
     kb_storage_path: str | None = None
     display_name: str | None = None
     onboarded: bool | None = None
+
+
+class LLMProviderUpdate(BaseModel):
+    """Save one provider's config (key/model/base_url). Used by the provider grid."""
+    model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    aws_region: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+
+
+class ActivateProviderRequest(BaseModel):
+    """Make a provider the active one (copies its saved config into ``llm``)."""
+    provider: str
 
 
 class EmbeddingModelStatus(BaseModel):
