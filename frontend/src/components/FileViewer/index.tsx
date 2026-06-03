@@ -1420,6 +1420,7 @@ export default function FileViewer({
             }}
             showWebSearch={showWebSearch}
             initialQuestion={qaInitialQ}
+            currentPage={page}
           />
         )}
       </Box>

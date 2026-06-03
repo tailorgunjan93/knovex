@@ -313,6 +313,11 @@ class ReaderService:
 
         context = await self._build_context(file_id, req.question)
 
+        # ── Page-scoped context — prioritise the page the reader is on ────────
+        page_context = ""
+        if req.page:
+            page_context = await self._build_page_context(file_id, req.page)
+
         # ── Optional web search context ──────────────────────────────────────
         web_context = ""
         if req.use_web_search and self._search_svc is not None:
@@ -339,15 +344,25 @@ class ReaderService:
                 logger.warning("Reader web search failed: %s", exc)
 
         combined_context = context
+        if page_context:
+            # The current page leads; the rest of the document follows as backup.
+            combined_context = (
+                f"Current page ({req.page}) — the user is reading this now:\n{page_context}\n\n"
+                f"--- Elsewhere in the document ---\n{context}"
+            )
         if web_context:
             combined_context = (
-                f"Document context:\n{context}\n\n"
+                f"Document context:\n{combined_context}\n\n"
                 f"Web search results:\n{web_context}"
             )
 
+        page_hint = (
+            f' The user is currently on page {req.page}; prioritise that page unless the question is broader.'
+            if req.page else ""
+        )
         system_prompt = (
             f"You are a helpful assistant answering questions about the document "
-            f'"{file.name}". '
+            f'"{file.name}".{page_hint} '
             "Use the provided document context and any web search results to answer. "
             "If the answer is not in the context, say so clearly. "
             "Be concise and cite specific parts of the document when helpful."
@@ -402,6 +417,36 @@ class ReaderService:
                 f"File '{file.name}' is not yet readable (status: {file.status}). "
                 f"Wait for ingestion to complete."
             )
+
+    async def _build_page_context(self, file_id: str, page: int) -> str:
+        """
+        Text of the chunks on a specific page — used to ground the page-assistant
+        in what the reader is currently looking at. Returns "" when the format
+        has no page info (e.g. plain text/markdown) so the caller falls back to
+        whole-document context.
+        """
+        rows = await self._backend.fetchall(
+            """
+            SELECT content
+            FROM   chunks
+            WHERE  file_id = ? AND page = ?
+            ORDER  BY chunk_index
+            LIMIT  ?
+            """,
+            (file_id, page, _MAX_CONTEXT_CHUNKS),
+        )
+        if not rows:
+            return ""
+
+        parts: list[str] = []
+        total_chars = 0
+        for row in rows:
+            chunk_text = row["content"]
+            if total_chars + len(chunk_text) > _MAX_CONTEXT_CHARS:
+                break
+            parts.append(chunk_text)
+            total_chars += len(chunk_text)
+        return "\n".join(parts)
 
     async def _build_context(self, file_id: str, question: str) -> str:
         """Fetch stored chunks and build a context string for the LLM."""

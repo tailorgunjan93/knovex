@@ -278,6 +278,7 @@ class FileContentResponse(BaseModel):
 class FileAskRequest(BaseModel):
     question: str = Field(..., min_length=1)
     use_web_search: bool = False
+    page: int | None = Field(default=None, ge=1)   # current reader page → prioritised as context
 
 
 # ---------------------------------------------------------------------------

@@ -121,12 +121,13 @@ export const readerApi = {
     fileId: string,
     question: string,
     useWebSearch = false,
+    page?: number,
   ): AsyncGenerator<string, void, unknown> {
     const url = `${API_BASE}/api/kb/${kbId}/files/${fileId}/ask`
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, use_web_search: useWebSearch }),
+      body: JSON.stringify({ question, use_web_search: useWebSearch, ...(page ? { page } : {}) }),
     })
 
     if (!res.ok) {

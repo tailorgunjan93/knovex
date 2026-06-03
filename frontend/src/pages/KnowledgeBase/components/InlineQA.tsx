@@ -57,11 +57,13 @@ interface Props {
   showWebSearch?: boolean
   /** Pre-fills the question input (e.g. from text selection toolbar) */
   initialQuestion?: string
+  /** The page the reader is currently on — grounds answers in that page. */
+  currentPage?: number
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearch = false, initialQuestion }: Props) {
+export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearch = false, initialQuestion, currentPage }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
@@ -127,7 +129,7 @@ export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearc
 
     try {
       let accumulated = ''
-      for await (const token of readerApi.askStream(kbId, fileId, question, withWeb)) {
+      for await (const token of readerApi.askStream(kbId, fileId, question, withWeb, currentPage)) {
         accumulated += token
         setMessages(prev => {
           const updated = [...prev]
