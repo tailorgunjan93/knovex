@@ -215,6 +215,21 @@ def _try_docnest(file_path: Path) -> list[Chunk] | None:
     return chunks or None
 
 
+def _pages_need_ocr(pages: list) -> bool:
+    """Decide whether a PDF warrants the (slow) OCR pipeline.
+
+    Signal: the PyMuPDF adapter rasterises *image-dominant* pages (>= ~55%
+    image coverage) into a ``page-raster`` figure precisely because they have no
+    recoverable text layer — exactly the pages OCR can rescue. So if any page is
+    a raster page, the document has scanned/image content worth OCR'ing.
+
+    A born-digital text PDF (even one with small inline figures) has no raster
+    pages, so it stays on the fast path. This is a cheap, content-based check on
+    pages we already extracted — no extra parsing.
+    """
+    return any(p.is_html and "page-raster" in p.text for p in pages)
+
+
 def _html_to_plain(html: str) -> str:
     """
     Strip HTML to plain text for indexing. Drops <img> tags entirely (so base64
@@ -245,12 +260,24 @@ class PDFParser(IFileParser):
         return frozenset({"pdf"})
 
     def parse(self, file_path: Path) -> list[Chunk]:
-        # Prefer docnest (normalisation + OCR) when installed; else lightweight PyMuPDF.
-        dn = _try_docnest(file_path)
-        if dn is not None:
-            return dn
-
+        # Smart routing: a born-digital PDF has a usable text layer, so the fast
+        # PyMuPDF path extracts it in milliseconds. We only pay for docnest's
+        # heavy OCR pipeline when the document actually needs it — i.e. it has
+        # image-dominant / scanned pages with no recoverable text. This keeps
+        # text PDFs instant while still reading scans/decks when OCR is installed.
         pages = self._adapter.extract_pages(file_path)
+
+        if _pages_need_ocr(pages):
+            ocr = _try_docnest(file_path)   # docnest OCR; None when unavailable
+            if ocr is not None:
+                return ocr
+            # OCR not installed → fall through; image pages simply yield no text.
+
+        return self._chunks_from_pages(pages)
+
+    @staticmethod
+    def _chunks_from_pages(pages: list) -> list[Chunk]:
+        """Build chunks from PyMuPDF page text (the fast path)."""
         chunks: list[Chunk] = []
         chunk_idx = 0
         for page in pages:
