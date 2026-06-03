@@ -45,6 +45,12 @@ class TestSectionsFromPayload:
     def test_empty_sections_returns_none(self):
         assert dn._sections_from_payload({"ok": True, "sections": []}) is None
 
+    def test_drops_docling_placeholder_sections(self):
+        out = dn._sections_from_payload(
+            {"ok": True, "sections": [{"text": "Figures", "section": "Figures"}, {"text": "real"}]}
+        )
+        assert out == [dn.DocnestSection(text="real")]
+
     def test_skips_blank_text_entries(self):
         out = dn._sections_from_payload(
             {"ok": True, "sections": [{"text": "  ", "section": "x"}, {"text": "real"}]}

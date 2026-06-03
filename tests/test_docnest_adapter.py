@@ -92,6 +92,20 @@ class TestParseDocumentMapping:
         assert out == [dn.DocnestSection(
             text="OCR CONFIRMS DOCNEST WORKS", section="OCR CONFIRMS DOCNEST WORKS")]
 
+    def test_drops_docling_structural_placeholders(self, monkeypatch):
+        """An image-only page docling can't OCR leaks as a 'Figures' placeholder
+        section — that must NOT be indexed as content."""
+        Sec = _install_fake_docnest(monkeypatch)
+        secs = [Sec(text="Figures", title="Figures"), Sec(text="real body text", title="Intro")]
+        _install_fake_docnest(monkeypatch, sections=secs)
+        out = dn.parse_document("invitation.pdf")
+        assert [s.text for s in out] == ["real body text"]
+
+    def test_all_placeholders_returns_none(self, monkeypatch):
+        Sec = _install_fake_docnest(monkeypatch)
+        _install_fake_docnest(monkeypatch, sections=[Sec(text="Figures", title="Figures")])
+        assert dn.parse_document("imageonly.pdf") is None
+
     def test_falls_back_to_raw_text_when_no_sections(self, monkeypatch):
         _install_fake_docnest(monkeypatch, sections=[], raw_text="flat document text")
         out = dn.parse_document("x.pdf")

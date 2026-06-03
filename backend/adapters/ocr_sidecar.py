@@ -33,6 +33,12 @@ import json
 import logging
 import sys
 
+# Mirror of docnest_adapter._DOCLING_PLACEHOLDERS (process boundary → can't import
+# it). docling group labels that leak as a section's entire content; drop them.
+_DOCLING_PLACEHOLDERS = frozenset({
+    "figures", "figure", "tables", "table", "pictures", "picture", "forms", "form",
+})
+
 
 def extract_sections(file_path: str, *, engine: str = "docling", ocr: bool = True) -> list[dict]:
     """Parse a document via docnest and return plain section dicts.
@@ -61,7 +67,7 @@ def extract_sections(file_path: str, *, engine: str = "docling", ocr: bool = Tru
         title = (getattr(sec, "title", "") or "").strip()
         text = (getattr(sec, "text", "") or "").strip()
         content = text or title  # heading-only sections still carry indexable text
-        if not content:
+        if not content or content.strip().lower() in _DOCLING_PLACEHOLDERS:
             continue
         sections.append({"text": content, "section": title, "page": getattr(sec, "page", None)})
 

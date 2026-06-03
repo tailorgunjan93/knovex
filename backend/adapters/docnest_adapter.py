@@ -28,6 +28,18 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# docling leaks its document-structure *group* labels (e.g. an image-only page
+# with no OCR'd text becomes a section whose entire content is the word
+# "Figures"). Indexing those pollutes search with meaningless chunks, so we drop
+# any section whose whole content is just such a structural placeholder.
+_DOCLING_PLACEHOLDERS = frozenset({
+    "figures", "figure", "tables", "table", "pictures", "picture", "forms", "form",
+})
+
+
+def _is_placeholder(content: str) -> bool:
+    return content.strip().lower() in _DOCLING_PLACEHOLDERS
+
 
 @dataclass(frozen=True)
 class DocnestSection:
@@ -125,7 +137,7 @@ def _parse_in_process(
         # OCR'd line) as title-with-empty-text — that title is still real,
         # indexable content, so fall back to it. Skip only when both are empty.
         content = text or title
-        if not content:
+        if not content or _is_placeholder(content):
             continue
         sections.append(
             DocnestSection(text=content, section=title, page=getattr(sec, "page", None))
@@ -176,7 +188,9 @@ def _sections_from_payload(data: dict) -> list[DocnestSection] | None:
             page=s.get("page"),
         )
         for s in data.get("sections", [])
-        if isinstance(s, dict) and (s.get("text") or "").strip()
+        if isinstance(s, dict)
+        and (s.get("text") or "").strip()
+        and not _is_placeholder(s["text"])
     ]
     return sections or None
 
