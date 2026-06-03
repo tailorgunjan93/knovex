@@ -15,6 +15,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, type AppSettings } from '@/api/settings.api'
 import { useSettingsStore } from '@/store/settings.store'
 import { BRAND } from '@/theme/tokens'
+import OcrPackCard from './OcrPackCard'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
 
@@ -161,6 +162,12 @@ export default function AppSettingsTab({ settings }: AppSettingsProps) {
       {pathMutation.isSuccess && (
         <Alert severity="success" sx={{ mt: -3, mb: 4, borderRadius: 2 }}>Path saved. Restart the app to apply.</Alert>
       )}
+
+      {/* ── Advanced (OCR pack) ── */}
+      <SectionLabel>ADVANCED</SectionLabel>
+      <Box sx={{ mb: 4 }}>
+        <OcrPackCard />
+      </Box>
 
       {/* ── About ── */}
       <SectionLabel>ABOUT</SectionLabel>
