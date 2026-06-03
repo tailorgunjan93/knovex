@@ -234,6 +234,7 @@ async def stream_chat(
             use_web_search=body.use_web_search,
             search_engine=search.engine,
             search_api_key=search.api_key,
+            search_engines=await settings_svc.enabled_search_engines(),
             kb_ids=body.kb_ids or None,
             attached_context=body.attached_context or None,
         ),

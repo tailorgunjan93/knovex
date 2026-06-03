@@ -63,9 +63,22 @@ class LLMProviderConfig(BaseModel):
 
 
 class SearchSettings(BaseModel):
-    """Web search engine configuration."""
-    engine: str = "duckduckgo"  # duckduckgo | serper | brave
+    """Web search engine configuration (legacy 'primary' engine; kept for compat)."""
+    engine: str = "duckduckgo"  # duckduckgo | wikipedia | serper | brave
     api_key: str = ""
+
+
+class SearchEngineConfig(BaseModel):
+    """Per-engine config (multi-engine). Free engines need no key."""
+    enabled: bool = False
+    api_key: str = ""
+    configured: bool = False     # derived: free engine, or a key is present
+
+
+class SearchEngineUpdate(BaseModel):
+    """Enable/disable an engine or set its key. Used by the search grid."""
+    enabled: bool | None = None
+    api_key: str | None = None
 
 
 class EmbeddingSettings(BaseModel):
@@ -91,6 +104,8 @@ class AppSettingsResponse(BaseModel):
     # Per-provider saved configs (multi-provider). Keyed by provider id.
     llm_providers: dict[str, LLMProviderConfig] = Field(default_factory=dict)
     search: SearchSettings = Field(default_factory=SearchSettings)
+    # Per-engine configs (multi-engine web search). Keyed by engine id.
+    search_engines: dict[str, SearchEngineConfig] = Field(default_factory=dict)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     theme: str = "dark"                     # light | medium | dark
     kb_storage_path: str = ""

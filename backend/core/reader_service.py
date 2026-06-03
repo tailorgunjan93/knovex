@@ -297,6 +297,7 @@ class ReaderService:
         credentials: ProviderCredentials,
         search_engine: str = "duckduckgo",
         search_api_key: str = "",
+        search_engines: list[tuple[str, str]] | None = None,
     ) -> AsyncGenerator[str, None]:
         """
         Stream an answer to *req.question* grounded in the file's chunks.
@@ -316,11 +317,14 @@ class ReaderService:
         web_context = ""
         if req.use_web_search and self._search_svc is not None:
             try:
-                web_resp = await self._search_svc.search(
-                    query=req.question,
-                    engine=search_engine,
-                    api_key=search_api_key,
-                    num_results=5,
+                web_resp = (
+                    await self._search_svc.search_blended(
+                        query=req.question, engines=search_engines, num_results=5,
+                    )
+                    if search_engines
+                    else await self._search_svc.search(
+                        query=req.question, engine=search_engine, api_key=search_api_key, num_results=5,
+                    )
                 )
                 if web_resp.results:
                     parts = []

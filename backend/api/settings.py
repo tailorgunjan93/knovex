@@ -22,6 +22,7 @@ from backend.models.schemas import (
     LLMModelsResponse,
     LLMProviderUpdate,
     OllamaDetectResponse,
+    SearchEngineUpdate,
     TestLLMResponse,
 )
 
@@ -193,6 +194,27 @@ async def test_llm_provider(
         model=cfg.model or current.llm.model,
         credentials=credentials,
     )
+
+
+# ---------------------------------------------------------------------------
+# Multi-engine web search — enable/disable + key per engine
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/settings/search/engines/{engine_id}",
+    response_model=AppSettingsResponse,
+    summary="Enable/disable a search engine or set its key",
+)
+async def set_search_engine(
+    engine_id: str,
+    body: SearchEngineUpdate,
+    settings_svc: SettingsServiceDep,
+) -> AppSettingsResponse:
+    """Toggle an engine on/off or save its API key. Response is masked."""
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise HTTPException(status_code=400, detail="No fields provided to update")
+    return await settings_svc.set_search_engine(engine_id, patch)
 
 
 # ---------------------------------------------------------------------------

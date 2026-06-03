@@ -39,11 +39,16 @@ async def web_search(
     For DuckDuckGo no API key is required.
     For Serper / Brave set the key in Settings → Search.
     """
+    engines = await settings_svc.enabled_search_engines()
+    if engines:
+        return await search_svc.search_blended(
+            query=body.query, engines=engines, num_results=body.num_results,
+        )
+    # Fallback: legacy single-engine config.
     current = await settings_svc.get()
-    search = current.search
     return await search_svc.search(
         query=body.query,
-        engine=search.engine or "duckduckgo",
-        api_key=search.api_key or "",
+        engine=current.search.engine or "duckduckgo",
+        api_key=current.search.api_key or "",
         num_results=body.num_results,
     )

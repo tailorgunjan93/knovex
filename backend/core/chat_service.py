@@ -138,6 +138,7 @@ class ChatService:
         use_web_search: bool = False,
         search_engine: str = "duckduckgo",
         search_api_key: str = "",
+        search_engines: list[tuple[str, str]] | None = None,
         kb_ids: list[str] | None = None,
         attached_context: str | None = None,
     ) -> AsyncGenerator[str, None]:
@@ -178,11 +179,19 @@ class ChatService:
         web_sources: list[dict] = []
         web_context = ""
         if use_web_search:
-            web_resp = await self._search_svc.search(
-                query=user_message,
-                engine=search_engine,
-                api_key=search_api_key,
-                num_results=_MAX_WEB_RESULTS,
+            web_resp = (
+                await self._search_svc.search_blended(
+                    query=user_message,
+                    engines=search_engines,
+                    num_results=_MAX_WEB_RESULTS,
+                )
+                if search_engines
+                else await self._search_svc.search(
+                    query=user_message,
+                    engine=search_engine,
+                    api_key=search_api_key,
+                    num_results=_MAX_WEB_RESULTS,
+                )
             )
             web_sources = [r.model_dump() for r in web_resp.results]
             if web_sources:

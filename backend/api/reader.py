@@ -164,6 +164,7 @@ async def ask_file(
             credentials=credentials,
             search_engine=current.search.engine,
             search_api_key=current.search.api_key,
+            search_engines=await settings_svc.enabled_search_engines(),
         ),
         media_type="text/event-stream",
         headers={

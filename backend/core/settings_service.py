@@ -42,6 +42,7 @@ from backend.models.schemas import (
     EmbeddingSettings,
     LLMProviderConfig,
     LLMSettings,
+    SearchEngineConfig,
     SearchSettings,
 )
 
@@ -74,6 +75,15 @@ _PROVIDER_FIELDS = (
 )
 
 
+_SEARCH_ENGINE_IDS = ("duckduckgo", "wikipedia", "serper", "brave")
+_FREE_SEARCH_ENGINES = {"duckduckgo", "wikipedia"}   # no API key required
+
+
+def _engine_configured(engine_id: str, cfg: dict[str, Any]) -> bool:
+    """A free engine is always usable; a paid engine needs a key."""
+    return engine_id in _FREE_SEARCH_ENGINES or bool(cfg.get("api_key"))
+
+
 def _provider_configured(provider_id: str, cfg: dict[str, Any]) -> bool:
     """True if a provider has usable credentials (plaintext cfg)."""
     if cfg.get("api_key"):
@@ -104,6 +114,13 @@ def _default_settings() -> dict[str, Any]:
         "search": {
             "engine": "duckduckgo",
             "api_key": "",
+        },
+        # Per-engine multi-search configs. DuckDuckGo on by default (free).
+        "search_engines": {
+            "duckduckgo": {"enabled": True,  "api_key": ""},
+            "wikipedia":  {"enabled": False, "api_key": ""},
+            "serper":     {"enabled": False, "api_key": ""},
+            "brave":      {"enabled": False, "api_key": ""},
         },
         "embedding": {
             "enabled": False,
@@ -220,6 +237,33 @@ class SettingsService:
         logger.info("Activated provider: %s", provider_id)
         return self._to_model(self._load(), masked=True)
 
+    async def set_search_engine(self, engine_id: str, patch: dict[str, Any]) -> AppSettingsResponse:
+        """Enable/disable a search engine or set its key (multi-engine grid)."""
+        raw = self._load()
+        engines = raw.setdefault("search_engines", {})
+        cfg = dict(engines.get(engine_id, {"enabled": False, "api_key": ""}))
+        for key, value in patch.items():
+            if value is not None:
+                cfg[key] = value
+        engines[engine_id] = cfg
+        self._save(raw)
+        logger.info("Saved search engine: %s", engine_id)
+        return self._to_model(self._load(), masked=True)
+
+    async def enabled_search_engines(self) -> list[tuple[str, str]]:
+        """
+        (engine_id, api_key) for every enabled + usable engine — for the search
+        service to blend. Paid engines without a key are skipped.
+        """
+        raw = self._load()
+        out: list[tuple[str, str]] = []
+        for eid, cfg in (raw.get("search_engines") or {}).items():
+            if not isinstance(cfg, dict) or not cfg.get("enabled"):
+                continue
+            if _engine_configured(eid, cfg):
+                out.append((eid, cfg.get("api_key", "")))
+        return out
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -255,6 +299,11 @@ class SettingsService:
                 if self._encryptor.is_encrypted(value):
                     cfg[sub] = self._encryptor.decrypt(value)
 
+        # Decrypt per-engine search keys (search_engines.<id>.api_key)
+        for cfg in (raw.get("search_engines") or {}).values():
+            if isinstance(cfg, dict) and self._encryptor.is_encrypted(cfg.get("api_key", "")):
+                cfg["api_key"] = self._encryptor.decrypt(cfg["api_key"])
+
         self._cache = raw
         return raw
 
@@ -284,6 +333,13 @@ class SettingsService:
                 plaintext = cfg.get(sub, "")
                 if plaintext and not self._encryptor.is_encrypted(plaintext):
                     cfg[sub] = self._encryptor.encrypt(plaintext)
+
+        # Encrypt per-engine search keys.
+        for cfg in (to_write.get("search_engines") or {}).values():
+            if isinstance(cfg, dict):
+                plaintext = cfg.get("api_key", "")
+                if plaintext and not self._encryptor.is_encrypted(plaintext):
+                    cfg["api_key"] = self._encryptor.encrypt(plaintext)
 
         self._store.save(to_write)
         self._cache = None  # invalidate cache
@@ -348,10 +404,24 @@ class SettingsService:
             fields["configured"] = configured
             providers_out[pid] = LLMProviderConfig(**fields)
 
+        # ── Per-engine search configs ────────────────────────────────────────
+        engines_out: dict[str, SearchEngineConfig] = {}
+        for eid, cfg in (raw.get("search_engines") or {}).items():
+            if not isinstance(cfg, dict):
+                continue
+            configured = _engine_configured(eid, cfg)
+            key = cfg.get("api_key", "")
+            engines_out[eid] = SearchEngineConfig(
+                enabled=bool(cfg.get("enabled", False)),
+                api_key=_mask(key) if masked else key,
+                configured=configured,
+            )
+
         return AppSettingsResponse(
             llm=LLMSettings(**llm_display),
             llm_providers=providers_out,
             search=SearchSettings(**search_display),
+            search_engines=engines_out,
             embedding=EmbeddingSettings(**embedding_display),
             theme=raw.get("theme", "dark"),
             kb_storage_path=raw.get("kb_storage_path", ""),
