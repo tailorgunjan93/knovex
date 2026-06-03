@@ -21,7 +21,6 @@
 import { Box, Typography, useTheme } from '@mui/material'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
-const SERIF = '"Instrument Serif", Georgia, serif'
 
 interface ScreenHeaderProps {
   eyebrow?:      string           // "LIBRARY · 6 COLLECTIONS" (mono, all-caps, em-dash prepended)
@@ -84,10 +83,9 @@ export default function ScreenHeader({
         <Typography
           component="h1"
           sx={{
-            fontFamily:    SERIF,
-            fontWeight:    400,
+            fontWeight:    700,
             fontSize:      32,
-            letterSpacing: '-0.01em',
+            letterSpacing: '-0.02em',
             lineHeight:    1.05,
             color:         'text.primary',
             m:              0,
@@ -98,9 +96,9 @@ export default function ScreenHeader({
             <>
               {' '}
               <Box
-                component="em"
+                component="span"
                 sx={{
-                  fontStyle: 'italic',
+                  fontStyle: 'normal',
                   color:      theme.palette.primary.main,
                 }}
               >
