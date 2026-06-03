@@ -79,16 +79,30 @@ def parse_document(
     """
     Parse a document through docnest, returning normalised sections.
 
-    Returns ``None`` when docnest is unavailable or cannot handle the file (the
-    caller should fall back to the lightweight adapter). An empty list means
-    docnest parsed the file but found no usable text — also a fall-back signal,
-    surfaced as ``None`` to keep the caller contract simple.
+    Strategy: use docnest **in-process** when it's importable (dev / a venv with
+    docnest installed); otherwise fall back to an **out-of-process sidecar** in a
+    provisioned OCR environment (the packaged app, where docnest can't be bundled
+    or imported into the frozen backend). Returns ``None`` when neither route is
+    available or can't handle the file, so the caller uses the lightweight path.
 
     ``pdf_engine`` selects docnest's PDF backend: ``"docling"`` (default — ML
     layout analysis) or ``"pymupdf"`` (fast font heuristic, no model downloads).
     ``ocr`` enables OCR for scanned/image-only PDFs on the docling path (the
     reason delegation exists); first use downloads docling's OCR models.
     """
+    if is_available():
+        return _parse_in_process(file_path, pdf_engine, ocr)
+
+    python_exe = _resolve_ocr_python()
+    if python_exe:
+        return parse_via_sidecar(file_path, python_exe, engine=pdf_engine, ocr=ocr)
+    return None
+
+
+def _parse_in_process(
+    file_path: str | Path, pdf_engine: str, ocr: bool
+) -> list[DocnestSection] | None:
+    """Parse using docnest imported into the current interpreter."""
     try:
         factory = _build_factory(pdf_engine, ocr)
     except Exception:
@@ -124,3 +138,91 @@ def parse_document(
             sections.append(DocnestSection(text=raw_text))
 
     return sections or None
+
+
+# ── Out-of-process sidecar (packaged app: docnest lives in a provisioned env) ──
+
+def _resolve_ocr_python() -> str | None:
+    """Locate a Python interpreter that has docnest installed, or ``None``.
+
+    Resolution is config-free (no ``core`` import) so the adapter stays a leaf:
+    the provisioner / desktop layer points us at the env via environment vars.
+      * ``KNOVEX_OCR_PYTHON`` — explicit interpreter path, or
+      * ``KNOVEX_OCR_HOME``   — an env dir (we find Scripts/python.exe | bin/python).
+    """
+    import os
+
+    explicit = os.environ.get("KNOVEX_OCR_PYTHON")
+    if explicit and Path(explicit).exists():
+        return explicit
+
+    home = os.environ.get("KNOVEX_OCR_HOME")
+    if home:
+        for rel in ("Scripts/python.exe", "bin/python", "bin/python3"):
+            cand = Path(home) / rel
+            if cand.exists():
+                return str(cand)
+    return None
+
+
+def _sections_from_payload(data: dict) -> list[DocnestSection] | None:
+    """Map the sidecar's JSON payload onto DocnestSections (pure, unit-tested)."""
+    if not isinstance(data, dict) or not data.get("ok"):
+        return None
+    sections = [
+        DocnestSection(
+            text=s["text"],
+            section=s.get("section", "") or "",
+            page=s.get("page"),
+        )
+        for s in data.get("sections", [])
+        if isinstance(s, dict) and (s.get("text") or "").strip()
+    ]
+    return sections or None
+
+
+def parse_via_sidecar(
+    file_path: str | Path,
+    python_exe: str,
+    *,
+    engine: str = "docling",
+    ocr: bool = True,
+    timeout: int = 900,
+) -> list[DocnestSection] | None:
+    """Run ``ocr_sidecar.py`` under ``python_exe`` and map its JSON result.
+
+    The sidecar writes JSON to a temp file (kept clear of any library logging on
+    stdout). Any launch/parse/OCR failure degrades to ``None`` so the caller
+    falls back to the lightweight path — OCR is best-effort, never fatal.
+    """
+    import json
+    import os
+    import subprocess
+    import tempfile
+
+    sidecar = os.path.join(os.path.dirname(__file__), "ocr_sidecar.py")
+    fd, out_path = tempfile.mkstemp(suffix=".json", prefix="knovex_ocr_")
+    os.close(fd)
+    cmd = [str(python_exe), sidecar, str(file_path), "--engine", engine, "--out", out_path]
+    if not ocr:
+        cmd.append("--no-ocr")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if proc.returncode != 0:
+            detail = (proc.stdout or proc.stderr or "").strip()[:500]
+            logger.info("OCR sidecar exited %s: %s", proc.returncode, detail)
+        with open(out_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception as exc:  # noqa: BLE001 — launch/timeout/JSON errors all fall back
+        logger.info("OCR sidecar failed for %s (%s)", Path(str(file_path)).name, exc)
+        return None
+    finally:
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
+
+    if not data.get("ok"):
+        logger.info("OCR sidecar reported failure: %s", data.get("error"))
+        return None
+    return _sections_from_payload(data)
