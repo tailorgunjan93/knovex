@@ -63,30 +63,36 @@ class TestPDFParserIndexesText:
 
     def test_delegates_to_docnest_when_installed(self, monkeypatch):
         """Ingestion is docnest's domain: when installed, PDFParser uses it
-        (OCR + normalisation) instead of the lightweight PyMuPDF fallback."""
-        import sys
-        import types
+        (OCR + normalisation) instead of the lightweight PyMuPDF fallback.
 
-        class _Ch:
-            def __init__(self, t, s, p):
-                self.text, self.section, self.page = t, s, p
+        We patch the anti-corruption seam (`docnest_adapter.parse_document`) —
+        PDFParser must consume its normalised DocnestSection shape, not reach
+        into docnest's concrete API itself.
+        """
+        from backend.adapters import docnest_adapter
+        from backend.core import ingestion_service
 
-        class _Parsed:
-            chunks = [_Ch("Real text recovered by docnest OCR", "Slide 6", 6)]
-
-        class _Parser:
-            def parse(self, _path):
-                return _Parsed()
-
-        pkg = types.ModuleType("docnest")
-        sub = types.ModuleType("docnest.parsers")
-        sub.get_parser = lambda _fmt: _Parser()           # type: ignore[attr-defined]
-        monkeypatch.setitem(sys.modules, "docnest", pkg)
-        monkeypatch.setitem(sys.modules, "docnest.parsers", sub)
+        monkeypatch.setattr(
+            ingestion_service.docnest_adapter, "parse_document",
+            lambda *_a, **_k: [docnest_adapter.DocnestSection(
+                text="Real text recovered by docnest OCR", section="Slide 6", page=6)],
+        )
 
         # Even though the PyMuPDF stub would yield "fallback text", docnest wins.
         page = PageContent(page_num=1, text="<p>pymupdf fallback text</p>", is_html=True)
         chunks = self._parser([page]).parse(Path("scan.pdf"))
         assert len(chunks) == 1
         assert chunks[0].content == "Real text recovered by docnest OCR"
+        assert chunks[0].section == "Slide 6"
         assert chunks[0].page == 6
+
+    def test_falls_back_when_docnest_absent(self, monkeypatch):
+        """When docnest yields nothing, PDFParser uses the PyMuPDF adapter."""
+        from backend.core import ingestion_service
+
+        monkeypatch.setattr(
+            ingestion_service.docnest_adapter, "parse_document", lambda *_a, **_k: None)
+        page = PageContent(page_num=2, text="<p>local fallback content here.</p>", is_html=True)
+        chunks = self._parser([page]).parse(Path("x.pdf"))
+        assert len(chunks) == 1
+        assert "local fallback content" in chunks[0].content

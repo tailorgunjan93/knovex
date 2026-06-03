@@ -32,6 +32,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from backend.adapters import docnest_adapter
 from backend.adapters.document_parsers import (
     IParagraphAdapter,
     IPDFAdapter,
@@ -184,36 +185,34 @@ class CSVParser(IFileParser):
         return chunks
 
 
-def _try_docnest(file_path: Path, fmt: str) -> list[Chunk] | None:
+def _try_docnest(file_path: Path) -> list[Chunk] | None:
     """
     Best-effort: parse via docnest-ai (normalisation + OCR) when it's installed.
 
     Document ingestion is docnest's domain, not Knovex's — so when the engine is
     available we delegate to it (this is how we get OCR for scans/design PDFs
-    without owning any of it). Returns Chunks, or None when docnest is absent or
-    can't handle the file, so the caller falls back to the lightweight adapter.
+    without owning any of it). All docnest contact goes through the
+    ``docnest_adapter`` anti-corruption seam. Returns Chunks, or None when
+    docnest is absent or can't handle the file, so the caller falls back to the
+    lightweight adapter.
     """
-    try:
-        from docnest.parsers import get_parser as dn_get_parser  # type: ignore
-    except Exception:
+    sections = docnest_adapter.parse_document(file_path)
+    if not sections:
         return None
-    try:
-        parsed = dn_get_parser(fmt).parse(str(file_path))
-        chunks: list[Chunk] = []
-        for i, ch in enumerate(getattr(parsed, "chunks", []) or []):
-            text = (getattr(ch, "text", "") or "").strip()
-            if not text:
+    chunks: list[Chunk] = []
+    idx = 0
+    for sec in sections:
+        for c in PlainTextParser._split_into_chunks(sec.text, max_chars=1200):
+            if not c.content:
                 continue
             chunks.append(Chunk(
-                content=text,
-                chunk_index=i,
-                section=getattr(ch, "section", "") or "",
-                page=getattr(ch, "page", None),
+                content=c.content,
+                chunk_index=idx,
+                section=sec.section,
+                page=sec.page,
             ))
-        return chunks or None   # nothing usable → let the fallback try
-    except Exception as exc:
-        logger.info("docnest ingestion unavailable for %s (%s) — using fallback", file_path.name, exc)
-        return None
+            idx += 1
+    return chunks or None
 
 
 def _html_to_plain(html: str) -> str:
@@ -247,7 +246,7 @@ class PDFParser(IFileParser):
 
     def parse(self, file_path: Path) -> list[Chunk]:
         # Prefer docnest (normalisation + OCR) when installed; else lightweight PyMuPDF.
-        dn = _try_docnest(file_path, "pdf")
+        dn = _try_docnest(file_path)
         if dn is not None:
             return dn
 
@@ -345,22 +344,12 @@ class UDFParser(IFileParser):
         return frozenset({"udf"})
 
     def parse(self, file_path: Path) -> list[Chunk]:
-        # Prefer docnest-ai native UDF support
-        try:
-            from docnest.parsers import get_parser as dn_get_parser  # type: ignore
-            parser = dn_get_parser("udf")
-            parsed_doc = parser.parse(str(file_path))
-            chunks = []
-            for i, chunk in enumerate(parsed_doc.chunks):
-                chunks.append(Chunk(
-                    content=chunk.text,
-                    chunk_index=i,
-                    section=getattr(chunk, "section", ""),
-                    page=getattr(chunk, "page", None),
-                ))
-            return chunks
-        except Exception:
-            pass  # Fall through to ZIP fallback
+        # Prefer docnest-ai when installed (via the anti-corruption seam). It
+        # may decline .udf (the factory parses documents, not docnest's own
+        # archive format) — then we fall through to the ZIP extractor below.
+        dn = _try_docnest(file_path)
+        if dn is not None:
+            return dn
 
         # Fallback: extract text from ZIP entries
         import zipfile
