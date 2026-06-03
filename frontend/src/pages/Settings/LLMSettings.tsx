@@ -1,700 +1,285 @@
 /**
- * LLM Settings Tab
+ * LLM Settings — multi-provider card grid (lab screen 17).
  *
- * Provider dropdown → model input → masked API key → test button.
- * Supports: OpenAI, Anthropic, Groq, Gemini, Cerebras, AWS Bedrock, Ollama.
+ * Each provider is an independently-configured card: paste a key, pick a model,
+ * test it. One provider is "Active" (answers chat & page Q&A); the rest stay on
+ * standby. Backed by the per-provider store (settings.llm_providers) + the
+ * active selector (settings.llm.provider) — see settings_service.
  *
- * Also includes the Embeddings section (Sprint 7):
- *   - Local ONNX model (all-MiniLM-L6-v2, first-launch download)
- *   - OpenAI Embeddings API (optional key, skip local download)
+ * Embeddings live in their own Settings tab now (not here).
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import {
-  Box,
-  Typography,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Button,
-  Alert,
-  CircularProgress,
-  LinearProgress,
-  Chip,
-  Divider,
-  InputAdornment,
-  IconButton,
-  FormHelperText,
-  Tooltip,
+  Box, Typography, TextField, Button, Chip, Switch, InputAdornment,
+  IconButton, CircularProgress, Tooltip, alpha, useTheme,
 } from '@mui/material'
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import WifiTetheringIcon from '@mui/icons-material/WifiTethering'
-import RadarIcon from '@mui/icons-material/Radar'
 import LockIcon from '@mui/icons-material/Lock'
-import DownloadIcon from '@mui/icons-material/Download'
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
-import SyncIcon from '@mui/icons-material/Sync'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { settingsApi, type AppSettings } from '@/api/settings.api'
-import { setupApi } from '@/api/setup.api'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { settingsApi, type AppSettings, type LLMProviderConfig } from '@/api/settings.api'
+import { BRAND } from '@/theme/tokens'
 
-const PROVIDERS = [
-  { id: 'openai',    label: 'OpenAI',         requiresKey: true,  hasBaseUrl: false },
-  { id: 'anthropic', label: 'Anthropic',       requiresKey: true,  hasBaseUrl: false },
-  { id: 'groq',      label: 'Groq',            requiresKey: true,  hasBaseUrl: false },
-  { id: 'gemini',    label: 'Google Gemini',   requiresKey: true,  hasBaseUrl: false },
-  { id: 'cerebras',  label: 'Cerebras',        requiresKey: true,  hasBaseUrl: false },
-  { id: 'bedrock',   label: 'AWS Bedrock',     requiresKey: false, hasBaseUrl: false },
-  { id: 'ollama',    label: 'Ollama (local)',  requiresKey: false, hasBaseUrl: true  },
+const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
+
+interface ProviderMeta {
+  id: string
+  label: string
+  letter: string
+  color: string
+  requiresKey: boolean
+  hasBaseUrl?: boolean
+  isBedrock?: boolean
+  defaultModel: string
+}
+
+const PROVIDERS: ProviderMeta[] = [
+  { id: 'openai',    label: 'OpenAI',        letter: 'O',  color: '#10A37F', requiresKey: true,  defaultModel: 'gpt-4o-mini' },
+  { id: 'anthropic', label: 'Anthropic',     letter: 'A',  color: '#C9714E', requiresKey: true,  defaultModel: 'claude-haiku-4-5' },
+  { id: 'groq',      label: 'Groq',          letter: 'Gq', color: '#F55036', requiresKey: true,  defaultModel: 'llama-3.3-70b-versatile' },
+  { id: 'gemini',    label: 'Google Gemini', letter: 'Ge', color: '#4285F4', requiresKey: true,  defaultModel: 'gemini-2.0-flash' },
+  { id: 'cerebras',  label: 'Cerebras',      letter: 'Ce', color: '#F76707', requiresKey: true,  defaultModel: 'llama3.3-70b' },
+  { id: 'bedrock',   label: 'AWS Bedrock',   letter: 'Be', color: '#FF9900', requiresKey: false, isBedrock: true, defaultModel: 'anthropic.claude-3-5-sonnet-20240620-v1:0' },
+  { id: 'ollama',    label: 'Ollama',        letter: 'Ol', color: '#6E7079', requiresKey: false, hasBaseUrl: true, defaultModel: 'llama3.2:3b' },
 ]
 
-interface LLMSettingsProps {
+interface Props {
   settings: AppSettings
 }
 
-// ── localStorage helpers ──────────────────────────────────────────────────────
-// Persist non-sensitive form state across sessions.
-// API keys are intentionally NOT stored here; they live in the backend (encrypted).
-
-const LS_LLM = 'knovex_llm_draft'
-
-export function loadLLMDraft(): { provider?: string; model?: string; baseUrl?: string } {
-  try { return JSON.parse(localStorage.getItem(LS_LLM) ?? '{}') } catch { return {} }
-}
-export function saveLLMDraft(data: { provider: string; model: string; baseUrl: string }) {
-  try { localStorage.setItem(LS_LLM, JSON.stringify(data)) } catch { /* ignore */ }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-export default function LLMSettingsTab({ settings }: LLMSettingsProps) {
-  const qc = useQueryClient()
-
-  const currentLLM = settings.llm
-  const currentEmb = settings.embedding ?? { provider: 'local', model: 'text-embedding-3-small', api_key: '' }
-
-  // Initialise from localStorage draft first, then fall back to backend values.
-  // This makes the form "sticky" — navigating away and back preserves changes.
-  const draft = loadLLMDraft()
-
-  const [provider, setProvider] = useState(draft.provider ?? currentLLM.provider)
-  const [model, setModel] = useState(draft.model ?? currentLLM.model)
-  const [apiKey, setApiKey] = useState('')          // always empty — enter only to change
-  const [baseUrl, setBaseUrl] = useState(draft.baseUrl ?? (currentLLM.base_url || 'http://localhost:11434'))
-  const [awsRegion, setAwsRegion] = useState(currentLLM.aws_region || 'us-east-1')
-  const [awsKeyId, setAwsKeyId] = useState('')
-  const [awsSecretKey, setAwsSecretKey] = useState('')
-  const [showKey, setShowKey] = useState(false)
-  const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null)
-  const [modelsRefreshed, setModelsRefreshed] = useState<number | null>(null) // count after last refresh
-
-  // Keep localStorage in sync whenever the user edits these fields
-  useEffect(() => {
-    saveLLMDraft({ provider, model, baseUrl })
-  }, [provider, model, baseUrl])
-
-  // ── Embedding state ────────────────────────────────────────────────────────
-  const [embProvider, setEmbProvider] = useState(currentEmb.provider)
-  const [embApiKey, setEmbApiKey]     = useState('')   // always empty on load
-  const [showEmbKey, setShowEmbKey]   = useState(false)
-  const [dlProgress, setDlProgress]   = useState<number | null>(null)  // null = idle
-  const [dlError, setDlError]         = useState<string | null>(null)
-  const [dlDone, setDlDone]           = useState(false)
-  const abortRef = useRef<AbortController | null>(null)
-
-  // Local model status
-  const modelStatusQuery = useQuery({
-    queryKey: ['embedding-model-status'],
-    queryFn: setupApi.getModelStatus,
-    refetchOnWindowFocus: false,
-  })
-
-  const embSaveMutation = useMutation({
-    mutationFn: () =>
-      settingsApi.update({
-        embedding: {
-          provider: embProvider,
-          ...(embApiKey ? { api_key: embApiKey } : {}),
-        },
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings'] })
-    },
-  })
-
-  const handleDownloadModel = () => {
-    setDlProgress(0)
-    setDlError(null)
-    setDlDone(false)
-    abortRef.current = new AbortController()
-    setupApi
-      .downloadModel(
-        (pct) => setDlProgress(pct),
-        abortRef.current.signal,
-      )
-      .then(() => {
-        setDlProgress(100)
-        setDlDone(true)
-        modelStatusQuery.refetch()
-      })
-      .catch((err: Error) => {
-        if (err.name !== 'AbortError') {
-          setDlError(err.message)
-        }
-        setDlProgress(null)
-      })
-  }
-
-  const providerInfo = PROVIDERS.find((p) => p.id === provider)
-
-  // Ollama auto-detect
-  const detectMutation = useMutation({
-    mutationFn: settingsApi.detectOllama,
-    onSuccess: (result) => {
-      if (result.detected) {
-        setBaseUrl(result.url)
-        // Auto-select first detected model if model field is blank
-        if (!model && result.models.length > 0) {
-          setModel(result.models[0])
-        }
-      }
-    },
-  })
-
-  // Model catalogue for selected provider
-  const { data: modelsData, isFetching: modelsFetching, refetch: refetchModels } = useQuery({
-    queryKey: ['llm-models', provider],
-    queryFn: () => settingsApi.getModels(provider),
-  })
-
-  // Auto-fix stale model: if the saved model ID no longer appears in the catalogue
-  // (e.g. a provider removed or renamed it), silently select the first available model.
-  // Without this the MUI Select shows a blank field because no MenuItem matches.
-  useEffect(() => {
-    if (
-      modelsData?.models.length &&
-      model &&
-      !modelsData.models.find((m) => m.id === model)
-    ) {
-      setModel(modelsData.models[0].id)
-    }
-  }, [modelsData])
-
-  // Save mutation
-  const saveMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof settingsApi.update>[0]) =>
-      settingsApi.update(patch),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings'] })
-      // After a successful save the draft is committed — clear it so localStorage
-      // stays in sync with the backend rather than preserving stale draft values.
-      try { localStorage.removeItem(LS_LLM) } catch { /* ignore */ }
-      setApiKey('')    // clear the key input (it's now saved on the backend)
-    },
-  })
-
-  // Test mutation
-  const testMutation = useMutation({
-    mutationFn: async () => {
-      // Save first, then test
-      await saveMutation.mutateAsync(buildPatch())
-      return settingsApi.testLLM()
-    },
-    onSuccess: (result) => {
-      setTestResult(
-        result.success
-          ? { success: true, msg: `Connected — ${result.latency_ms}ms` }
-          : { success: false, msg: result.error ?? 'Connection failed' },
-      )
-    },
-    onError: (err: Error) => {
-      setTestResult({ success: false, msg: err.message })
-    },
-  })
-
-  const buildPatch = () => ({
-    llm: {
-      provider,
-      model,
-      ...(apiKey ? { api_key: apiKey } : {}),
-      base_url: baseUrl,
-      aws_region: awsRegion,
-      ...(awsKeyId ? { aws_access_key_id: awsKeyId } : {}),
-      ...(awsSecretKey ? { aws_secret_access_key: awsSecretKey } : {}),
-    },
-  })
-
-  const handleSave = () => {
-    saveMutation.mutate(buildPatch())
-    setTestResult(null)
-  }
+export default function LLMSettingsTab({ settings }: Props) {
+  const theme = useTheme()
+  const activeProvider = settings.llm.provider
+  const providers = settings.llm_providers ?? {}
+  const configuredCount = PROVIDERS.filter(p => providers[p.id]?.configured).length
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 520 }}>
-      <Typography variant="h6" fontWeight={600}>LLM Provider</Typography>
-
-      {/* Provider */}
-      <FormControl fullWidth>
-        <InputLabel>Provider</InputLabel>
-        <Select
-          label="Provider"
-          value={provider}
-          onChange={(e) => {
-            setProvider(e.target.value)
-            setModel('')
-            setApiKey('')        // clear key — previous provider's key must not leak to new one
-            setTestResult(null)
-            setModelsRefreshed(null)
-          }}
-        >
-          {PROVIDERS.map((p) => (
-            <MenuItem key={p.id} value={p.id}>{p.label}</MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-
-      {/* Model — dropdown when catalogue available, free-text fallback */}
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-          {modelsData?.models.length ? (
-            <FormControl fullWidth>
-              <InputLabel>Model</InputLabel>
-              <Select
-                label="Model"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-              >
-                {modelsData.models.map((m) => (
-                  <MenuItem key={m.id} value={m.id}>{m.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          ) : (
-            <TextField
-              label="Model"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder="e.g. gpt-4o-mini"
-              fullWidth
-            />
-          )}
-          <Tooltip title={apiKey ? 'Fetch live models using key above' : 'Refresh model list from provider'}>
-            <span>
-              <IconButton
-                size="small"
-                disabled={modelsFetching}
-                sx={{ mt: 1 }}
-                onClick={async () => {
-                  setModelsRefreshed(null)
-                  // Pass the form's api_key (even unsaved) so live fetch works
-                  const result = await qc.fetchQuery({
-                    queryKey: ['llm-models', provider],
-                    queryFn: () => settingsApi.getModels(provider, apiKey || undefined),
-                  })
-                  setModelsRefreshed(result.models.length)
-                  // Auto-select first model if current selection no longer exists
-                  if (result.models.length && !result.models.find(m => m.id === model)) {
-                    setModel(result.models[0].id)
-                  }
-                }}
-              >
-                <SyncIcon
-                  fontSize="small"
-                  sx={{
-                    '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
-                    animation: modelsFetching ? 'spin 0.7s linear infinite' : 'none',
-                  }}
-                />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Box>
-        {modelsRefreshed !== null && (
-          <Typography variant="caption" color="success.main" sx={{ pl: 0.5 }}>
-            ✓ {modelsRefreshed} model{modelsRefreshed !== 1 ? 's' : ''} loaded from API
+    <Box>
+      {/* Section intro + count chip */}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 2.5, flexWrap: 'wrap' }}>
+        <Box sx={{ flex: 1, minWidth: 280 }}>
+          <Typography sx={{ fontSize: 20, fontWeight: 700, mb: 0.5 }}>LLM providers</Typography>
+          <Typography sx={{ fontSize: 13.5, color: 'text.secondary', lineHeight: 1.6, maxWidth: 620 }}>
+            Connect any combination. The active provider answers chat &amp; page Q&amp;A; the rest stand by for fallback.
           </Typography>
-        )}
-      </Box>
-
-      {/* API Key (non-Bedrock, non-Ollama) */}
-      {providerInfo?.requiresKey && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-          {/* "Key saved" chip — shown whenever the backend has a key for this provider */}
-          {currentLLM.api_key && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <CheckCircleOutlineIcon sx={{ fontSize: 14, color: 'success.main' }} />
-              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>
-                Key saved:
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: 'text.secondary',
-                  fontFamily: '"IBM Plex Mono", monospace',
-                  fontSize: '0.75rem',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {currentLLM.api_key}
-              </Typography>
-            </Box>
-          )}
-
-          <TextField
-            label={currentLLM.api_key ? 'Change API Key' : 'API Key'}
-            type={showKey ? 'text' : 'password'}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={currentLLM.api_key ? 'Enter new key to replace…' : 'Enter API key'}
-            fullWidth
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setShowKey(!showKey)}>
-                    {showKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-            helperText={
-              currentLLM.api_key
-                ? 'Leave blank to keep the existing key. Enter a new key only to change it.'
-                : 'Your key is encrypted on disk and never leaves this device.'
-            }
-          />
         </Box>
-      )}
-
-      {/* Base URL (Ollama) + auto-detect button */}
-      {providerInfo?.hasBaseUrl && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <TextField
-            label="Ollama Base URL"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="http://localhost:11434"
-            fullWidth
-            helperText="Default: http://localhost:11434"
-          />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={
-                detectMutation.isPending
-                  ? <CircularProgress size={14} />
-                  : <RadarIcon fontSize="small" />
-              }
-              disabled={detectMutation.isPending}
-              onClick={() => detectMutation.mutate()}
-            >
-              Auto-Detect Ollama
-            </Button>
-            {detectMutation.isSuccess && (
-              <Typography variant="caption" color={
-                detectMutation.data?.detected ? 'success.main' : 'warning.main'
-              }>
-                {detectMutation.data?.detected
-                  ? `✓ Found ${detectMutation.data.models.length} model(s) at ${detectMutation.data.url}`
-                  : '✗ Ollama not found on localhost:11434'
-                }
-              </Typography>
-            )}
-          </Box>
-          {detectMutation.isSuccess && detectMutation.data?.detected && detectMutation.data.models.length > 0 && (
-            <FormControl fullWidth size="small">
-              <InputLabel>Detected Models</InputLabel>
-              <Select
-                label="Detected Models"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-              >
-                {detectMutation.data.models.map((m) => (
-                  <MenuItem key={m} value={m}>{m}</MenuItem>
-                ))}
-              </Select>
-              <FormHelperText>Select a model from your Ollama installation</FormHelperText>
-            </FormControl>
-          )}
-        </Box>
-      )}
-
-      {/* AWS Bedrock credentials */}
-      {provider === 'bedrock' && (
-        <>
-          <TextField
-            label="AWS Region"
-            value={awsRegion}
-            onChange={(e) => setAwsRegion(e.target.value)}
-            placeholder="us-east-1"
-            fullWidth
-          />
-          <TextField
-            label="AWS Access Key ID"
-            value={awsKeyId}
-            onChange={(e) => setAwsKeyId(e.target.value)}
-            type={showKey ? 'text' : 'password'}
-            fullWidth
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setShowKey(!showKey)}>
-                    {showKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-          <TextField
-            label="AWS Secret Access Key"
-            value={awsSecretKey}
-            onChange={(e) => setAwsSecretKey(e.target.value)}
-            type="password"
-            fullWidth
-          />
-        </>
-      )}
-
-      <Divider />
-
-      {/* Test result */}
-      {testResult && (
-        <Alert
-          severity={testResult.success ? 'success' : 'error'}
-          icon={testResult.success ? <CheckCircleOutlineIcon /> : <ErrorOutlineIcon />}
-        >
-          {testResult.msg}
-        </Alert>
-      )}
-
-      {/* Actions */}
-      <Box sx={{ display: 'flex', gap: 1.5 }}>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={saveMutation.isPending}
-          startIcon={saveMutation.isPending ? <CircularProgress size={16} /> : undefined}
-        >
-          Save
-        </Button>
-        <Button
-          variant="outlined"
-          onClick={() => testMutation.mutate()}
-          disabled={testMutation.isPending}
-          startIcon={
-            testMutation.isPending
-              ? <CircularProgress size={16} />
-              : <WifiTetheringIcon />
-          }
-        >
-          Test Connection
-        </Button>
-      </Box>
-
-      {saveMutation.isSuccess && !testMutation.isPending && (
-        <Typography variant="caption" color="success.main">
-          ✓ Settings saved
-        </Typography>
-      )}
-
-      <Divider />
-
-      {/* ── Embeddings section ──────────────────────────────────────────── */}
-      <Typography variant="h6" fontWeight={600} sx={{ mt: 0.5 }}>
-        Embeddings
-        <Tooltip
-          title="Embeddings enable semantic (meaning-based) search over your knowledge base. Without them, only keyword search (FTS5) is used."
-          placement="right"
-        >
-          <InfoOutlinedIcon sx={{ fontSize: 16, ml: 0.8, mb: '-2px', color: 'text.secondary', cursor: 'help' }} />
-        </Tooltip>
-      </Typography>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mt: -1.5 }}>
-        Choose between a <strong>local ONNX model</strong> (private, ~45 MB one-time download)
-        or the <strong>OpenAI Embeddings API</strong> (cloud, requires key, no disk footprint).
-        Leave both blank to stay in FTS5-only keyword mode.
-      </Typography>
-
-      {/* Provider toggle */}
-      <FormControl fullWidth>
-        <InputLabel>Embedding Provider</InputLabel>
-        <Select
-          label="Embedding Provider"
-          value={embProvider}
-          onChange={(e) => setEmbProvider(e.target.value)}
-        >
-          <MenuItem value="local">Local ONNX model (all-MiniLM-L6-v2)</MenuItem>
-          <MenuItem value="openai">OpenAI Embeddings API</MenuItem>
-        </Select>
-        <FormHelperText>
-          {embProvider === 'local'
-            ? 'Runs 100% on-device — no API key needed'
-            : 'Uses text-embedding-3-small — fast and cheap'}
-        </FormHelperText>
-      </FormControl>
-
-      {/* OpenAI embedding key */}
-      {embProvider === 'openai' && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-          {currentEmb.api_key && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <CheckCircleOutlineIcon sx={{ fontSize: 14, color: 'success.main' }} />
-              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>
-                Key saved:
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: 'text.secondary',
-                  fontFamily: '"IBM Plex Mono", monospace',
-                  fontSize: '0.75rem',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {currentEmb.api_key}
-              </Typography>
-            </Box>
-          )}
-          <TextField
-            label={currentEmb.api_key ? 'Change Embedding API Key' : 'OpenAI Embedding API Key'}
-            type={showEmbKey ? 'text' : 'password'}
-            value={embApiKey}
-            onChange={(e) => setEmbApiKey(e.target.value)}
-            placeholder={currentEmb.api_key ? 'Enter new key to replace…' : 'Enter OpenAI API key'}
-            fullWidth
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setShowEmbKey(!showEmbKey)}>
-                    {showEmbKey ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-            helperText={
-              currentEmb.api_key
-                ? 'Leave blank to keep the existing key. Enter a new key only to change it.'
-                : 'Can be the same key as your LLM provider, or a separate restricted key.'
-            }
-          />
-        </Box>
-      )}
-
-      {/* Local model download card */}
-      {embProvider === 'local' && (
-        <Box
-          sx={{
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 2,
-            p: 2,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1.5,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box>
-              <Typography variant="subtitle2" fontWeight={600}>
-                all-MiniLM-L6-v2 (ONNX)
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                384-dim · ~45 MB · CPU inference
-              </Typography>
-            </Box>
-            {modelStatusQuery.data?.ready || dlDone ? (
-              <Chip label="Ready" color="success" size="small" icon={<CheckCircleOutlineIcon />} />
-            ) : (
-              <Chip label="Not downloaded" size="small" variant="outlined" />
-            )}
-          </Box>
-
-          {/* Download progress */}
-          {dlProgress !== null && !dlDone && (
-            <Box>
-              <LinearProgress variant="determinate" value={dlProgress} sx={{ borderRadius: 1 }} />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                Downloading… {dlProgress.toFixed(0)}%
-              </Typography>
-            </Box>
-          )}
-
-          {dlError && (
-            <Alert severity="error" icon={<ErrorOutlineIcon />} sx={{ py: 0.5 }}>
-              {dlError}
-            </Alert>
-          )}
-
-          {(dlDone || modelStatusQuery.data?.ready) && (
-            <Alert severity="success" icon={<CheckCircleOutlineIcon />} sx={{ py: 0.5 }}>
-              Model ready — semantic search enabled
-            </Alert>
-          )}
-
-          {!modelStatusQuery.data?.ready && !dlDone && dlProgress === null && (
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<DownloadIcon />}
-              onClick={handleDownloadModel}
-              sx={{ alignSelf: 'flex-start' }}
-            >
-              Download Model (~45 MB)
-            </Button>
-          )}
-
-          {dlProgress !== null && !dlDone && (
-            <Button
-              variant="text"
-              size="small"
-              color="error"
-              onClick={() => {
-                abortRef.current?.abort()
-                setDlProgress(null)
-              }}
-              sx={{ alignSelf: 'flex-start' }}
-            >
-              Cancel
-            </Button>
-          )}
-        </Box>
-      )}
-
-      {/* Embedding save */}
-      <Box sx={{ display: 'flex', gap: 1.5 }}>
-        <Button
-          variant="outlined"
+        <Chip
+          label={`${configuredCount} configured · ${PROVIDERS.length} supported`}
           size="small"
-          onClick={() => embSaveMutation.mutate()}
-          disabled={embSaveMutation.isPending}
-          startIcon={embSaveMutation.isPending ? <CircularProgress size={14} /> : undefined}
-        >
-          Save Embedding Settings
-        </Button>
+          sx={{ fontFamily: MONO, fontSize: 11.5, height: 28, borderRadius: 99,
+                bgcolor: 'action.hover', color: 'text.secondary' }}
+        />
       </Box>
 
-      {embSaveMutation.isSuccess && (
-        <Typography variant="caption" color="success.main">
-          ✓ Embedding settings saved
-        </Typography>
-      )}
-
-      <Divider />
+      {/* Provider grid */}
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+        {PROVIDERS.map(p => (
+          <ProviderCard
+            key={p.id}
+            meta={p}
+            config={providers[p.id]}
+            isActive={activeProvider === p.id}
+          />
+        ))}
+      </Box>
 
       {/* Encryption notice */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-        <LockIcon sx={{ fontSize: 16, color: 'success.main' }} />
-        <Typography variant="caption">
-          API keys are encrypted at rest using Fernet symmetric encryption.
-          The key is stored in your user config directory (
-          <code>~/.config/Knovex/.knovex.key</code>), readable only by your OS user.
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', mt: 3 }}>
+        <LockIcon sx={{ fontSize: 16, color: '#3A8D7A' }} />
+        <Typography sx={{ fontSize: 12 }}>
+          Keys are encrypted at rest (Fernet) in your user config directory — never sent anywhere but the provider you choose.
         </Typography>
+      </Box>
+    </Box>
+  )
+}
+
+// ─── Provider card ───────────────────────────────────────────────────────────
+
+function ProviderCard({ meta, config, isActive }: {
+  meta: ProviderMeta
+  config: LLMProviderConfig | undefined
+  isActive: boolean
+}) {
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const qc = useQueryClient()
+
+  const configured = config?.configured ?? false
+  const [apiKey, setApiKey]   = useState('')                       // blank = keep existing
+  const [model, setModel]     = useState(config?.model || meta.defaultModel)
+  const [baseUrl, setBaseUrl] = useState(config?.base_url || 'http://localhost:11434')
+  const [awsRegion, setAwsRegion] = useState(config?.aws_region || 'us-east-1')
+  const [awsKeyId, setAwsKeyId]   = useState('')
+  const [awsSecret, setAwsSecret] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [test, setTest] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  const dirty =
+    !!apiKey || !!awsKeyId || !!awsSecret ||
+    model !== (config?.model || meta.defaultModel) ||
+    (meta.hasBaseUrl && baseUrl !== (config?.base_url || 'http://localhost:11434')) ||
+    (meta.isBedrock && awsRegion !== (config?.aws_region || 'us-east-1'))
+
+  const buildPatch = () => ({
+    model,
+    ...(apiKey ? { api_key: apiKey } : {}),
+    ...(meta.hasBaseUrl ? { base_url: baseUrl } : {}),
+    ...(meta.isBedrock ? {
+      aws_region: awsRegion,
+      ...(awsKeyId ? { aws_access_key_id: awsKeyId } : {}),
+      ...(awsSecret ? { aws_secret_access_key: awsSecret } : {}),
+    } : {}),
+  })
+
+  const save = useMutation({
+    mutationFn: () => settingsApi.setProvider(meta.id, buildPatch()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings'] })
+      setApiKey(''); setAwsKeyId(''); setAwsSecret('')
+    },
+  })
+
+  const activate = useMutation({
+    mutationFn: () => settingsApi.activateProvider(meta.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+
+  const testConn = useMutation({
+    mutationFn: async () => {
+      if (dirty) await save.mutateAsync()
+      return settingsApi.testProvider(meta.id)
+    },
+    onSuccess: (r) => setTest(r.success
+      ? { ok: true, msg: `Connected — ${r.latency_ms}ms` }
+      : { ok: false, msg: r.error ?? 'Connection failed' }),
+    onError: (e: Error) => setTest({ ok: false, msg: e.message }),
+  })
+
+  const status = isActive ? 'Active' : configured ? 'Configured · standby' : 'Not connected'
+  const statusColor = isActive ? '#3A8D7A' : configured ? 'text.secondary' : 'text.disabled'
+
+  return (
+    <Box data-testid={`provider-${meta.id}`} sx={{
+      borderRadius: 3, p: 2.25,
+      border: '1px solid', borderColor: isActive ? alpha(BRAND.copper, 0.5) : 'divider',
+      bgcolor: isActive ? alpha(BRAND.copper, isDark ? 0.06 : 0.04) : 'background.paper',
+      display: 'flex', flexDirection: 'column', gap: 1.5,
+      transition: 'border-color 0.15s, background 0.15s',
+    }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+        <Box sx={{
+          width: 38, height: 38, borderRadius: 2, flexShrink: 0,
+          display: 'grid', placeItems: 'center', bgcolor: meta.color, color: '#fff',
+          fontWeight: 800, fontSize: 14, fontFamily: MONO,
+        }}>
+          {meta.letter}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>{meta.label}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: isActive ? '#3A8D7A' : configured ? 'text.disabled' : 'transparent', border: configured || isActive ? 'none' : '1px solid', borderColor: 'divider' }} />
+            <Typography sx={{ fontSize: 11.5, color: statusColor, fontWeight: isActive ? 600 : 400 }}>{status}</Typography>
+          </Box>
+        </Box>
+        <Tooltip title={isActive ? 'Active provider' : configured ? 'Make active' : 'Add a key first'} arrow>
+          <span>
+            <Switch
+              size="small"
+              checked={isActive}
+              disabled={isActive || !configured || activate.isPending}
+              onChange={() => activate.mutate()}
+            />
+          </span>
+        </Tooltip>
+      </Box>
+
+      {/* Credentials */}
+      {meta.requiresKey && (
+        <TextField
+          type={showKey ? 'text' : 'password'}
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={configured ? `Saved: ${config?.api_key || '••••'} — enter to replace` : 'Paste API key'}
+          size="small"
+          fullWidth
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setShowKey(s => !s)}>
+                  {showKey ? <VisibilityOffIcon sx={{ fontSize: 16 }} /> : <VisibilityIcon sx={{ fontSize: 16 }} />}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: 13 } }}
+        />
+      )}
+
+      {meta.hasBaseUrl && (
+        <TextField
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder="http://localhost:11434"
+          size="small"
+          fullWidth
+          sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: 13 } }}
+        />
+      )}
+
+      {meta.isBedrock && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <TextField value={awsRegion} onChange={(e) => setAwsRegion(e.target.value)} placeholder="us-east-1" size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: 13 } }} />
+          <TextField value={awsKeyId} onChange={(e) => setAwsKeyId(e.target.value)} placeholder={configured ? 'Access key saved — enter to replace' : 'AWS Access Key ID'} type={showKey ? 'text' : 'password'} size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: 13 } }} />
+          <TextField value={awsSecret} onChange={(e) => setAwsSecret(e.target.value)} placeholder="AWS Secret Access Key" type="password" size="small" fullWidth sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, fontSize: 13 } }} />
+        </Box>
+      )}
+
+      {/* Model */}
+      <TextField
+        value={model}
+        onChange={(e) => setModel(e.target.value)}
+        label="Model"
+        size="small"
+        fullWidth
+        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, fontFamily: MONO, fontSize: 12.5 } }}
+      />
+
+      {/* Test result */}
+      {test && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: test.ok ? '#3A8D7A' : 'error.main' }}>
+          {test.ok ? <CheckCircleIcon sx={{ fontSize: 15 }} /> : <ErrorOutlineIcon sx={{ fontSize: 15 }} />}
+          <Typography sx={{ fontSize: 12 }}>{test.msg}</Typography>
+        </Box>
+      )}
+
+      {/* Footer actions */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.25 }}>
+        <Button
+          size="small"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate()}
+          sx={{ fontSize: 12.5, textTransform: 'none', borderRadius: 99, px: 1.5,
+                color: BRAND.copper, '&:hover': { bgcolor: alpha(BRAND.copper, 0.08) } }}
+        >
+          {save.isPending ? <CircularProgress size={14} /> : save.isSuccess && !dirty ? 'Saved ✓' : 'Save'}
+        </Button>
+        <Box sx={{ flex: 1 }} />
+        <Button
+          size="small"
+          disabled={testConn.isPending}
+          onClick={() => { setTest(null); testConn.mutate() }}
+          startIcon={testConn.isPending ? <CircularProgress size={12} /> : <WifiTetheringIcon sx={{ fontSize: 14 }} />}
+          sx={{ fontSize: 12.5, textTransform: 'none', borderRadius: 99, px: 1.5, color: 'text.secondary',
+                '&:hover': { bgcolor: 'action.hover' } }}
+        >
+          Test connection
+        </Button>
       </Box>
     </Box>
   )

@@ -16,6 +16,17 @@ export interface LLMSettings {
   aws_secret_access_key: string
 }
 
+/** Per-provider saved config (multi-provider grid). Keys masked in responses. */
+export interface LLMProviderConfig {
+  model: string
+  api_key: string
+  base_url: string
+  aws_region: string
+  aws_access_key_id: string
+  aws_secret_access_key: string
+  configured: boolean
+}
+
 export interface SearchSettings {
   engine: string
   api_key: string
@@ -45,6 +56,8 @@ export interface DownloadProgress {
 
 export interface AppSettings {
   llm: LLMSettings
+  /** Per-provider saved configs (multi-provider). Keyed by provider id. */
+  llm_providers: Record<string, LLMProviderConfig>
   search: SearchSettings
   embedding: EmbeddingSettings
   theme: string
@@ -107,6 +120,24 @@ export const settingsApi = {
   /** Test the currently-saved LLM connection. */
   async testLLM(): Promise<TestLLMResult> {
     const res = await apiClient.post<TestLLMResult>('/settings/test-llm')
+    return res.data
+  },
+
+  /** Save one provider's config (multi-provider grid). Only changed fields. */
+  async setProvider(providerId: string, patch: Partial<Omit<LLMProviderConfig, 'configured'>>): Promise<AppSettings> {
+    const res = await apiClient.post<AppSettings>(`/settings/llm/providers/${providerId}`, patch)
+    return res.data
+  },
+
+  /** Make a saved provider the active one. */
+  async activateProvider(providerId: string): Promise<AppSettings> {
+    const res = await apiClient.post<AppSettings>('/settings/llm/activate', { provider: providerId })
+    return res.data
+  },
+
+  /** Test a specific provider without changing the active one. */
+  async testProvider(providerId: string): Promise<TestLLMResult> {
+    const res = await apiClient.post<TestLLMResult>(`/settings/llm/providers/${providerId}/test`)
     return res.data
   },
 
