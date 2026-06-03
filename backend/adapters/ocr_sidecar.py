@@ -46,6 +46,9 @@ def extract_sections(file_path: str, *, engine: str = "docling", ocr: bool = Tru
     Mirror of ``docnest_adapter`` mapping, kept dependency-free so it runs in the
     OCR env. Raises on docnest failure (the caller reports it as ok=false).
     """
+    import os
+    import shutil
+
     from docnest.parsers.factory import ParserFactory
 
     factory = ParserFactory(pdf_engine=engine)
@@ -53,8 +56,18 @@ def extract_sections(file_path: str, *, engine: str = "docling", ocr: bool = Tru
         try:
             from docnest.parsers.pdf import DoclingPDFParser
 
+            # Tesseract (Devanagari/Hindi-capable) when available, else default.
+            tcmd = os.environ.get("KNOVEX_TESSERACT_CMD") or shutil.which("tesseract")
+            langs = [x.strip() for x in os.environ.get("KNOVEX_OCR_LANG", "eng,hin").split(",") if x.strip()]
+            if tcmd:
+                parser = DoclingPDFParser(
+                    ocr=True, ocr_engine="tesseract", ocr_lang=langs or ["eng"],
+                    tesseract_cmd=tcmd, force_full_page_ocr=True,
+                )
+            else:
+                parser = DoclingPDFParser(ocr=True)
             factory.unregister(DoclingPDFParser)
-            factory.register(DoclingPDFParser(ocr=True), position=0)
+            factory.register(parser, position=0)
         except Exception:
             pass  # fall back to factory default if docnest internals differ
 

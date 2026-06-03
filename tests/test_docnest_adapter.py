@@ -120,6 +120,44 @@ class TestParseDocumentMapping:
         assert dn.parse_document("broken.pdf") is None
 
 
+class TestTesseractResolution:
+    def test_lang_default_is_english_hindi(self, monkeypatch):
+        monkeypatch.delenv("KNOVEX_OCR_LANG", raising=False)
+        assert dn._ocr_languages() == ["eng", "hin"]
+
+    def test_lang_override(self, monkeypatch):
+        monkeypatch.setenv("KNOVEX_OCR_LANG", "eng, mar , hin")
+        assert dn._ocr_languages() == ["eng", "mar", "hin"]
+
+    def test_resolve_explicit_cmd(self, monkeypatch, tmp_path):
+        exe = tmp_path / "tesseract.exe"
+        exe.write_text("")
+        monkeypatch.setenv("KNOVEX_TESSERACT_CMD", str(exe))
+        assert dn._resolve_tesseract() == str(exe)
+
+    def test_resolve_none_when_absent(self, monkeypatch):
+        monkeypatch.delenv("KNOVEX_TESSERACT_CMD", raising=False)
+        monkeypatch.setattr("shutil.which", lambda _n: None)
+        monkeypatch.setattr(dn.Path, "exists", lambda self: False)
+        assert dn._resolve_tesseract() is None
+
+    @pytest.mark.skipif(not dn.is_available(), reason="docnest-ai not installed")
+    def test_factory_uses_tesseract_when_available(self, monkeypatch, tmp_path):
+        """When a Tesseract binary resolves, the registered docling parser is
+        configured for Tesseract + the requested languages."""
+        exe = tmp_path / "tesseract.exe"
+        exe.write_text("")
+        monkeypatch.setenv("KNOVEX_TESSERACT_CMD", str(exe))
+        monkeypatch.setenv("KNOVEX_OCR_LANG", "eng,hin")
+        factory = dn._build_factory("docling", ocr=True)
+        from docnest.parsers.pdf import DoclingPDFParser
+        parser = next(p for p in factory._registry if isinstance(p, DoclingPDFParser))
+        assert parser._ocr_engine == "tesseract"
+        assert parser._ocr_lang == ["eng", "hin"]
+        assert parser._tesseract_cmd == str(exe)
+        assert parser._force_full_page_ocr is True
+
+
 class TestAvailability:
     def test_absent_docnest_reports_unavailable(self, monkeypatch):
         monkeypatch.setitem(sys.modules, "docnest.parsers.factory", None)
