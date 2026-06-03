@@ -184,6 +184,38 @@ class CSVParser(IFileParser):
         return chunks
 
 
+def _try_docnest(file_path: Path, fmt: str) -> list[Chunk] | None:
+    """
+    Best-effort: parse via docnest-ai (normalisation + OCR) when it's installed.
+
+    Document ingestion is docnest's domain, not Knovex's — so when the engine is
+    available we delegate to it (this is how we get OCR for scans/design PDFs
+    without owning any of it). Returns Chunks, or None when docnest is absent or
+    can't handle the file, so the caller falls back to the lightweight adapter.
+    """
+    try:
+        from docnest.parsers import get_parser as dn_get_parser  # type: ignore
+    except Exception:
+        return None
+    try:
+        parsed = dn_get_parser(fmt).parse(str(file_path))
+        chunks: list[Chunk] = []
+        for i, ch in enumerate(getattr(parsed, "chunks", []) or []):
+            text = (getattr(ch, "text", "") or "").strip()
+            if not text:
+                continue
+            chunks.append(Chunk(
+                content=text,
+                chunk_index=i,
+                section=getattr(ch, "section", "") or "",
+                page=getattr(ch, "page", None),
+            ))
+        return chunks or None   # nothing usable → let the fallback try
+    except Exception as exc:
+        logger.info("docnest ingestion unavailable for %s (%s) — using fallback", file_path.name, exc)
+        return None
+
+
 def _html_to_plain(html: str) -> str:
     """
     Strip HTML to plain text for indexing. Drops <img> tags entirely (so base64
@@ -214,6 +246,11 @@ class PDFParser(IFileParser):
         return frozenset({"pdf"})
 
     def parse(self, file_path: Path) -> list[Chunk]:
+        # Prefer docnest (normalisation + OCR) when installed; else lightweight PyMuPDF.
+        dn = _try_docnest(file_path, "pdf")
+        if dn is not None:
+            return dn
+
         pages = self._adapter.extract_pages(file_path)
         chunks: list[Chunk] = []
         chunk_idx = 0

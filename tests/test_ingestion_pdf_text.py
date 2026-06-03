@@ -60,3 +60,33 @@ class TestPDFParserIndexesText:
         chunks = self._parser([page]).parse(Path("t.pdf"))
         assert len(chunks) == 1
         assert chunks[0].content == "Just plain text, no markup."
+
+    def test_delegates_to_docnest_when_installed(self, monkeypatch):
+        """Ingestion is docnest's domain: when installed, PDFParser uses it
+        (OCR + normalisation) instead of the lightweight PyMuPDF fallback."""
+        import sys
+        import types
+
+        class _Ch:
+            def __init__(self, t, s, p):
+                self.text, self.section, self.page = t, s, p
+
+        class _Parsed:
+            chunks = [_Ch("Real text recovered by docnest OCR", "Slide 6", 6)]
+
+        class _Parser:
+            def parse(self, _path):
+                return _Parsed()
+
+        pkg = types.ModuleType("docnest")
+        sub = types.ModuleType("docnest.parsers")
+        sub.get_parser = lambda _fmt: _Parser()           # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "docnest", pkg)
+        monkeypatch.setitem(sys.modules, "docnest.parsers", sub)
+
+        # Even though the PyMuPDF stub would yield "fallback text", docnest wins.
+        page = PageContent(page_num=1, text="<p>pymupdf fallback text</p>", is_html=True)
+        chunks = self._parser([page]).parse(Path("scan.pdf"))
+        assert len(chunks) == 1
+        assert chunks[0].content == "Real text recovered by docnest OCR"
+        assert chunks[0].page == 6
