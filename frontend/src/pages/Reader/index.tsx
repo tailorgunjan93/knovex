@@ -57,6 +57,7 @@ import ChevronLeftIcon   from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon  from '@mui/icons-material/ChevronRight'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { kbApi, type FileRecord, type KB } from '../../api/kb.api'
+import { pollIngestionStatus } from '@/lib/ingestion/pollStatus'
 import { readerApi } from '../../api/reader.api'
 import FileViewer, { type UploadStatus } from '../../components/FileViewer'
 import { getRecentDocs, recordRecentDoc, type RecentDoc } from '../../lib/recentDocs'
@@ -718,28 +719,33 @@ export default function ReaderPage() {
 
     setUpload({ phase: 'ingesting', name: resp.name, kbId: resp.kb_id, fileId: resp.file_id })
 
-    // Poll status until ready
+    // Poll status until ready. Keeps waiting while the backend reports progress —
+    // OCR-backed ingestion (scanned/image PDFs) is legitimately slow, especially
+    // the first run which downloads OCR models.
     const poll = async () => {
-      let attempts = 0
-      while (attempts < 60) {
-        await new Promise(r => setTimeout(r, 2000))
-        try {
-          const status = await kbApi.getFileStatus(resp.kb_id, resp.file_id)
-          if (status.status === 'ready') {
-            setUpload({ phase: 'idle' })
-            openDoc({ kbId: resp.kb_id, fileId: resp.file_id, fileName: resp.name, format: resp.format })
-            queryClient.invalidateQueries({ queryKey: ['kb', resp.kb_id, 'files'] })
-            queryClient.invalidateQueries({ queryKey: ['kbs'] })
-            return
-          }
-          if (status.status === 'error') {
-            setUpload({ phase: 'error', message: status.error ?? 'Ingestion failed' })
-            return
-          }
-        } catch { /* ignore transient errors */ }
-        attempts++
+      const result = await pollIngestionStatus({
+        getStatus: () => kbApi.getFileStatus(resp.kb_id, resp.file_id),
+      })
+      switch (result.outcome) {
+        case 'ready':
+          setUpload({ phase: 'idle' })
+          openDoc({ kbId: resp.kb_id, fileId: resp.file_id, fileName: resp.name, format: resp.format })
+          queryClient.invalidateQueries({ queryKey: ['kb', resp.kb_id, 'files'] })
+          queryClient.invalidateQueries({ queryKey: ['kbs'] })
+          return
+        case 'error':
+          setUpload({ phase: 'error', message: result.message })
+          return
+        case 'disconnected':
+          setUpload({ phase: 'error', message: 'Lost connection to the backend during ingestion.' })
+          return
+        case 'timeout':
+          setUpload({
+            phase: 'error',
+            message: 'Still indexing — this is taking a while. It may finish in the background; check Recent shortly.',
+          })
+          return
       }
-      setUpload({ phase: 'error', message: 'Ingestion timed out after 2 minutes' })
     }
     poll()
   }, [queryClient, openDoc])
