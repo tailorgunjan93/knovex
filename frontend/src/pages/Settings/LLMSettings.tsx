@@ -9,18 +9,20 @@
  * Embeddings live in their own Settings tab now (not here).
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Box, Typography, TextField, Button, Chip, Switch, InputAdornment,
-  IconButton, CircularProgress, Tooltip, alpha, useTheme,
+  IconButton, CircularProgress, Tooltip, Select, MenuItem, FormControl,
+  InputLabel, alpha, useTheme,
 } from '@mui/material'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
 import WifiTetheringIcon from '@mui/icons-material/WifiTethering'
+import SyncIcon from '@mui/icons-material/Sync'
 import LockIcon from '@mui/icons-material/Lock'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, type AppSettings, type LLMProviderConfig } from '@/api/settings.api'
 import { BRAND } from '@/theme/tokens'
 
@@ -160,6 +162,28 @@ function ProviderCard({ meta, config, isActive }: {
     onError: (e: Error) => setTest({ ok: false, msg: e.message }),
   })
 
+  // ── Model catalogue (live-fetchable per provider) ──────────────────────────
+  const { data: modelsData, isFetching: modelsFetching } = useQuery({
+    queryKey: ['llm-models', meta.id],
+    queryFn: () => settingsApi.getModels(meta.id),
+    staleTime: 5 * 60_000,
+  })
+  const models = modelsData?.models ?? []
+
+  // Auto-select the first model if the current one isn't in the fetched list.
+  useEffect(() => {
+    if (models.length && !models.find(m => m.id === model)) setModel(models[0].id)
+  }, [modelsData])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh using the entered (unsaved) key so live models load before saving.
+  const refreshModels = async () => {
+    const r = await qc.fetchQuery({
+      queryKey: ['llm-models', meta.id],
+      queryFn: () => settingsApi.getModels(meta.id, apiKey || undefined),
+    })
+    if (r.models.length && !r.models.find(m => m.id === model)) setModel(r.models[0].id)
+  }
+
   const status = isActive ? 'Active' : configured ? 'Configured · standby' : 'Not connected'
   const statusColor = isActive ? '#3A8D7A' : configured ? 'text.secondary' : 'text.disabled'
 
@@ -240,15 +264,44 @@ function ProviderCard({ meta, config, isActive }: {
         </Box>
       )}
 
-      {/* Model */}
-      <TextField
-        value={model}
-        onChange={(e) => setModel(e.target.value)}
-        label="Model"
-        size="small"
-        fullWidth
-        sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, fontFamily: MONO, fontSize: 12.5 } }}
-      />
+      {/* Model — dropdown from the provider's catalogue, with live refresh */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        {models.length ? (
+          <FormControl size="small" fullWidth>
+            <InputLabel>Model</InputLabel>
+            <Select
+              label="Model"
+              value={models.find(m => m.id === model) ? model : ''}
+              onChange={(e) => setModel(e.target.value)}
+              sx={{ borderRadius: 2, fontFamily: MONO, fontSize: 12.5 }}
+            >
+              {models.map(m => (
+                <MenuItem key={m.id} value={m.id} sx={{ fontFamily: MONO, fontSize: 12.5 }}>{m.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        ) : (
+          <TextField
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            label="Model"
+            size="small"
+            fullWidth
+            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2, fontFamily: MONO, fontSize: 12.5 } }}
+          />
+        )}
+        <Tooltip title={apiKey ? 'Fetch live models with the entered key' : 'Refresh model list'} arrow>
+          <span>
+            <IconButton size="small" disabled={modelsFetching} onClick={refreshModels} sx={{ color: 'text.secondary' }}>
+              <SyncIcon sx={{
+                fontSize: 16,
+                '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
+                animation: modelsFetching ? 'spin 0.7s linear infinite' : 'none',
+              }} />
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Box>
 
       {/* Test result */}
       {test && (

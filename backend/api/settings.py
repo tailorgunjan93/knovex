@@ -262,26 +262,24 @@ async def get_llm_models(
     For Cerebras/Groq, fetches the live model list when an api_key is available.
     """
     current = await settings_svc.get()
-    base_url = current.llm.base_url if provider.lower() == "ollama" else ""
 
-    # Only reuse the stored key when it belongs to the same provider that is being
-    # queried.  Using a different provider's key (e.g. an OpenAI key when the user
-    # switches to Cerebras in the UI) causes live-fetch to fail with 401, silently
-    # falling back to the stale static catalogue — which is the root cause of the
-    # "not fetching new models" bug.
-    stored_key = (
-        current.llm.api_key
-        if current.llm.provider.lower() == provider.lower()
-        else ""
-    )
-    effective_key = api_key or stored_key
+    # Multi-provider aware: pull this provider's OWN saved config from the store
+    # (so a non-active provider's key is used for live fetch), not the active one.
+    cfg = current.llm_providers.get(provider)
+
+    base_url = ""
+    if provider.lower() == "ollama":
+        base_url = (cfg.base_url if cfg else "") or current.llm.base_url or "http://localhost:11434"
+
+    stored_key = cfg.api_key if cfg else ""
+    effective_key = api_key or stored_key   # explicit override (unsaved key) wins
 
     credentials = ProviderCredentials(
         api_key=effective_key,
-        base_url=current.llm.base_url,
-        aws_region=current.llm.aws_region,
-        aws_access_key_id=current.llm.aws_access_key_id,
-        aws_secret_access_key=current.llm.aws_secret_access_key,
+        base_url=base_url,
+        aws_region=(cfg.aws_region if cfg else current.llm.aws_region),
+        aws_access_key_id=(cfg.aws_access_key_id if cfg else ""),
+        aws_secret_access_key=(cfg.aws_secret_access_key if cfg else ""),
     )
     return await llm_svc.get_models(provider, base_url=base_url, credentials=credentials)
 

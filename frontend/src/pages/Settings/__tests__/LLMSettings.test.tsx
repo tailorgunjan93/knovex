@@ -21,6 +21,7 @@ vi.mock('@/api/settings.api', () => ({
     setProvider:      vi.fn().mockResolvedValue({}),
     activateProvider: vi.fn().mockResolvedValue({}),
     testProvider:     vi.fn().mockResolvedValue({ success: true, latency_ms: 42, error: null }),
+    getModels:        vi.fn().mockResolvedValue({ provider: '', models: [] }),
   },
 }))
 
