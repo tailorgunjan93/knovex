@@ -22,8 +22,10 @@ from __future__ import annotations
 import asyncio
 import csv
 import hashlib
+import html as _htmllib
 import io
 import logging
+import re
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -182,6 +184,18 @@ class CSVParser(IFileParser):
         return chunks
 
 
+def _html_to_plain(html: str) -> str:
+    """
+    Strip HTML to plain text for indexing. Drops <img> tags entirely (so base64
+    data URIs never enter the index) and all other markup; unescapes entities
+    and collapses whitespace. An image-only page → "".
+    """
+    s = re.sub(r"<img\b[^>]*>", " ", html, flags=re.IGNORECASE)   # drop images (base64)
+    s = re.sub(r"<[^>]+>", " ", s)                                # strip remaining tags
+    s = _htmllib.unescape(s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 @register_parser
 class PDFParser(IFileParser):
     """
@@ -204,7 +218,13 @@ class PDFParser(IFileParser):
         chunks: list[Chunk] = []
         chunk_idx = 0
         for page in pages:
-            sub_chunks = PlainTextParser._split_into_chunks(page.text, max_chars=1200)
+            # Index PLAIN TEXT — never the display HTML. Otherwise base64 <img>
+            # data URIs (image/raster pages) get stored as "content", polluting
+            # FTS + embeddings and feeding the assistant garbage.
+            page_text = _html_to_plain(page.text) if page.is_html else page.text
+            if not page_text.strip():
+                continue   # image-only page with no extractable text → no chunk
+            sub_chunks = PlainTextParser._split_into_chunks(page_text, max_chars=1200)
             for c in sub_chunks:
                 if c.content:
                     chunks.append(Chunk(
