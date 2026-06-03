@@ -45,6 +45,7 @@ function makeSettings(
     },
     llm_providers: providers,
     search: { engine: 'duckduckgo', api_key: '' },
+    search_engines: {},
     embedding: { enabled: false, provider: 'local', model: 'text-embedding-3-small', api_key: '' },
     theme: 'dark', kb_storage_path: '', backend_port: 8765,
   }

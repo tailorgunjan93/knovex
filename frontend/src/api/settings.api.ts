@@ -32,6 +32,13 @@ export interface SearchSettings {
   api_key: string
 }
 
+/** Per-engine multi-search config. Free engines need no key. */
+export interface SearchEngineConfig {
+  enabled: boolean
+  api_key: string
+  configured: boolean
+}
+
 export interface EmbeddingSettings {
   enabled: boolean   // master switch — false = FTS5 only
   provider: string   // "local" | "openai"
@@ -59,6 +66,8 @@ export interface AppSettings {
   /** Per-provider saved configs (multi-provider). Keyed by provider id. */
   llm_providers: Record<string, LLMProviderConfig>
   search: SearchSettings
+  /** Per-engine multi-search configs. Keyed by engine id. */
+  search_engines: Record<string, SearchEngineConfig>
   embedding: EmbeddingSettings
   theme: string
   kb_storage_path: string
@@ -138,6 +147,12 @@ export const settingsApi = {
   /** Test a specific provider without changing the active one. */
   async testProvider(providerId: string): Promise<TestLLMResult> {
     const res = await apiClient.post<TestLLMResult>(`/settings/llm/providers/${providerId}/test`)
+    return res.data
+  },
+
+  /** Enable/disable a search engine or set its key (multi-engine). */
+  async setSearchEngine(engineId: string, patch: Partial<{ enabled: boolean; api_key: string }>): Promise<AppSettings> {
+    const res = await apiClient.post<AppSettings>(`/settings/search/engines/${engineId}`, patch)
     return res.data
   },
 
