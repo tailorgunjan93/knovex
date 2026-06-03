@@ -46,6 +46,7 @@ def extract_sections(file_path: str, *, engine: str = "docling", ocr: bool = Tru
     Mirror of ``docnest_adapter`` mapping, kept dependency-free so it runs in the
     OCR env. Raises on docnest failure (the caller reports it as ok=false).
     """
+    import importlib.util
     import os
     import shutil
 
@@ -56,12 +57,24 @@ def extract_sections(file_path: str, *, engine: str = "docling", ocr: bool = Tru
         try:
             from docnest.parsers.pdf import DoclingPDFParser
 
-            # Tesseract (Devanagari/Hindi-capable) when available, else default.
+            # Prefer EasyOCR (pure-Python, Devanagari/Hindi); else a Tesseract
+            # binary; else docnest's default engine (Latin/CJK only).
+            forced = os.environ.get("KNOVEX_OCR_ENGINE", "").strip().lower()
             tcmd = os.environ.get("KNOVEX_TESSERACT_CMD") or shutil.which("tesseract")
-            langs = [x.strip() for x in os.environ.get("KNOVEX_OCR_LANG", "eng,hin").split(",") if x.strip()]
-            if tcmd:
+            has_easy = importlib.util.find_spec("easyocr") is not None
+            chosen = forced if forced in ("easyocr", "tesseract", "auto") else (
+                "easyocr" if has_easy else "tesseract" if tcmd else "auto"
+            )
+            lang_env = [x.strip() for x in os.environ.get("KNOVEX_OCR_LANG", "").split(",") if x.strip()]
+            if chosen == "easyocr":
                 parser = DoclingPDFParser(
-                    ocr=True, ocr_engine="tesseract", ocr_lang=langs or ["eng"],
+                    ocr=True, ocr_engine="easyocr",
+                    ocr_lang=lang_env or ["en", "hi"], force_full_page_ocr=True,
+                )
+            elif chosen == "tesseract":
+                parser = DoclingPDFParser(
+                    ocr=True, ocr_engine="tesseract",
+                    ocr_lang=lang_env or ["eng", "hin"],
                     tesseract_cmd=tcmd, force_full_page_ocr=True,
                 )
             else:

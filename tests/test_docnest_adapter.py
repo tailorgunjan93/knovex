@@ -120,41 +120,50 @@ class TestParseDocumentMapping:
         assert dn.parse_document("broken.pdf") is None
 
 
-class TestTesseractResolution:
-    def test_lang_default_is_english_hindi(self, monkeypatch):
+class TestOcrEngineResolution:
+    def test_lang_default_per_engine(self, monkeypatch):
         monkeypatch.delenv("KNOVEX_OCR_LANG", raising=False)
-        assert dn._ocr_languages() == ["eng", "hin"]
+        assert dn._ocr_languages("easyocr") == ["en", "hi"]
+        assert dn._ocr_languages("tesseract") == ["eng", "hin"]
 
     def test_lang_override(self, monkeypatch):
-        monkeypatch.setenv("KNOVEX_OCR_LANG", "eng, mar , hin")
-        assert dn._ocr_languages() == ["eng", "mar", "hin"]
+        monkeypatch.setenv("KNOVEX_OCR_LANG", "en, mr , hi")
+        assert dn._ocr_languages("easyocr") == ["en", "mr", "hi"]
 
-    def test_resolve_explicit_cmd(self, monkeypatch, tmp_path):
-        exe = tmp_path / "tesseract.exe"
-        exe.write_text("")
+    def test_engine_forced_via_env(self, monkeypatch):
+        monkeypatch.setenv("KNOVEX_OCR_ENGINE", "tesseract")
+        assert dn._resolve_ocr_engine() == "tesseract"
+
+    def test_engine_prefers_easyocr_when_installed(self, monkeypatch):
+        monkeypatch.delenv("KNOVEX_OCR_ENGINE", raising=False)
+        monkeypatch.setattr(dn, "_easyocr_available", lambda: True)
+        assert dn._resolve_ocr_engine() == "easyocr"
+
+    def test_engine_tesseract_when_no_easyocr_but_binary(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("KNOVEX_OCR_ENGINE", raising=False)
+        monkeypatch.setattr(dn, "_easyocr_available", lambda: False)
+        exe = tmp_path / "tesseract.exe"; exe.write_text("")
         monkeypatch.setenv("KNOVEX_TESSERACT_CMD", str(exe))
-        assert dn._resolve_tesseract() == str(exe)
+        assert dn._resolve_ocr_engine() == "tesseract"
 
-    def test_resolve_none_when_absent(self, monkeypatch):
+    def test_engine_auto_when_nothing_available(self, monkeypatch):
+        monkeypatch.delenv("KNOVEX_OCR_ENGINE", raising=False)
         monkeypatch.delenv("KNOVEX_TESSERACT_CMD", raising=False)
-        monkeypatch.setattr("shutil.which", lambda _n: None)
-        monkeypatch.setattr(dn.Path, "exists", lambda self: False)
-        assert dn._resolve_tesseract() is None
+        monkeypatch.setattr(dn, "_easyocr_available", lambda: False)
+        monkeypatch.setattr(dn, "_resolve_tesseract", lambda: None)
+        assert dn._resolve_ocr_engine() == "auto"
 
     @pytest.mark.skipif(not dn.is_available(), reason="docnest-ai not installed")
-    def test_factory_uses_tesseract_when_available(self, monkeypatch, tmp_path):
-        """When a Tesseract binary resolves, the registered docling parser is
-        configured for Tesseract + the requested languages."""
-        exe = tmp_path / "tesseract.exe"
-        exe.write_text("")
-        monkeypatch.setenv("KNOVEX_TESSERACT_CMD", str(exe))
-        monkeypatch.setenv("KNOVEX_OCR_LANG", "eng,hin")
+    def test_factory_uses_easyocr_when_preferred(self, monkeypatch):
+        """EasyOCR installed → registered docling parser is configured for it."""
+        monkeypatch.delenv("KNOVEX_OCR_ENGINE", raising=False)
+        monkeypatch.delenv("KNOVEX_OCR_LANG", raising=False)
+        monkeypatch.setattr(dn, "_easyocr_available", lambda: True)
         factory = dn._build_factory("docling", ocr=True)
         from docnest.parsers.pdf import DoclingPDFParser
         parser = next(p for p in factory._registry if isinstance(p, DoclingPDFParser))
-        assert parser._ocr_engine == "tesseract"
-        assert parser._ocr_lang == ["eng", "hin"]
-        assert parser._tesseract_cmd == str(exe)
+        assert parser._ocr_engine == "easyocr"
+        assert parser._ocr_lang == ["en", "hi"]
         assert parser._force_full_page_ocr is True
 
 

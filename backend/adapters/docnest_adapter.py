@@ -60,12 +60,14 @@ def is_available() -> bool:
         return False
 
 
-def _resolve_tesseract() -> str | None:
-    """Locate the Tesseract executable (Devanagari/Hindi-capable OCR), or None.
+# Default OCR languages per engine (the user reads Hindi + English). EasyOCR
+# uses 2-letter codes, Tesseract ISO 639-2. Override either via KNOVEX_OCR_LANG.
+_DEFAULT_OCR_LANG = {"easyocr": ["en", "hi"], "tesseract": ["eng", "hin"]}
 
-    Env override first (set by desktop/provisioner), then PATH, then the common
-    Windows install location. Returning None means we use docnest's default OCR
-    engine instead (Latin/CJK only)."""
+
+def _resolve_tesseract() -> str | None:
+    """Locate the Tesseract executable, or None. Env override → PATH → common
+    Windows install path."""
     import os
     import shutil
 
@@ -84,14 +86,39 @@ def _resolve_tesseract() -> str | None:
     return None
 
 
-def _ocr_languages() -> list[str]:
-    """OCR language codes (Tesseract ISO 639-2). Default English + Hindi; override
-    via ``KNOVEX_OCR_LANG`` (comma-separated, e.g. ``eng,hin,mar``)."""
+def _easyocr_available() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("easyocr") is not None
+
+
+def _resolve_ocr_engine() -> str:
+    """Pick the OCR engine. Honour KNOVEX_OCR_ENGINE if set; else prefer EasyOCR
+    (pure-Python, reads Devanagari/Hindi, works in the on-demand env), then a
+    Tesseract binary, else docnest's default (Latin/CJK only)."""
     import os
 
-    raw = os.environ.get("KNOVEX_OCR_LANG", "eng,hin")
-    langs = [x.strip() for x in raw.split(",") if x.strip()]
-    return langs or ["eng"]
+    forced = os.environ.get("KNOVEX_OCR_ENGINE", "").strip().lower()
+    if forced in ("easyocr", "tesseract", "auto"):
+        return forced
+    if _easyocr_available():
+        return "easyocr"
+    if _resolve_tesseract():
+        return "tesseract"
+    return "auto"
+
+
+def _ocr_languages(engine: str) -> list[str]:
+    """OCR language codes for ``engine``. Override via ``KNOVEX_OCR_LANG``
+    (comma-separated, codes matching the engine)."""
+    import os
+
+    raw = os.environ.get("KNOVEX_OCR_LANG", "").strip()
+    if raw:
+        langs = [x.strip() for x in raw.split(",") if x.strip()]
+        if langs:
+            return langs
+    return _DEFAULT_OCR_LANG.get(engine, ["en"])
 
 
 def _build_factory(pdf_engine: str, ocr: bool):
@@ -99,10 +126,10 @@ def _build_factory(pdf_engine: str, ocr: bool):
 
     docnest's ``DoclingPDFParser`` defaults ``ocr=False`` and the factory wires
     it with that default — so scanned/image-only PDFs yield nothing. We swap in
-    an OCR-enabled parser. When a Tesseract binary is available we use it with
-    the configured languages (so Devanagari/Hindi scans are read); otherwise we
-    fall back to docnest's default OCR engine. Best-effort: any failure leaves
-    the factory's default in place.
+    an OCR-enabled parser using a Devanagari/Hindi-capable engine (EasyOCR by
+    default — no system binary; Tesseract if its binary is present), so Hindi
+    scans are read. Falls back to docnest's default engine when neither is
+    available. Best-effort: any failure leaves the factory's default in place.
     """
     from docnest.parsers.factory import ParserFactory
 
@@ -111,14 +138,17 @@ def _build_factory(pdf_engine: str, ocr: bool):
         try:
             from docnest.parsers.pdf import DoclingPDFParser
 
-            tesseract = _resolve_tesseract()
-            if tesseract:
+            engine = _resolve_ocr_engine()
+            if engine == "easyocr":
                 parser = DoclingPDFParser(
-                    ocr=True,
-                    ocr_engine="tesseract",
-                    ocr_lang=_ocr_languages(),
-                    tesseract_cmd=tesseract,
-                    force_full_page_ocr=True,
+                    ocr=True, ocr_engine="easyocr",
+                    ocr_lang=_ocr_languages("easyocr"), force_full_page_ocr=True,
+                )
+            elif engine == "tesseract":
+                parser = DoclingPDFParser(
+                    ocr=True, ocr_engine="tesseract",
+                    ocr_lang=_ocr_languages("tesseract"),
+                    tesseract_cmd=_resolve_tesseract(), force_full_page_ocr=True,
                 )
             else:
                 parser = DoclingPDFParser(ocr=True)   # default engine (Latin/CJK)
