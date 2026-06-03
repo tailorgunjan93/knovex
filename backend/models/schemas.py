@@ -155,6 +155,14 @@ class TestLLMResponse(BaseModel):
     error: str | None = None
 
 
+class OcrStatusResponse(BaseModel):
+    """State of the on-demand OCR pack (docnest provisioned outside the bundle)."""
+    state: Literal["not_installed", "installing", "ready", "error", "unavailable"]
+    detail: str = ""
+    python_path: str | None = None
+    log_tail: list[str] = Field(default_factory=list)
+
+
 class OllamaDetectResponse(BaseModel):
     detected: bool
     url: str = ""

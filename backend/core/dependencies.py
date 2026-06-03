@@ -343,6 +343,18 @@ def get_highlight_repository(backend=Depends(get_sqlite_backend)):
     return SQLiteHighlightRepository(backend)
 
 
+@lru_cache(maxsize=1)
+def get_ocr_provision_service():
+    """Provide the OcrProvisionService singleton.
+
+    Singleton because it holds the install state machine + background task and
+    must survive across requests. Constructing it auto-detects (and adopts) an
+    OCR env provisioned by a previous run.
+    """
+    from backend.core.ocr_provision_service import OcrProvisionService
+    return OcrProvisionService(env_home=app_config.data_dir / "ocr")
+
+
 # ---------------------------------------------------------------------------
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------
