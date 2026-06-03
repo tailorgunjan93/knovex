@@ -48,10 +48,33 @@ def is_available() -> bool:
         return False
 
 
+def _build_factory(pdf_engine: str, ocr: bool):
+    """Construct a docnest ParserFactory, enabling OCR for the docling engine.
+
+    docnest's ``DoclingPDFParser`` defaults ``ocr=False`` and the factory wires
+    it with that default — so scanned/image-only PDFs yield nothing. To get the
+    OCR we delegated here for, swap in an OCR-enabled docling parser. This is
+    best-effort: if docnest's internals differ, we keep the factory's default.
+    """
+    from docnest.parsers.factory import ParserFactory
+
+    factory = ParserFactory(pdf_engine=pdf_engine)
+    if ocr and pdf_engine == "docling":
+        try:
+            from docnest.parsers.pdf import DoclingPDFParser
+
+            factory.unregister(DoclingPDFParser)
+            factory.register(DoclingPDFParser(ocr=True), position=0)
+        except Exception:
+            logger.info("docnest OCR-enabled docling parser unavailable — using factory default")
+    return factory
+
+
 def parse_document(
     file_path: str | Path,
     *,
     pdf_engine: str = "docling",
+    ocr: bool = True,
 ) -> list[DocnestSection] | None:
     """
     Parse a document through docnest, returning normalised sections.
@@ -62,17 +85,17 @@ def parse_document(
     surfaced as ``None`` to keep the caller contract simple.
 
     ``pdf_engine`` selects docnest's PDF backend: ``"docling"`` (default — ML
-    layout analysis + OCR for scans/design PDFs) or ``"pymupdf"`` (fast font
-    heuristic, no model downloads).
+    layout analysis) or ``"pymupdf"`` (fast font heuristic, no model downloads).
+    ``ocr`` enables OCR for scanned/image-only PDFs on the docling path (the
+    reason delegation exists); first use downloads docling's OCR models.
     """
     try:
-        from docnest.parsers.factory import ParserFactory
+        factory = _build_factory(pdf_engine, ocr)
     except Exception:
         return None
 
     path = str(file_path)
     try:
-        factory = ParserFactory(pdf_engine=pdf_engine)
         if not factory.supports(path):
             return None
         raw = factory.get(path).parse(path)
@@ -82,15 +105,16 @@ def parse_document(
 
     sections: list[DocnestSection] = []
     for sec in getattr(raw, "sections", None) or []:
+        title = (getattr(sec, "title", "") or "").strip()
         text = (getattr(sec, "text", "") or "").strip()
-        if not text:
+        # docnest emits heading-only sections (e.g. a slide title, or a single
+        # OCR'd line) as title-with-empty-text — that title is still real,
+        # indexable content, so fall back to it. Skip only when both are empty.
+        content = text or title
+        if not content:
             continue
         sections.append(
-            DocnestSection(
-                text=text,
-                section=(getattr(sec, "title", "") or "").strip(),
-                page=getattr(sec, "page", None),
-            )
+            DocnestSection(text=content, section=title, page=getattr(sec, "page", None))
         )
 
     # Some parsers populate raw_text instead of structured sections.

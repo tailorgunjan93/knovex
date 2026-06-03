@@ -76,12 +76,21 @@ class TestParseDocumentMapping:
         assert out[0].section == "Intro"
         assert out[1].page == 3
 
-    def test_skips_empty_sections(self, monkeypatch):
-        Sec = _install_fake_docnest(monkeypatch, sections=[])
-        secs = [Sec(text="  ", title="blank"), Sec(text="real content", title="ok")]
+    def test_skips_fully_empty_sections(self, monkeypatch):
+        Sec = _install_fake_docnest(monkeypatch)
+        secs = [Sec(text="  ", title=""), Sec(text="real content", title="ok")]
         _install_fake_docnest(monkeypatch, sections=secs)
         out = dn.parse_document("x.pdf")
         assert [s.text for s in out] == ["real content"]
+
+    def test_heading_only_section_uses_title_as_content(self, monkeypatch):
+        """OCR'd headings land in title with empty text — still indexable."""
+        Sec = _install_fake_docnest(monkeypatch)
+        secs = [Sec(text="", title="OCR CONFIRMS DOCNEST WORKS")]
+        _install_fake_docnest(monkeypatch, sections=secs)
+        out = dn.parse_document("scan.pdf")
+        assert out == [dn.DocnestSection(
+            text="OCR CONFIRMS DOCNEST WORKS", section="OCR CONFIRMS DOCNEST WORKS")]
 
     def test_falls_back_to_raw_text_when_no_sections(self, monkeypatch):
         _install_fake_docnest(monkeypatch, sections=[], raw_text="flat document text")
@@ -127,3 +136,24 @@ class TestRealDocnest:
         joined = " ".join(s.text for s in out)
         assert "Backpropagation" in joined
         assert "chain rule" in joined.lower()
+
+    @pytest.mark.slow
+    def test_ocr_recovers_image_only_pdf(self, tmp_path):
+        """The whole point of delegating to docnest: a PDF with NO text layer
+        (text baked into an image) is recovered via OCR. docnest's docling
+        parser defaults ocr=False, so the adapter must enable it. Slow — downloads
+        docling OCR models on first run."""
+        src = fitz.open(); sp = src.new_page(width=600, height=200)
+        sp.insert_text((40, 110), "OCR CONFIRMS DOCNEST WORKS", fontsize=34)
+        pix = sp.get_pixmap(dpi=150)
+        img = fitz.open(); ip = img.new_page(width=600, height=200)
+        ip.insert_image(fitz.Rect(0, 0, 600, 200), pixmap=pix)
+        path = tmp_path / "image_only.pdf"
+        img.save(str(path)); img.close(); src.close()
+
+        assert fitz.open(str(path))[0].get_text().strip() == "", "PDF must have no text layer"
+
+        out = dn.parse_document(path, pdf_engine="docling", ocr=True)
+        assert out, "OCR recovered no text from the image-only PDF"
+        joined = " ".join(s.text for s in out).upper()
+        assert "DOCNEST" in joined
