@@ -53,6 +53,25 @@ class ParagraphContent:
     style: str = ""     # e.g. "Heading 1", "Normal", "List Bullet"
 
 
+def _image_coverage(blocks: list[dict], page_width: float, page_height: float) -> float:
+    """
+    Fraction of the page area covered by image blocks (clamped to [0, 1]).
+
+    Pure + module-level so the "is this page image-dominant?" decision is
+    unit-testable without a real PDF. type==1 blocks are images in PyMuPDF's
+    ``get_text("dict")`` output.
+    """
+    page_area = page_width * page_height
+    if page_area <= 0:
+        return 0.0
+    img_area = 0.0
+    for b in blocks:
+        if b.get("type") == 1:
+            x0, y0, x1, y1 = b.get("bbox", (0, 0, 0, 0))
+            img_area += max(0.0, (x1 - x0)) * max(0.0, (y1 - y0))
+    return min(1.0, img_area / page_area)
+
+
 # ---------------------------------------------------------------------------
 # Interfaces
 # ---------------------------------------------------------------------------
@@ -231,9 +250,19 @@ class PyMuPDFAdapter(IPDFAdapter):
 
         blocks     = data.get("blocks", [])
         page_width = float(data.get("width", 595))
+        page_height = float(data.get("height", 842))
 
         if not blocks:
             return ""
+
+        # Image-dominant pages (design slides, scans, decks) reconstruct poorly
+        # from get_text("dict"): raw image bytes ignore soft-masks/colorspaces
+        # and vector backgrounds aren't captured at all — producing artefacts.
+        # Render the whole page to a composited pixmap instead (true WYSIWYG).
+        if _image_coverage(blocks, page_width, page_height) >= 0.55:
+            raster = self._render_page_raster(page, page_num, filename)
+            if raster:
+                return raster
 
         base_size     = self._median_font_size(blocks)
         sorted_blocks = self._reading_order(blocks, page_width)
@@ -525,6 +554,29 @@ class PyMuPDFAdapter(IPDFAdapter):
         _close_list()   # close any trailing open list
 
         return "\n".join(html_out)
+
+    def _render_page_raster(self, page, page_num: int, filename: str) -> str:
+        """
+        Render the entire PDF page to a composited PNG (text + vector graphics +
+        images with their masks all flattened correctly). Used for image-dominant
+        pages where HTML reconstruction is unfaithful.
+        """
+        try:
+            pix = page.get_pixmap(dpi=150, alpha=False)   # alpha=False → white bg
+            png = pix.tobytes("png")
+            b64 = base64.b64encode(png).decode("ascii")
+            return (
+                f'<figure class="page-raster">'
+                f'<img src="data:image/png;base64,{b64}" alt="page {page_num}" '
+                f'style="width:100%;height:auto;display:block" />'
+                f'</figure>'
+            )
+        except Exception as exc:
+            logger.warning(
+                "PyMuPDF: page raster failed for page %d of %s: %s",
+                page_num, filename, exc,
+            )
+            return ""
 
     def _image_block_html(self, block: dict, page_num: int, filename: str) -> str:
         """Render an image block as a base64 <img> tag wrapped in <figure>."""
