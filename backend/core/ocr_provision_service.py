@@ -103,13 +103,15 @@ class OcrProvisionService:
         env_home: Path,
         uv_resolver: Callable[[], str | None] = default_uv_resolver,
         runner: CommandRunner | None = None,
-        package: str = "docnest-ai",
+        packages: list[str] | None = None,
         python_version: str = "3.11",
     ) -> None:
         self._home = Path(env_home)
         self._uv_resolver = uv_resolver
         self._runner = runner or AsyncSubprocessRunner()
-        self._package = package
+        # docnest-ai >=0.7.0 (OCR engine/lang + full-page-OCR text recovery) plus
+        # EasyOCR so non-Latin scripts (Devanagari/Hindi) work in the OCR env.
+        self._packages = packages or ["docnest-ai>=0.7.0", "easyocr"]
         self._python_version = python_version
 
         self._state = OcrState.NOT_INSTALLED
@@ -163,10 +165,10 @@ class OcrProvisionService:
             steps: list[tuple[str, list[str]]] = [
                 ("Creating OCR environment…",
                  [uv, "venv", str(self._home), "--python", self._python_version]),
-                (f"Downloading and installing {self._package} (this can take a while)…",
-                 [uv, "pip", "install", "--python", str(py), self._package]),
+                ("Downloading and installing the OCR engine (this can take a while)…",
+                 [uv, "pip", "install", "--python", str(py), *self._packages]),
                 ("Verifying OCR engine…",
-                 [str(py), "-c", "import docnest"]),
+                 [str(py), "-c", "import docnest, easyocr"]),
             ]
 
             for detail, cmd in steps:

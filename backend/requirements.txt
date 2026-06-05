@@ -30,8 +30,10 @@ cryptography>=43.0          # Fernet symmetric encryption for API keys
 # fail because docnest-ai depends on `docling>=2.0`, which transitively pulls
 # in torch, transformers, onnxruntime and other large ML packages (several GB).
 #
-# Users who need docnest-ai for native .udf support can install it separately:
-#   pip install docnest-ai>=0.6.0
+# Users who need docnest-ai for OCR (scanned/image PDFs, incl. Devanagari/Hindi)
+# and native .udf support can install it separately, with EasyOCR for non-Latin
+# scripts (docnest >=0.7.0 surfaces full-page OCR text and supports engine/lang):
+#   pip install "docnest-ai>=0.7.0" easyocr
 # All other formats (PDF, DOCX, TXT, MD, CSV) work without it.
 
 # ─── LLM layer ────────────────────────────────────────────────────────────────

@@ -80,8 +80,9 @@ class TestInstall:
         assert os.environ[OCR_HOME_ENV] == str(tmp_path / "ocr")
         # venv, pip install, verify-import
         assert [c[1] for c in runner.calls][:2] == ["venv", "pip"]
-        assert any("docnest-ai" in c for c in runner.calls[1])
-        assert runner.calls[2][1:] == ["-c", "import docnest"]
+        assert any("docnest-ai>=0.7.0" in c for c in runner.calls[1])
+        assert any("easyocr" in c for c in runner.calls[1])
+        assert runner.calls[2][1:] == ["-c", "import docnest, easyocr"]
 
     async def test_failure_sets_error_state(self, tmp_path):
         svc = _svc(tmp_path, runner=FakeRunner(fail_at=1))   # pip install fails
