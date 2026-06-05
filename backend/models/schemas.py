@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # Shared / primitive models
@@ -47,10 +47,38 @@ class LLMSettings(BaseModel):
     aws_secret_access_key: str = ""
 
 
-class SearchSettings(BaseModel):
-    """Web search engine configuration."""
-    engine: str = "duckduckgo"  # duckduckgo | serper | brave
+class LLMProviderConfig(BaseModel):
+    """
+    Per-provider saved config (multi-provider store). The active provider's
+    config is also mirrored into the top-level ``llm`` field for consumers.
+    Keys are masked in API responses.
+    """
+    model: str = ""
     api_key: str = ""
+    base_url: str = ""
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    configured: bool = False     # derived: has a usable key / credentials
+
+
+class SearchSettings(BaseModel):
+    """Web search engine configuration (legacy 'primary' engine; kept for compat)."""
+    engine: str = "duckduckgo"  # duckduckgo | wikipedia | serper | brave
+    api_key: str = ""
+
+
+class SearchEngineConfig(BaseModel):
+    """Per-engine config (multi-engine). Free engines need no key."""
+    enabled: bool = False
+    api_key: str = ""
+    configured: bool = False     # derived: free engine, or a key is present
+
+
+class SearchEngineUpdate(BaseModel):
+    """Enable/disable an engine or set its key. Used by the search grid."""
+    enabled: bool | None = None
+    api_key: str | None = None
 
 
 class EmbeddingSettings(BaseModel):
@@ -73,11 +101,17 @@ class EmbeddingSettings(BaseModel):
 class AppSettingsResponse(BaseModel):
     """Full settings payload returned by GET /api/settings."""
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    # Per-provider saved configs (multi-provider). Keyed by provider id.
+    llm_providers: dict[str, LLMProviderConfig] = Field(default_factory=dict)
     search: SearchSettings = Field(default_factory=SearchSettings)
+    # Per-engine configs (multi-engine web search). Keyed by engine id.
+    search_engines: dict[str, SearchEngineConfig] = Field(default_factory=dict)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     theme: str = "dark"                     # light | medium | dark
     kb_storage_path: str = ""
     backend_port: int = 8765
+    display_name: str = ""                  # what the app calls the user; "" → "You"
+    onboarded: bool = False                 # has the first-run welcome been completed
 
 
 class AppSettingsUpdate(BaseModel):
@@ -87,6 +121,23 @@ class AppSettingsUpdate(BaseModel):
     embedding: EmbeddingSettings | None = None
     theme: str | None = None
     kb_storage_path: str | None = None
+    display_name: str | None = None
+    onboarded: bool | None = None
+
+
+class LLMProviderUpdate(BaseModel):
+    """Save one provider's config (key/model/base_url). Used by the provider grid."""
+    model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    aws_region: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+
+
+class ActivateProviderRequest(BaseModel):
+    """Make a provider the active one (copies its saved config into ``llm``)."""
+    provider: str
 
 
 class EmbeddingModelStatus(BaseModel):
@@ -102,6 +153,14 @@ class TestLLMResponse(BaseModel):
     latency_ms: float | None = None
     model: str = ""
     error: str | None = None
+
+
+class OcrStatusResponse(BaseModel):
+    """State of the on-demand OCR pack (docnest provisioned outside the bundle)."""
+    state: Literal["not_installed", "installing", "ready", "error", "unavailable"]
+    detail: str = ""
+    python_path: str | None = None
+    log_tail: list[str] = Field(default_factory=list)
 
 
 class OllamaDetectResponse(BaseModel):
@@ -227,6 +286,44 @@ class FileContentResponse(BaseModel):
 class FileAskRequest(BaseModel):
     question: str = Field(..., min_length=1)
     use_web_search: bool = False
+    page: int | None = Field(default=None, ge=1)   # current reader page → prioritised as context
+
+
+# ---------------------------------------------------------------------------
+# Reader highlights (user-created, persisted)
+# ---------------------------------------------------------------------------
+
+# Allowed highlight colors (named — the frontend maps them to theme tints).
+HIGHLIGHT_COLORS = ("yellow", "green", "blue", "pink", "purple")
+
+
+class HighlightCreate(BaseModel):
+    """Payload to create a highlight on a page of a file."""
+    page: int = Field(default=1, ge=1)
+    text: str = Field(..., min_length=1, max_length=4000)
+    color: str = Field(default="yellow")
+    note: str = Field(default="", max_length=2000)
+
+    @field_validator("color")
+    @classmethod
+    def _valid_color(cls, v: str) -> str:
+        return v if v in HIGHLIGHT_COLORS else "yellow"
+
+
+class Highlight(BaseModel):
+    """A persisted highlight, returned by the API."""
+    id: str
+    kb_id: str
+    file_id: str
+    page: int
+    text: str
+    color: str
+    note: str
+    created_at: str
+
+
+class HighlightListResponse(BaseModel):
+    highlights: list[Highlight]
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +425,7 @@ class LearnSessionCreate(BaseModel):
     source_type: str                    # topic | kb_file | url | upload
     source_ref: str | None = None       # file_id for kb_file, URL string for url
     difficulty: Literal["beginner", "intermediate", "expert"] = "intermediate"
+    language: str = "English"           # generate-in-language; default English = no behavior change
     use_web_search: bool = False
     context_text: str = ""              # pre-fetched source text (KB/upload); backend fetches URL if empty + source_type=='url'
 

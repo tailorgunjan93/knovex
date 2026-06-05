@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from backend.adapters.document_parsers import (
+    CachingPDFAdapter,
     IParagraphAdapter,
     IPDFAdapter,
     PyMuPDFAdapter,
@@ -85,7 +86,20 @@ class ReaderService:
         self._file_repo = file_repo
         self._backend = backend
         self._llm_svc = llm_svc
-        self._pdf_adapter = pdf_adapter or PyMuPDFAdapter()
+        # Wrap the PDF adapter in a caching decorator so page turns don't
+        # re-parse the whole document each time (Reader perf fix). The wrap is
+        # transparent (same IPDFAdapter contract) and applies to injected stubs
+        # too, which keeps tests fast and still exercises the cached path.
+        #
+        # CRITICAL: do NOT re-wrap an adapter that already caches. ReaderService
+        # is built per-request (see dependencies.get_reader_service), so the
+        # cache only survives across page turns when a *singleton*
+        # CachingPDFAdapter is injected — re-wrapping it here would give each
+        # request a fresh, empty cache and re-parse the whole PDF every turn.
+        if isinstance(pdf_adapter, CachingPDFAdapter):
+            self._pdf_adapter: IPDFAdapter = pdf_adapter
+        else:
+            self._pdf_adapter = CachingPDFAdapter(pdf_adapter or PyMuPDFAdapter())
         self._para_adapter = para_adapter or PythonDocxAdapter()
         self._search_svc = search_svc
 
@@ -283,6 +297,7 @@ class ReaderService:
         credentials: ProviderCredentials,
         search_engine: str = "duckduckgo",
         search_api_key: str = "",
+        search_engines: list[tuple[str, str]] | None = None,
     ) -> AsyncGenerator[str, None]:
         """
         Stream an answer to *req.question* grounded in the file's chunks.
@@ -298,15 +313,23 @@ class ReaderService:
 
         context = await self._build_context(file_id, req.question)
 
+        # ── Page-scoped context — prioritise the page the reader is on ────────
+        page_context = ""
+        if req.page:
+            page_context = await self._build_page_context(file_id, req.page)
+
         # ── Optional web search context ──────────────────────────────────────
         web_context = ""
         if req.use_web_search and self._search_svc is not None:
             try:
-                web_resp = await self._search_svc.search(
-                    query=req.question,
-                    engine=search_engine,
-                    api_key=search_api_key,
-                    num_results=5,
+                web_resp = (
+                    await self._search_svc.search_blended(
+                        query=req.question, engines=search_engines, num_results=5,
+                    )
+                    if search_engines
+                    else await self._search_svc.search(
+                        query=req.question, engine=search_engine, api_key=search_api_key, num_results=5,
+                    )
                 )
                 if web_resp.results:
                     parts = []
@@ -321,15 +344,25 @@ class ReaderService:
                 logger.warning("Reader web search failed: %s", exc)
 
         combined_context = context
+        if page_context:
+            # The current page leads; the rest of the document follows as backup.
+            combined_context = (
+                f"Current page ({req.page}) — the user is reading this now:\n{page_context}\n\n"
+                f"--- Elsewhere in the document ---\n{context}"
+            )
         if web_context:
             combined_context = (
-                f"Document context:\n{context}\n\n"
+                f"Document context:\n{combined_context}\n\n"
                 f"Web search results:\n{web_context}"
             )
 
+        page_hint = (
+            f' The user is currently on page {req.page}; prioritise that page unless the question is broader.'
+            if req.page else ""
+        )
         system_prompt = (
             f"You are a helpful assistant answering questions about the document "
-            f'"{file.name}". '
+            f'"{file.name}".{page_hint} '
             "Use the provided document context and any web search results to answer. "
             "If the answer is not in the context, say so clearly. "
             "Be concise and cite specific parts of the document when helpful."
@@ -384,6 +417,36 @@ class ReaderService:
                 f"File '{file.name}' is not yet readable (status: {file.status}). "
                 f"Wait for ingestion to complete."
             )
+
+    async def _build_page_context(self, file_id: str, page: int) -> str:
+        """
+        Text of the chunks on a specific page — used to ground the page-assistant
+        in what the reader is currently looking at. Returns "" when the format
+        has no page info (e.g. plain text/markdown) so the caller falls back to
+        whole-document context.
+        """
+        rows = await self._backend.fetchall(
+            """
+            SELECT content
+            FROM   chunks
+            WHERE  file_id = ? AND page = ?
+            ORDER  BY chunk_index
+            LIMIT  ?
+            """,
+            (file_id, page, _MAX_CONTEXT_CHUNKS),
+        )
+        if not rows:
+            return ""
+
+        parts: list[str] = []
+        total_chars = 0
+        for row in rows:
+            chunk_text = row["content"]
+            if total_chars + len(chunk_text) > _MAX_CONTEXT_CHARS:
+                break
+            parts.append(chunk_text)
+            total_chars += len(chunk_text)
+        return "\n".join(parts)
 
     async def _build_context(self, file_id: str, question: str) -> str:
         """Fetch stored chunks and build a context string for the LLM."""

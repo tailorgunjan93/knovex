@@ -16,9 +16,27 @@ export interface LLMSettings {
   aws_secret_access_key: string
 }
 
+/** Per-provider saved config (multi-provider grid). Keys masked in responses. */
+export interface LLMProviderConfig {
+  model: string
+  api_key: string
+  base_url: string
+  aws_region: string
+  aws_access_key_id: string
+  aws_secret_access_key: string
+  configured: boolean
+}
+
 export interface SearchSettings {
   engine: string
   api_key: string
+}
+
+/** Per-engine multi-search config. Free engines need no key. */
+export interface SearchEngineConfig {
+  enabled: boolean
+  api_key: string
+  configured: boolean
 }
 
 export interface EmbeddingSettings {
@@ -45,11 +63,20 @@ export interface DownloadProgress {
 
 export interface AppSettings {
   llm: LLMSettings
+  /** Per-provider saved configs (multi-provider). Keyed by provider id. */
+  llm_providers: Record<string, LLMProviderConfig>
   search: SearchSettings
+  /** Per-engine multi-search configs. Keyed by engine id. */
+  search_engines: Record<string, SearchEngineConfig>
   embedding: EmbeddingSettings
   theme: string
   kb_storage_path: string
   backend_port: number
+  /** User's display name (added in the redesign; optional for forward-compat
+   *  until the backend field + onboarding ship). Empty/undefined → "You". */
+  display_name?: string
+  /** Whether first-run onboarding completed. */
+  onboarded?: boolean
 }
 
 export interface TestLLMResult {
@@ -92,6 +119,8 @@ export const settingsApi = {
     embedding: Partial<EmbeddingSettings>
     theme: string
     kb_storage_path: string
+    display_name: string
+    onboarded: boolean
   }>): Promise<AppSettings> {
     const res = await apiClient.put<AppSettings>('/settings', patch)
     return res.data
@@ -100,6 +129,30 @@ export const settingsApi = {
   /** Test the currently-saved LLM connection. */
   async testLLM(): Promise<TestLLMResult> {
     const res = await apiClient.post<TestLLMResult>('/settings/test-llm')
+    return res.data
+  },
+
+  /** Save one provider's config (multi-provider grid). Only changed fields. */
+  async setProvider(providerId: string, patch: Partial<Omit<LLMProviderConfig, 'configured'>>): Promise<AppSettings> {
+    const res = await apiClient.post<AppSettings>(`/settings/llm/providers/${providerId}`, patch)
+    return res.data
+  },
+
+  /** Make a saved provider the active one. */
+  async activateProvider(providerId: string): Promise<AppSettings> {
+    const res = await apiClient.post<AppSettings>('/settings/llm/activate', { provider: providerId })
+    return res.data
+  },
+
+  /** Test a specific provider without changing the active one. */
+  async testProvider(providerId: string): Promise<TestLLMResult> {
+    const res = await apiClient.post<TestLLMResult>(`/settings/llm/providers/${providerId}/test`)
+    return res.data
+  },
+
+  /** Enable/disable a search engine or set its key (multi-engine). */
+  async setSearchEngine(engineId: string, patch: Partial<{ enabled: boolean; api_key: string }>): Promise<AppSettings> {
+    const res = await apiClient.post<AppSettings>(`/settings/search/engines/${engineId}`, patch)
     return res.data
   },
 

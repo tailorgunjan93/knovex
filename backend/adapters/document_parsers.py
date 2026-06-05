@@ -53,6 +53,25 @@ class ParagraphContent:
     style: str = ""     # e.g. "Heading 1", "Normal", "List Bullet"
 
 
+def _image_coverage(blocks: list[dict], page_width: float, page_height: float) -> float:
+    """
+    Fraction of the page area covered by image blocks (clamped to [0, 1]).
+
+    Pure + module-level so the "is this page image-dominant?" decision is
+    unit-testable without a real PDF. type==1 blocks are images in PyMuPDF's
+    ``get_text("dict")`` output.
+    """
+    page_area = page_width * page_height
+    if page_area <= 0:
+        return 0.0
+    img_area = 0.0
+    for b in blocks:
+        if b.get("type") == 1:
+            x0, y0, x1, y1 = b.get("bbox", (0, 0, 0, 0))
+            img_area += max(0.0, (x1 - x0)) * max(0.0, (y1 - y0))
+    return min(1.0, img_area / page_area)
+
+
 # ---------------------------------------------------------------------------
 # Interfaces
 # ---------------------------------------------------------------------------
@@ -231,9 +250,19 @@ class PyMuPDFAdapter(IPDFAdapter):
 
         blocks     = data.get("blocks", [])
         page_width = float(data.get("width", 595))
+        page_height = float(data.get("height", 842))
 
         if not blocks:
             return ""
+
+        # Image-dominant pages (design slides, scans, decks) reconstruct poorly
+        # from get_text("dict"): raw image bytes ignore soft-masks/colorspaces
+        # and vector backgrounds aren't captured at all — producing artefacts.
+        # Render the whole page to a composited pixmap instead (true WYSIWYG).
+        if _image_coverage(blocks, page_width, page_height) >= 0.55:
+            raster = self._render_page_raster(page, page_num, filename)
+            if raster:
+                return raster
 
         base_size     = self._median_font_size(blocks)
         sorted_blocks = self._reading_order(blocks, page_width)
@@ -526,6 +555,29 @@ class PyMuPDFAdapter(IPDFAdapter):
 
         return "\n".join(html_out)
 
+    def _render_page_raster(self, page, page_num: int, filename: str) -> str:
+        """
+        Render the entire PDF page to a composited PNG (text + vector graphics +
+        images with their masks all flattened correctly). Used for image-dominant
+        pages where HTML reconstruction is unfaithful.
+        """
+        try:
+            pix = page.get_pixmap(dpi=150, alpha=False)   # alpha=False → white bg
+            png = pix.tobytes("png")
+            b64 = base64.b64encode(png).decode("ascii")
+            return (
+                f'<figure class="page-raster">'
+                f'<img src="data:image/png;base64,{b64}" alt="page {page_num}" '
+                f'style="width:100%;height:auto;display:block" />'
+                f'</figure>'
+            )
+        except Exception as exc:
+            logger.warning(
+                "PyMuPDF: page raster failed for page %d of %s: %s",
+                page_num, filename, exc,
+            )
+            return ""
+
     def _image_block_html(self, block: dict, page_num: int, filename: str) -> str:
         """Render an image block as a base64 <img> tag wrapped in <figure>."""
         try:
@@ -633,3 +685,71 @@ class StubParagraphAdapter(IParagraphAdapter):
 
     def extract_paragraphs(self, file_path: Path) -> list[ParagraphContent]:
         return self._paragraphs
+
+
+# ---------------------------------------------------------------------------
+# Caching decorator — Reader performance fix
+# ---------------------------------------------------------------------------
+
+class CachingPDFAdapter(IPDFAdapter):
+    """
+    Decorator (GoF) that memoizes ``extract_pages`` of any ``IPDFAdapter``.
+
+    Why: ReaderService re-parsed the whole PDF on every page turn and threw
+    away all but one page — O(full-parse) per turn. Wrapping the real adapter
+    in this cache makes the first open parse once and every subsequent page
+    turn an O(1) dict lookup.
+
+    Cache key: ``(resolved_path, mtime_ns, size)`` so the entry auto-invalidates
+    if the file is modified or replaced on disk (correctness over staleness).
+
+    Bounded LRU (``maxsize`` entries, default 8) so a long reading session over
+    many documents can't grow memory without bound; the least-recently-used
+    document is evicted first. Thread-safe: ``get_content`` runs the renderer in
+    a thread-pool executor, so the cache may be touched from multiple threads.
+
+    SOLID: SRP (only caching — parsing stays in the wrapped adapter), OCP (wraps
+    any current/future IPDFAdapter without modifying it), LSP (is an IPDFAdapter).
+    """
+
+    def __init__(self, inner: IPDFAdapter, maxsize: int = 8) -> None:
+        self._inner = inner
+        self._maxsize = max(1, maxsize)
+        # OrderedDict as an LRU: most-recently-used moved to the end.
+        from collections import OrderedDict
+        from threading import Lock
+        self._cache: OrderedDict[tuple, list[PageContent]] = OrderedDict()
+        self._lock = Lock()
+
+    @staticmethod
+    def _key(file_path: Path) -> tuple:
+        """Identity that changes whenever the file content could have changed."""
+        p = file_path.resolve()
+        try:
+            st = p.stat()
+            return (str(p), st.st_mtime_ns, st.st_size)
+        except OSError:
+            # File missing/unreadable — use a key that won't collide with a real
+            # stat; the inner adapter will raise the appropriate error.
+            return (str(p), -1, -1)
+
+    def extract_pages(self, file_path: Path) -> list[PageContent]:
+        key = self._key(file_path)
+
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit is not None:
+                self._cache.move_to_end(key)        # mark most-recently-used
+                return hit
+
+        # Parse outside the lock so concurrent reads of *different* files don't
+        # serialize on a slow parse. A duplicate concurrent miss for the same
+        # file may parse twice, but the result is identical and idempotent.
+        pages = self._inner.extract_pages(file_path)
+
+        with self._lock:
+            self._cache[key] = pages
+            self._cache.move_to_end(key)
+            while len(self._cache) > self._maxsize:
+                self._cache.popitem(last=False)     # evict least-recently-used
+        return pages

@@ -15,11 +15,14 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.core.dependencies import LLMServiceDep, SettingsServiceDep
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
+    ActivateProviderRequest,
     AppSettingsResponse,
     AppSettingsUpdate,
     EmbeddingModelStatus,
     LLMModelsResponse,
+    LLMProviderUpdate,
     OllamaDetectResponse,
+    SearchEngineUpdate,
     TestLLMResponse,
 )
 
@@ -77,6 +80,10 @@ async def update_settings(
         patch["theme"] = body.theme
     if body.kb_storage_path is not None:
         patch["kb_storage_path"] = body.kb_storage_path
+    if body.display_name is not None:
+        patch["display_name"] = body.display_name
+    if body.onboarded is not None:
+        patch["onboarded"] = body.onboarded
 
     if not patch:
         raise HTTPException(status_code=400, detail="No fields provided to update")
@@ -119,6 +126,95 @@ async def test_llm(
         model=llm.model,
         credentials=credentials,
     )
+
+
+# ---------------------------------------------------------------------------
+# Multi-provider — save / activate / test a specific provider
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/settings/llm/providers/{provider_id}",
+    response_model=AppSettingsResponse,
+    summary="Save one provider's config (key / model / base_url)",
+)
+async def set_llm_provider(
+    provider_id: str,
+    body: LLMProviderUpdate,
+    settings_svc: SettingsServiceDep,
+) -> AppSettingsResponse:
+    """
+    Persist a single provider's config without changing the active provider
+    (unless *provider_id* IS the active one). Send the real key; only the
+    fields you include are changed. Response is masked.
+    """
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise HTTPException(status_code=400, detail="No fields provided to update")
+    return await settings_svc.set_provider(provider_id, patch)
+
+
+@router.post(
+    "/settings/llm/activate",
+    response_model=AppSettingsResponse,
+    summary="Make a saved provider the active one",
+)
+async def activate_llm_provider(
+    body: ActivateProviderRequest,
+    settings_svc: SettingsServiceDep,
+) -> AppSettingsResponse:
+    """Switch the active LLM provider; its saved config is copied into ``llm``."""
+    return await settings_svc.activate_provider(body.provider)
+
+
+@router.post(
+    "/settings/llm/providers/{provider_id}/test",
+    response_model=TestLLMResponse,
+    summary="Test a specific provider (does not change the active provider)",
+)
+async def test_llm_provider(
+    provider_id: str,
+    settings_svc: SettingsServiceDep,
+    llm_svc: LLMServiceDep,
+) -> TestLLMResponse:
+    """Test a provider using its saved config, leaving the active provider unchanged."""
+    current = await settings_svc.get()  # plaintext for internal use
+    cfg = current.llm_providers.get(provider_id)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' is not configured")
+
+    credentials = ProviderCredentials(
+        api_key=cfg.api_key,
+        base_url=cfg.base_url,
+        aws_region=cfg.aws_region,
+        aws_access_key_id=cfg.aws_access_key_id,
+        aws_secret_access_key=cfg.aws_secret_access_key,
+    )
+    return await llm_svc.test_connection(
+        provider=provider_id,
+        model=cfg.model or current.llm.model,
+        credentials=credentials,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Multi-engine web search — enable/disable + key per engine
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/settings/search/engines/{engine_id}",
+    response_model=AppSettingsResponse,
+    summary="Enable/disable a search engine or set its key",
+)
+async def set_search_engine(
+    engine_id: str,
+    body: SearchEngineUpdate,
+    settings_svc: SettingsServiceDep,
+) -> AppSettingsResponse:
+    """Toggle an engine on/off or save its API key. Response is masked."""
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise HTTPException(status_code=400, detail="No fields provided to update")
+    return await settings_svc.set_search_engine(engine_id, patch)
 
 
 # ---------------------------------------------------------------------------
@@ -188,26 +284,24 @@ async def get_llm_models(
     For Cerebras/Groq, fetches the live model list when an api_key is available.
     """
     current = await settings_svc.get()
-    base_url = current.llm.base_url if provider.lower() == "ollama" else ""
 
-    # Only reuse the stored key when it belongs to the same provider that is being
-    # queried.  Using a different provider's key (e.g. an OpenAI key when the user
-    # switches to Cerebras in the UI) causes live-fetch to fail with 401, silently
-    # falling back to the stale static catalogue — which is the root cause of the
-    # "not fetching new models" bug.
-    stored_key = (
-        current.llm.api_key
-        if current.llm.provider.lower() == provider.lower()
-        else ""
-    )
-    effective_key = api_key or stored_key
+    # Multi-provider aware: pull this provider's OWN saved config from the store
+    # (so a non-active provider's key is used for live fetch), not the active one.
+    cfg = current.llm_providers.get(provider)
+
+    base_url = ""
+    if provider.lower() == "ollama":
+        base_url = (cfg.base_url if cfg else "") or current.llm.base_url or "http://localhost:11434"
+
+    stored_key = cfg.api_key if cfg else ""
+    effective_key = api_key or stored_key   # explicit override (unsaved key) wins
 
     credentials = ProviderCredentials(
         api_key=effective_key,
-        base_url=current.llm.base_url,
-        aws_region=current.llm.aws_region,
-        aws_access_key_id=current.llm.aws_access_key_id,
-        aws_secret_access_key=current.llm.aws_secret_access_key,
+        base_url=base_url,
+        aws_region=(cfg.aws_region if cfg else current.llm.aws_region),
+        aws_access_key_id=(cfg.aws_access_key_id if cfg else ""),
+        aws_secret_access_key=(cfg.aws_secret_access_key if cfg else ""),
     )
     return await llm_svc.get_models(provider, base_url=base_url, credentials=credentials)
 

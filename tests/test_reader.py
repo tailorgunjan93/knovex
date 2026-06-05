@@ -384,3 +384,68 @@ async def test_ask_no_chunks_still_streams():
         events.append(chunk)
 
     assert any("[DONE]" in e for e in events)
+
+
+# ---------------------------------------------------------------------------
+# Page-scoped assistant (req.page) — "Ask about this page"
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_build_page_context_returns_page_chunks():
+    svc = _make_svc(_make_file("pdf", status="ready"))
+    svc._backend.fetchall = AsyncMock(return_value=[{"content": "PAGE FOUR TEXT"}])
+    assert await svc._build_page_context("f1", 4) == "PAGE FOUR TEXT"
+
+
+@pytest.mark.asyncio
+async def test_build_page_context_empty_when_no_rows():
+    svc = _make_svc(_make_file("pdf", status="ready"))
+    svc._backend.fetchall = AsyncMock(return_value=[])
+    assert await svc._build_page_context("f1", 4) == ""
+
+
+@pytest.mark.asyncio
+async def test_ask_prioritises_current_page_in_prompt():
+    file = _make_file("pdf", status="ready")
+    svc = _make_svc(file)
+
+    async def fetchall(query, params):
+        if "AND page" in query:
+            return [{"content": "PAGE FOUR TEXT"}]
+        return [{"content": "whole doc chunk", "section": "", "chunk_index": 0}]
+    svc._backend.fetchall = fetchall
+
+    captured: dict = {}
+    async def _stream(*args, **kwargs):
+        captured["messages"] = kwargs.get("messages")
+        yield "ok"
+    svc._llm_svc.stream = _stream
+
+    from backend.core.providers.base import ProviderCredentials
+    req = FileAskRequest(question="Explain this", page=4)
+    async for _ in svc.ask("kb-1", file.id, req, "openai", "gpt-4o-mini", ProviderCredentials()):
+        pass
+
+    blob = " ".join(m["content"] for m in captured["messages"])
+    assert "Current page (4)" in blob
+    assert "PAGE FOUR TEXT" in blob
+    assert "page 4" in blob   # system hint to prioritise the page
+
+
+@pytest.mark.asyncio
+async def test_ask_without_page_has_no_page_framing():
+    file = _make_file("pdf", status="ready")
+    svc = _make_svc(file)
+    captured: dict = {}
+    async def _stream(*args, **kwargs):
+        captured["messages"] = kwargs.get("messages")
+        yield "ok"
+    svc._llm_svc.stream = _stream
+
+    from backend.core.providers.base import ProviderCredentials
+    req = FileAskRequest(question="Explain this")   # no page
+    async for _ in svc.ask("kb-1", file.id, req, "openai", "gpt-4o-mini", ProviderCredentials()):
+        pass
+
+    blob = " ".join(m["content"] for m in captured["messages"])
+    assert "Current page" not in blob

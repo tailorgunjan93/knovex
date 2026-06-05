@@ -49,9 +49,20 @@ import AutoAwesomeIcon   from '@mui/icons-material/AutoAwesome'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { chatApi, type AttachResult, type ChatMessage, type ChatSession, type SSEEvent, type SourceCitation } from '../../api/chat.api'
 import { kbApi, type KB } from '../../api/kb.api'
+import KnovexMark from '@/components/brand/KnovexMark'
+import { initialsOf, resolveDisplayName } from '@/lib/displayName'
+import { useSettingsStore } from '@/store/settings.store'
+import { BRAND } from '@/theme/tokens'
 
 const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
-const SERIF = '"Instrument Serif", Georgia, serif'
+
+// Stable empty-array references. React Query returns `undefined` for `data`
+// before/while disabled; a `= []` default would mint a NEW array every render,
+// which (when used as a useEffect dependency) triggers an infinite setState loop.
+// Sharing one frozen reference keeps the dependency identity stable.
+const EMPTY_SESSIONS: ChatSession[]   = []
+const EMPTY_KBS:      KB[]            = []
+const EMPTY_MESSAGES: ChatMessage[]   = []
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +93,8 @@ export default function ChatPage() {
   const navigate    = useNavigate()
   const isDark      = theme.palette.mode === 'dark'
   const accent      = theme.palette.primary.main
+  const { settings } = useSettingsStore()
+  const userInitials = initialsOf(settings?.display_name)
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [messages,        setMessages]         = useState<StreamingMessage[]>([])
@@ -89,7 +102,8 @@ export default function ChatPage() {
   const [isStreaming,     setIsStreaming]       = useState(false)
   const [webSearch,       setWebSearch]        = useState(false)
   const [error,           setError]            = useState<string | null>(null)
-  const [historyOpen,     setHistoryOpen]      = useState(true)
+  // Collapsed by default — chat-first like the lab (toggle to reveal history).
+  const [historyOpen,     setHistoryOpen]      = useState(false)
   const [sourcesOpen,     setSourcesOpen]      = useState(true)
   const [selectedKbIds,   setSelectedKbIds]    = useState<string[]>([])
   const [kbDropOpen,      setKbDropOpen]       = useState(false)
@@ -125,12 +139,12 @@ export default function ChatPage() {
   }, [kbDropOpen])
 
   // ── Queries ────────────────────────────────────────────────────────────────
-  const { data: sessions = [] } = useQuery({
+  const { data: sessions = EMPTY_SESSIONS } = useQuery({
     queryKey: ['chat-sessions'],
     queryFn:  () => chatApi.listSessions(),
   })
 
-  const { data: kbs = [] } = useQuery({
+  const { data: kbs = EMPTY_KBS } = useQuery({
     queryKey: ['kbs'],
     queryFn:  () => kbApi.list(),
   })
@@ -142,7 +156,7 @@ export default function ChatPage() {
     }
   }, [kbs]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { data: serverMessages = [], isLoading: msgsLoading } = useQuery({
+  const { data: serverMessages = EMPTY_MESSAGES, isLoading: msgsLoading } = useQuery({
     queryKey: ['chat-messages', activeSessionId],
     queryFn:  () => chatApi.getMessages(activeSessionId!),
     enabled:  !!activeSessionId,
@@ -323,9 +337,6 @@ export default function ChatPage() {
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const selectedKbs  = kbs.filter(k => selectedKbIds.includes(k.id))
-  const groundedLabel = selectedKbs.length === 0   ? 'all KBs'
-                      : selectedKbs.length === 1   ? selectedKbs[0].name
-                      : `${selectedKbs.length} KBs`
 
   // Which message's sources to show in the Sources panel (default = last AI msg)
   const [pinnedSources, setPinnedSources] = useState<StreamingMessage['sources'] | null>(null)
@@ -335,142 +346,55 @@ export default function ChatPage() {
   // Reset pinned sources when messages change
   useEffect(() => { setPinnedSources(null) }, [activeSessionId])
 
-  const divider = `1px solid ${theme.palette.divider}`
-
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
 
       {/* ══════════════════════════════════════════════════════════════════
-          LEFT: collapsible history panel
-          ══════════════════════════════════════════════════════════════════ */}
-      <Box sx={{ width: historyOpen ? 240 : 28, flexShrink: 0, position: 'relative',
-                 transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', zIndex: 10 }}>
-        {/* Inner clip */}
-        <Box sx={{ position: 'absolute', inset: 0, overflow: 'hidden',
-                   borderRight: divider,
-                   bgcolor: alpha(theme.palette.background.paper, 0.6), display: 'flex' }}>
-
-          {/* Panel content */}
-          <Box sx={{ width: 240, flexShrink: 0, height: '100%', display: 'flex',
-                     flexDirection: 'column', opacity: historyOpen ? 1 : 0,
-                     transition: 'opacity 0.15s ease', pointerEvents: historyOpen ? 'auto' : 'none' }}>
-            <Box sx={{ px: 1.75, pt: 1.5, pb: 1 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
-                                letterSpacing: '0.13em', color: 'text.disabled', mb: 1 }}>
-                Conversations
-              </Typography>
-              <Box
-                onClick={() => createSessionMutation.mutate()}
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.75,
-                      height: 30, px: 1.25, borderRadius: 1, cursor: 'pointer',
-                      border: `1px solid ${alpha(accent, 0.35)}`, color: accent,
-                      fontSize: 12, fontWeight: 500,
-                      '&:hover': { bgcolor: alpha(accent, 0.06), borderColor: accent } }}
-              >
-                <AddIcon sx={{ fontSize: 13 }} />
-                <Typography sx={{ fontSize: 12, fontWeight: 500 }}>New Chat</Typography>
-              </Box>
-            </Box>
-
-            <Divider sx={{ borderColor: alpha(theme.palette.divider, 0.6) }} />
-
-            <Box flex={1} overflow="auto">
-              {sessions.length === 0 ? (
-                <Box sx={{ p: 2, textAlign: 'center' }}>
-                  <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>No conversations yet</Typography>
-                </Box>
-              ) : (
-                <List dense disablePadding>
-                  {sessions.map(session => (
-                    <SessionItem
-                      key={session.id}
-                      session={session}
-                      active={session.id === activeSessionId}
-                      onClick={() => { setActiveSessionId(session.id); setMessages([]); setError(null) }}
-                      onDelete={() => deleteSessionMutation.mutate(session.id)}
-                    />
-                  ))}
-                </List>
-              )}
-            </Box>
-          </Box>
-
-          {/* Collapsed strip */}
-          {!historyOpen && (
-            <Box onClick={() => setHistoryOpen(true)} sx={{ position: 'absolute', inset: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                  '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } }}>
-              <Typography sx={{ transform: 'rotate(-90deg)', fontFamily: MONO, fontSize: 9,
-                                textTransform: 'uppercase', letterSpacing: '0.14em',
-                                color: 'text.disabled', whiteSpace: 'nowrap', userSelect: 'none' }}>
-                History
-              </Typography>
-            </Box>
-          )}
-        </Box>
-
-        {/* Toggle pill */}
-        <Box onClick={() => setHistoryOpen(v => !v)}
-          sx={{ position: 'absolute', right: -12, top: '50%', transform: 'translateY(-50%)',
-                width: 22, height: 44, bgcolor: 'background.paper', border: divider,
-                borderLeft: 'none', borderRadius: '0 8px 8px 0', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 30,
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                             '& svg': { color: accent } } }}>
-          {historyOpen
-            ? <ChevronLeftIcon  sx={{ fontSize: 13, color: 'text.disabled' }} />
-            : <ChevronRightIcon sx={{ fontSize: 13, color: 'text.disabled' }} />}
-        </Box>
-      </Box>
-
-      {/* ══════════════════════════════════════════════════════════════════
-          CENTER: chat main
+          CENTER: chat main (lab: rail + this + sources; history is a header menu)
           ══════════════════════════════════════════════════════════════════ */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
 
-        {/* Screen header — always shown */}
-        <Box sx={{ flexShrink: 0, px: 4, pt: 2.5, pb: 1.75, borderBottom: divider,
-                   display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-          <Box flex={1} minWidth={0}>
-            {/* Eyebrow */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled',
-                                textTransform: 'uppercase', letterSpacing: '0.14em', userSelect: 'none' }}>
-                — Ask Knovex
-              </Typography>
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5,
-                         px: 1, py: 0.25, borderRadius: 20,
-                         bgcolor: alpha(accent, isDark ? 0.15 : 0.1),
-                         border: `1px solid ${alpha(accent, 0.25)}` }}>
-                <Box sx={{ width: 5, height: 5, borderRadius: '50%', bgcolor: accent, flexShrink: 0 }} />
-                <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: accent, letterSpacing: '0.04em' }}>
-                  grounded · <strong>{groundedLabel}</strong>
-                </Typography>
-              </Box>
+        {/* Header bar (lab) — title · grounded scope · thread switcher · new thread */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 3, py: 2, flexShrink: 0 }}>
+          <Typography sx={{ fontSize: 24, fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+            Ask Knovex
+          </Typography>
+          {selectedKbs.length > 0 && (
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, height: 24, px: 1,
+                       borderRadius: 99, fontSize: 11.5, fontWeight: 600,
+                       color: BRAND.copperDark, bgcolor: alpha(accent, 0.11),
+                       border: `1px solid ${alpha(accent, 0.27)}` }}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: accent }} />
+              grounded · {selectedKbs.length} KB{selectedKbs.length !== 1 ? 's' : ''}
             </Box>
-            {/* Title */}
-            <Typography component="h1" sx={{ fontFamily: SERIF, fontSize: 26, fontWeight: 400,
-                                              letterSpacing: '-0.015em', lineHeight: 1.15,
-                                              color: 'text.primary', userSelect: 'none' }}>
-              Conversations that{' '}
-              <Box component="em" sx={{ fontStyle: 'italic', color: accent }}>remember</Box>
-              {' '}what you've read
-            </Typography>
-          </Box>
-
-          {/* Header action buttons */}
-          <Box sx={{ display: 'flex', gap: 0.75, pt: 0.5, flexShrink: 0 }}>
-            <HeaderBtn
-              icon={<LayersIcon sx={{ fontSize: 12 }} />}
-              label="New thread"
-              onClick={() => createSessionMutation.mutate()}
-            />
-          </Box>
+          )}
+          <Box flex={1} />
+          <ThreadSwitcher
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            open={historyOpen}
+            setOpen={setHistoryOpen}
+            onSelect={(id) => { setActiveSessionId(id); setMessages([]); setError(null); setHistoryOpen(false) }}
+            onDelete={(id) => deleteSessionMutation.mutate(id)}
+          />
+          <HeaderBtn
+            icon={<AddIcon sx={{ fontSize: 14 }} />}
+            label="New thread"
+            onClick={() => createSessionMutation.mutate()}
+          />
+          {!sourcesOpen && (
+            <Tooltip title="Show sources" placement="bottom">
+              <IconButton size="small" onClick={() => setSourcesOpen(true)} sx={{ color: 'text.secondary' }}>
+                <FolderOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
 
-        {/* Messages area */}
-        <Box flex={1} overflow="auto" sx={{ px: 4, py: 3 }}>
+        {/* Messages area — centered reading column (lab document style) */}
+        <Box flex={1} overflow="auto" sx={{ px: 4, py: 1 }}>
+          <Box sx={{ maxWidth: 760, mx: 'auto' }}>
           {activeSessionId ? (
             msgsLoading ? (
               <Box display="flex" justifyContent="center" pt={6}>
@@ -505,10 +429,11 @@ export default function ChatPage() {
             </Box>
           )}
           <div ref={bottomRef} />
+          </Box>
         </Box>
 
         {/* Composer */}
-        <Box sx={{ flexShrink: 0, borderTop: divider, px: 3, pt: 1.5, pb: 2 }}>
+        <Box sx={{ flexShrink: 0, px: 3, pt: 1.5, pb: 2 }}>
 
           {/* KB scope selector */}
           <KBScopeSelector
@@ -568,11 +493,12 @@ export default function ChatPage() {
             </Box>
           )}
 
-          {/* Textarea box */}
-          <Box sx={{ mt: 1, borderRadius: 2, border: `1.5px solid ${theme.palette.divider}`,
-                     bgcolor: alpha(theme.palette.background.paper, 0.8),
+          {/* Textarea box — soft elevated surface (lab style), no border */}
+          <Box sx={{ mt: 1, borderRadius: 3, border: '1px solid transparent',
+                     bgcolor: 'background.paper',
+                     boxShadow: '0 8px 30px -20px rgba(0,0,0,0.55)',
                      transition: 'border-color 0.15s',
-                     '&:focus-within': { borderColor: alpha(accent, 0.5) } }}>
+                     '&:focus-within': { borderColor: alpha(accent, 0.4) } }}>
             <Box
               component="textarea"
               ref={inputRef}
@@ -600,8 +526,8 @@ export default function ChatPage() {
                 <span>
                   <ComposerTool
                     icon={isAttaching
-                      ? <CircularProgress size={10} sx={{ color: 'inherit' }} />
-                      : <AttachFileIcon sx={{ fontSize: 12 }} />}
+                      ? <CircularProgress size={12} sx={{ color: 'inherit' }} />
+                      : <AttachFileIcon sx={{ fontSize: 14 }} />}
                     label="Attach"
                     active={attachedFiles.length > 0}
                     onClick={handleAttach}
@@ -611,8 +537,18 @@ export default function ChatPage() {
               <Tooltip title={webSearch ? 'Web search ON — click to disable' : 'Enable web search'} placement="top">
                 <span>
                   <ComposerTool
-                    icon={<SearchIcon sx={{ fontSize: 12 }} />}
+                    icon={<SearchIcon sx={{ fontSize: 14 }} />}
                     label="Web"
+                    active={webSearch}
+                    onClick={() => setWebSearch(v => !v)}
+                  />
+                </span>
+              </Tooltip>
+              <Tooltip title={webSearch ? 'Wikipedia grounding ON' : 'Ground answers with Wikipedia (web search)'} placement="top">
+                <span>
+                  <ComposerTool
+                    icon={<Box component="span" sx={{ fontFamily: 'serif', fontWeight: 700, fontSize: 15, lineHeight: 1 }}>W</Box>}
+                    label="Wikipedia"
                     active={webSearch}
                     onClick={() => setWebSearch(v => !v)}
                   />
@@ -644,16 +580,37 @@ export default function ChatPage() {
               ) : (
                 <Box onClick={handleSend}
                   sx={{ display: 'flex', alignItems: 'center', gap: 0.5,
-                        height: 28, px: 1.5, borderRadius: 1.25, cursor: 'pointer',
-                        bgcolor: input.trim() ? accent : alpha(accent, 0.25),
-                        color: input.trim() ? '#fff' : alpha('#fff', 0.5),
+                        height: 32, px: 1.75, borderRadius: 99, cursor: 'pointer',
+                        background: input.trim() ? BRAND.gradient : 'transparent',
+                        bgcolor: input.trim() ? undefined : alpha(accent, 0.2),
+                        color: input.trim() ? BRAND.onAccent : alpha(BRAND.onAccent, 0.45),
                         transition: 'all 0.12s ease',
-                        '&:hover': input.trim() ? { filter: 'brightness(1.1)' } : {} }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 600 }}>Send</Typography>
-                  <SendIcon sx={{ fontSize: 11 }} />
+                        '&:hover': input.trim() ? { filter: 'brightness(1.08)' } : {} }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>Send</Typography>
+                  <SendIcon sx={{ fontSize: 13 }} />
                 </Box>
               )}
             </Box>
+          </Box>
+
+          {/* Quick prompts (lab) — one-tap starters */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1.25 }}>
+            {['Explain a concept', 'Quiz me', 'Summarize a doc', 'Make flashcards', 'Connect ideas'].map(q => (
+              <Box
+                key={q}
+                onClick={() => !isStreaming && streamQuestion(q)}
+                sx={{
+                  display: 'inline-flex', alignItems: 'center', height: 28, px: 1.25,
+                  borderRadius: 99, cursor: isStreaming ? 'default' : 'pointer',
+                  fontSize: 12, color: 'text.secondary',
+                  border: `1px solid ${theme.palette.divider}`, bgcolor: 'transparent',
+                  transition: 'all 0.12s',
+                  '&:hover': isStreaming ? {} : { borderColor: alpha(accent, 0.5), color: 'text.primary', bgcolor: alpha(accent, 0.06) },
+                }}
+              >
+                {q}
+              </Box>
+            ))}
           </Box>
         </Box>
       </Box>
@@ -661,27 +618,34 @@ export default function ChatPage() {
       {/* ══════════════════════════════════════════════════════════════════
           RIGHT: collapsible sources panel
           ══════════════════════════════════════════════════════════════════ */}
-      <Box sx={{ width: sourcesOpen ? 340 : 28, flexShrink: 0, position: 'relative',
+      <Box sx={{ width: sourcesOpen ? 340 : 44, flexShrink: 0, position: 'relative',
                  transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)', zIndex: 10 }}>
-        {/* Inner clip */}
+        {/* Inner clip — flat sources panel (lab style), no hard border */}
         <Box sx={{ position: 'absolute', inset: 0, overflow: 'hidden',
-                   borderLeft: divider,
-                   bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
+                   bgcolor: alpha(theme.palette.background.paper, 0.55) }}>
 
           {/* Panel content */}
           <Box sx={{ width: 340, height: '100%', display: 'flex', flexDirection: 'column',
                      opacity: sourcesOpen ? 1 : 0, transition: 'opacity 0.15s ease',
                      pointerEvents: sourcesOpen ? 'auto' : 'none' }}>
-            {/* Sources header */}
-            <Box sx={{ px: 2.5, pt: 2, pb: 1.5, borderBottom: divider, flexShrink: 0 }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
-                                letterSpacing: '0.13em', color: 'text.disabled', mb: 0.5 }}>
-                Sources used · {latestSources.length}
-              </Typography>
-              <Typography sx={{ fontFamily: SERIF, fontSize: 20, fontWeight: 400,
-                                letterSpacing: '-0.01em', color: 'text.primary' }}>
-                Where this came from
-              </Typography>
+            {/* Sources header — collapse chevron on the right (lab) */}
+            <Box sx={{ px: 2.5, pt: 2, pb: 1.5, flexShrink: 0, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
+                                  letterSpacing: '0.13em', color: 'text.disabled', mb: 0.5 }}>
+                  Sources used · {latestSources.length}
+                </Typography>
+                <Typography sx={{ fontSize: 20, fontWeight: 700,
+                                  letterSpacing: '-0.01em', color: 'text.primary' }}>
+                  Where this came from
+                </Typography>
+              </Box>
+              <Tooltip title="Collapse panel" placement="left" arrow>
+                <IconButton size="small" onClick={() => setSourcesOpen(false)}
+                  sx={{ color: 'text.disabled', mt: -0.25, '&:hover': { color: 'text.primary' } }}>
+                  <ChevronRightIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
             </Box>
 
             {/* Sources list */}
@@ -694,18 +658,19 @@ export default function ChatPage() {
                 </Box>
               ) : (
                 latestSources.map((s, i) => (
-                  <SourceCard key={i} num={i + 1} source={s} isDark={isDark} />
+                  <SourceCard key={i} num={i + 1} source={s} isDark={isDark}
+                    kbName={kbs.find(k => k.id === s.kb_id)?.name} />
                 ))
               )}
             </Box>
 
             {/* Footer */}
-            <Box sx={{ px: 2, py: 1.5, borderTop: divider, flexShrink: 0 }}>
+            <Box sx={{ px: 2, py: 1.5, flexShrink: 0 }}>
               <Tooltip title="Source graph visualisation — coming soon" placement="top">
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5,
                            height: 30, px: 1.5, borderRadius: 1.25, cursor: 'not-allowed',
-                           border: `1px solid ${theme.palette.divider}`, justifyContent: 'center',
-                           color: 'text.disabled', opacity: 0.5 }}>
+                           bgcolor: theme.palette.action.hover, justifyContent: 'center',
+                           color: 'text.disabled', opacity: 0.6 }}>
                 <AccountTreeOutlinedIcon sx={{ fontSize: 12 }} />
                 <Typography sx={{ fontSize: 12 }}>Visualize source graph</Typography>
               </Box>
@@ -713,31 +678,25 @@ export default function ChatPage() {
             </Box>
           </Box>
 
-          {/* Collapsed strip */}
+          {/* Collapsed rail — expand chevron + vertical label (lab) */}
           {!sourcesOpen && (
-            <Box onClick={() => setSourcesOpen(true)} sx={{ position: 'absolute', inset: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                  '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' } }}>
-              <Typography sx={{ transform: 'rotate(90deg)', fontFamily: MONO, fontSize: 9,
-                                textTransform: 'uppercase', letterSpacing: '0.14em',
-                                color: 'text.disabled', whiteSpace: 'nowrap', userSelect: 'none' }}>
-                Sources
-              </Typography>
+            <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                       alignItems: 'center', pt: 1.5, gap: 1.5 }}>
+              <Tooltip title="Show sources" placement="left" arrow>
+                <IconButton size="small" onClick={() => setSourcesOpen(true)} sx={{ color: 'text.secondary' }}>
+                  <ChevronLeftIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Box onClick={() => setSourcesOpen(true)}
+                   sx={{ flex: 1, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <Typography sx={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)',
+                                  fontFamily: MONO, fontSize: 10, textTransform: 'uppercase',
+                                  letterSpacing: '0.14em', color: 'text.disabled', userSelect: 'none' }}>
+                  Sources · {latestSources.length}
+                </Typography>
+              </Box>
             </Box>
           )}
-        </Box>
-
-        {/* Toggle pill — on the LEFT edge of the right panel */}
-        <Box onClick={() => setSourcesOpen(v => !v)}
-          sx={{ position: 'absolute', left: -12, top: '50%', transform: 'translateY(-50%)',
-                width: 22, height: 44, bgcolor: 'background.paper', border: divider,
-                borderRight: 'none', borderRadius: '8px 0 0 8px', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 30,
-                '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                             '& svg': { color: accent } } }}>
-          {sourcesOpen
-            ? <ChevronRightIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-            : <ChevronLeftIcon  sx={{ fontSize: 13, color: 'text.disabled' }} />}
         </Box>
       </Box>
 
@@ -770,13 +729,88 @@ function HeaderBtn({ icon, label, onClick }: { icon: React.ReactNode; label: str
   const theme = useTheme()
   return (
     <Box onClick={onClick}
-      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5,
-            height: 26, px: 1.25, borderRadius: 1.25, cursor: 'pointer',
+      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.7,
+            height: 32, px: 1.75, borderRadius: 99, cursor: 'pointer',
             border: `1px solid ${theme.palette.divider}`, color: 'text.secondary',
-            fontSize: 11, userSelect: 'none',
-            '&:hover': { color: 'text.primary', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
+            fontWeight: 600, letterSpacing: '-0.005em', userSelect: 'none',
+            transition: 'background .12s, color .12s, border-color .12s',
+            '&:hover': { color: 'text.primary', borderColor: 'text.disabled', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
       {icon}
-      <Typography sx={{ fontSize: 11 }}>{label}</Typography>
+      <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{label}</Typography>
+    </Box>
+  )
+}
+
+// ─── Thread switcher ─────────────────────────────────────────────────────────
+// Chat history lives here (header dropdown), not in a permanent left column.
+
+function ThreadSwitcher({ sessions, activeSessionId, open, setOpen, onSelect, onDelete }: {
+  sessions: ChatSession[]; activeSessionId: string | null
+  open: boolean; setOpen: (v: boolean) => void
+  onSelect: (id: string) => void; onDelete: (id: string) => void
+}) {
+  const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const ref    = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open, setOpen])
+
+  return (
+    <Box sx={{ position: 'relative' }} ref={ref}>
+      <Box onClick={() => setOpen(!open)}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.7,
+              height: 32, px: 1.75, borderRadius: 99, cursor: 'pointer',
+              border: `1px solid ${open ? alpha(theme.palette.primary.main, 0.5) : theme.palette.divider}`,
+              color: open ? 'primary.main' : 'text.secondary',
+              fontWeight: 600, letterSpacing: '-0.005em', userSelect: 'none',
+              transition: 'background .12s, color .12s, border-color .12s',
+              '&:hover': { color: 'text.primary', borderColor: 'text.disabled', bgcolor: alpha(theme.palette.divider, 0.5) } }}>
+        <MoreHorizIcon sx={{ fontSize: 16 }} />
+        <Typography sx={{ fontSize: 13, fontWeight: 600 }}>History</Typography>
+        <Typography sx={{ fontSize: 11, opacity: 0.7 }}>▾</Typography>
+      </Box>
+
+      {open && (
+        <Box sx={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 280,
+                   maxHeight: 380, display: 'flex', flexDirection: 'column',
+                   borderRadius: 2, bgcolor: 'background.paper',
+                   border: `1px solid ${theme.palette.divider}`,
+                   boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.5)' : '0 8px 32px rgba(0,0,0,0.14)',
+                   zIndex: 100, overflow: 'hidden' }}>
+          <Box sx={{ px: 1.75, py: 1.25, borderBottom: `1px solid ${theme.palette.divider}` }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 9.5, textTransform: 'uppercase',
+                              letterSpacing: '0.13em', color: 'text.disabled' }}>
+              Conversations · {sessions.length}
+            </Typography>
+          </Box>
+          <Box sx={{ flex: 1, overflow: 'auto', py: 0.5 }}>
+            {sessions.length === 0 ? (
+              <Box sx={{ p: 2, textAlign: 'center' }}>
+                <Typography sx={{ fontSize: 11, color: 'text.disabled' }}>No conversations yet</Typography>
+              </Box>
+            ) : (
+              <List dense disablePadding>
+                {sessions.map(session => (
+                  <SessionItem
+                    key={session.id}
+                    session={session}
+                    active={session.id === activeSessionId}
+                    onClick={() => onSelect(session.id)}
+                    onDelete={() => onDelete(session.id)}
+                  />
+                ))}
+              </List>
+            )}
+          </Box>
+        </Box>
+      )}
     </Box>
   )
 }
@@ -788,15 +822,16 @@ function ComposerTool({ icon, label, active, onClick }: {
   const accent = theme.palette.primary.main
   return (
     <Box onClick={onClick}
-      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4,
-            height: 24, px: 0.875, borderRadius: 1, cursor: 'pointer',
-            color:   active ? accent : 'text.disabled',
+      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, height: 30, px: 1.25,
+            borderRadius: 99, cursor: 'pointer',
+            color:   active ? accent : 'text.secondary',
             bgcolor: active ? alpha(accent, 0.1) : 'transparent',
             border:  active ? `1px solid ${alpha(accent, 0.35)}` : '1px solid transparent',
-            '&:hover': { color: active ? accent : 'text.secondary',
+            transition: 'background .12s, color .12s',
+            '&:hover': { color: active ? accent : 'text.primary',
                          bgcolor: active ? alpha(accent, 0.15) : alpha(theme.palette.divider, 0.5) } }}>
       {icon}
-      <Typography sx={{ fontSize: 11 }}>{label}</Typography>
+      <Typography sx={{ fontSize: 12.5 }}>{label}</Typography>
     </Box>
   )
 }
@@ -883,8 +918,8 @@ function KBScopeSelector({
         <Box onClick={() => setDropOpen(!dropOpen)}
           sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4,
                 height: 22, px: 0.875, borderRadius: 20, flexShrink: 0,
-                border: `1px solid ${alpha(accent, 0.35)}`, color: accent, cursor: 'pointer',
-                '&:hover': { bgcolor: alpha(accent, 0.08) } }}>
+                border: `1px dashed ${theme.palette.divider}`, color: 'text.secondary', cursor: 'pointer',
+                '&:hover': { borderColor: accent, color: accent } }}>
           <AddIcon sx={{ fontSize: 10 }} />
           <Typography sx={{ fontSize: 11, fontWeight: 500 }}>Add KB</Typography>
           <Typography sx={{ fontSize: 10, ml: 0.2 }}>▾</Typography>
@@ -1071,6 +1106,10 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
   const isUser   = message.role === 'user'
   const navigate = useNavigate()
   const [thumbed, setThumbed] = useState<'up' | 'down' | null>(null)
+  const { settings } = useSettingsStore()
+  const userInitials = initialsOf(settings?.display_name)
+  const userName     = resolveDisplayName(settings?.display_name)
+  const model        = settings?.llm?.model
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content).then(onCopy).catch(() => {})
@@ -1083,26 +1122,28 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
   }
 
   return (
-    <Box sx={{ mb: 3, display: 'flex', gap: 1.5, alignItems: 'flex-start',
-               justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+    <Box sx={{ mb: 3, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
 
-      {/* Avatar — AI only on left: round circle with sparkle */}
-      {!isUser && (
-        <Box sx={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                   background: `linear-gradient(135deg, ${theme.palette.primary.light}, ${accent})`,
-                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                   boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), 0 1px 4px rgba(0,0,0,0.35)`,
-                   mt: 0.25 }}>
-          <AutoAwesomeIcon sx={{ fontSize: 13, color: '#fff' }} />
+      {/* Avatar — left gutter for BOTH roles (document transcript, lab style) */}
+      {isUser ? (
+        <Box sx={{ width: 30, height: 30, borderRadius: 2, flexShrink: 0, mt: 0.25,
+                   bgcolor: theme.palette.action.hover,
+                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 700, color: 'text.secondary', userSelect: 'none' }}>{userInitials}</Typography>
+        </Box>
+      ) : (
+        <Box sx={{ width: 30, height: 30, borderRadius: 2, flexShrink: 0, mt: 0.25,
+                   bgcolor: 'background.default', border: `1px solid ${theme.palette.divider}`,
+                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <KnovexMark size={18} />
         </Box>
       )}
 
-      <Box sx={{ maxWidth: '78%', minWidth: 0 }}>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
         {/* Role row */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5,
-                   justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary' }}>
-            {isUser ? 'You' : 'Knovex'}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: 'text.primary' }}>
+            {isUser ? userName : 'Knovex'}
           </Typography>
           {!isUser && message.sources && message.sources.length > 0 && (
             <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled' }}>
@@ -1114,8 +1155,8 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
                        px: 0.875, py: 0.15, borderRadius: 10,
                        bgcolor: alpha(isDark ? '#fff' : '#000', 0.05),
                        border: `1px solid ${theme.palette.divider}` }}>
-              <Typography sx={{ fontFamily: MONO, fontSize: 9, color: 'text.disabled' }}>
-                grounded
+              <Typography sx={{ fontFamily: MONO, fontSize: 9.5, color: 'text.disabled' }}>
+                {model ? `${model} · grounded` : 'grounded'}
               </Typography>
             </Box>
           )}
@@ -1148,43 +1189,39 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           </Box>
         )}
 
-        {/* Bubble */}
+        {/* Content — full-width document transcript (no bubble, lab style) */}
         <Box sx={{
-          px: 1.75, py: 1.25, borderRadius: isUser ? '12px 12px 4px 12px' : '4px 12px 12px 12px',
-          bgcolor: isUser
-            ? alpha(accent, isDark ? 0.2 : 0.12)
-            : alpha(theme.palette.background.paper, isDark ? 1 : 0.8),
-          border: `1px solid ${isUser ? alpha(accent, 0.3) : theme.palette.divider}`,
-          display: 'inline-block', maxWidth: '100%',
+          px: 0, py: 0,
+          // user text gets a subtle warm tint to distinguish it without a box
+          color: isUser ? 'text.primary' : 'text.primary',
+          display: 'block', maxWidth: '100%',
 
           // ── Paragraphs ──────────────────────────────────────────────────
           '& p': {
-            m: 0, mb: 1.25, fontSize: 13.5, lineHeight: 1.8, color: 'text.primary',
+            m: 0, mb: 1.25, fontSize: 15, lineHeight: 1.75, color: 'text.primary',
             '&:last-child': { mb: 0 },
           },
 
-          // ── Headings ────────────────────────────────────────────────────
+          // ── Headings — quiet, bold, no rules/accent (lab document style) ──
           '& h1': {
-            mt: 2, mb: 1, fontSize: 20, fontWeight: 700, color: 'text.primary',
-            borderBottom: `2px solid ${alpha(accent, 0.3)}`, pb: 0.5, lineHeight: 1.3,
+            mt: 2, mb: 0.75, fontSize: 18, fontWeight: 700, color: 'text.primary', lineHeight: 1.35,
           },
           '& h2': {
-            mt: 1.75, mb: 0.875, fontSize: 17, fontWeight: 700, color: 'text.primary',
-            borderBottom: `1px solid ${alpha(theme.palette.divider, 0.8)}`, pb: 0.4, lineHeight: 1.3,
+            mt: 1.75, mb: 0.5, fontSize: 16, fontWeight: 700, color: 'text.primary', lineHeight: 1.35,
           },
           '& h3': {
-            mt: 1.5, mb: 0.75, fontSize: 15, fontWeight: 600, color: accent, lineHeight: 1.3,
+            mt: 1.5, mb: 0.5, fontSize: 15, fontWeight: 700, color: 'text.primary', lineHeight: 1.35,
           },
           '& h4': {
-            mt: 1.25, mb: 0.5, fontSize: 13.5, fontWeight: 600,
-            color: isDark ? alpha('#fff', 0.8) : alpha('#000', 0.7), lineHeight: 1.3,
+            mt: 1.25, mb: 0.4, fontSize: 14, fontWeight: 700,
+            color: isDark ? alpha('#fff', 0.82) : alpha('#000', 0.74), lineHeight: 1.35,
           },
 
           // ── Lists ────────────────────────────────────────────────────────
           '& ul': {
             pl: 0, mb: 1, mt: 0.5, listStyle: 'none',
             '& li': {
-              mb: 0.5, fontSize: 13.5, lineHeight: 1.75, color: 'text.primary',
+              mb: 0.5, fontSize: 15, lineHeight: 1.75, color: 'text.primary',
               pl: 2, position: 'relative',
               '&::before': {
                 content: '"▸"', position: 'absolute', left: 0,
@@ -1195,19 +1232,18 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           '& ol': {
             pl: 2.5, mb: 1, mt: 0.5,
             '& li': {
-              mb: 0.5, fontSize: 13.5, lineHeight: 1.75, color: 'text.primary',
+              mb: 0.5, fontSize: 15, lineHeight: 1.75, color: 'text.primary',
               pl: 0.5,
               '&::marker': { color: accent, fontWeight: 700 },
             },
           },
 
-          // ── Inline code ──────────────────────────────────────────────────
+          // ── Inline code — neutral chip (lab style), not accent-tinted ─────
           '& code': {
-            fontFamily: MONO, fontSize: 12,
-            bgcolor: isDark ? alpha(accent, 0.12) : alpha(accent, 0.08),
-            color: isDark ? alpha(accent, 0.95) : accent,
-            px: 0.625, py: 0.15, borderRadius: 0.75,
-            border: `1px solid ${alpha(accent, 0.2)}`,
+            fontFamily: MONO, fontSize: 13,
+            bgcolor: theme.palette.action.hover,
+            color: 'text.primary',
+            px: 0.6, py: 0.15, borderRadius: 0.75,
           },
 
           // ── Code blocks ──────────────────────────────────────────────────
@@ -1281,7 +1317,7 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           },
         }}>
           {isUser ? (
-            <Typography sx={{ fontSize: 13.5, lineHeight: 1.7, color: 'text.primary',
+            <Typography sx={{ fontSize: 15, lineHeight: 1.75, color: 'text.primary',
                               whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {message.content}
             </Typography>
@@ -1349,17 +1385,6 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
           </Box>
         )}
       </Box>
-
-      {/* Avatar — user on right */}
-      {isUser && (
-        <Box sx={{ width: 30, height: 30, borderRadius: 1.5, flexShrink: 0,
-                   bgcolor: alpha(isDark ? '#fff' : '#000', 0.1),
-                   border: `1px solid ${theme.palette.divider}`,
-                   display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 0.25 }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: 'text.secondary',
-                            userSelect: 'none' }}>You</Typography>
-        </Box>
-      )}
     </Box>
   )
 }
@@ -1386,11 +1411,10 @@ function MsgAction({ icon, label, onClick, active }: {
 
 // ─── Source card ───────────────────────────────────────────────────────────────
 
-function SourceCard({ num, source, isDark }: {
-  num: number; source: SourceCitation; isDark: boolean
+function SourceCard({ num, source, isDark, kbName }: {
+  num: number; source: SourceCitation; isDark: boolean; kbName?: string
 }) {
   const theme    = useTheme()
-  const accent   = theme.palette.primary.main
   const navigate = useNavigate()
 
   const handleClick = () => {
@@ -1404,17 +1428,17 @@ function SourceCard({ num, source, isDark }: {
   return (
     <Box
       onClick={handleClick}
-      sx={{ mb: 1.5, p: 1.5, borderRadius: 1.5,
-               bgcolor: alpha(theme.palette.background.default, isDark ? 0.5 : 0.7),
-               border: `1px solid ${theme.palette.divider}`,
+      sx={{ mb: 1.25, p: 1.5, borderRadius: 2.5,
+               bgcolor: theme.palette.action.hover,
+               border: '1px solid transparent',
                cursor: source.kb_id ? 'pointer' : 'default',
-               '&:hover': source.kb_id ? { borderColor: alpha(accent, 0.3),
-                            bgcolor: alpha(theme.palette.background.paper, 0.8) } : {} }}>
+               transition: 'border-color .15s',
+               '&:hover': source.kb_id ? { borderColor: theme.palette.divider } : {} }}>
       {/* Head row: number + file type icon + page */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
-        <Box sx={{ width: 18, height: 18, borderRadius: 0.5, bgcolor: alpha(accent, 0.15),
+        <Box sx={{ width: 18, height: 18, borderRadius: 0.75, background: BRAND.gradient,
                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 9, color: accent, fontWeight: 700 }}>{num}</Typography>
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, color: BRAND.onAccent, fontWeight: 700 }}>{num}</Typography>
         </Box>
         <ArticleOutlinedIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
         <Box flex={1} />
@@ -1426,14 +1450,14 @@ function SourceCard({ num, source, isDark }: {
       </Box>
 
       {/* File name */}
-      <Typography sx={{ fontSize: 12, fontWeight: 600, color: 'text.primary', mb: 0.5,
+      <Typography sx={{ fontSize: 13, fontWeight: 600, color: 'text.primary', mb: 0.5, lineHeight: 1.35,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {source.file}
       </Typography>
 
       {/* Section as excerpt */}
       {source.section && (
-        <Typography sx={{ fontSize: 11, color: 'text.secondary', lineHeight: 1.5,
+        <Typography sx={{ fontSize: 11.5, color: 'text.secondary', lineHeight: 1.5,
                           fontStyle: 'italic', mb: 0.75,
                           display: '-webkit-box', WebkitLineClamp: 2,
                           WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -1441,14 +1465,14 @@ function SourceCard({ num, source, isDark }: {
         </Typography>
       )}
 
-      {/* Footer */}
+      {/* Footer — collection (KB) name, not the file again */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
         <FolderOutlinedIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
-        <Typography sx={{ fontSize: 10.5, color: 'text.disabled', flex: 1,
+        <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled', flex: 1,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {source.file}
+          {kbName ?? 'Knowledge base'}
         </Typography>
-        <ChevronRightIcon sx={{ fontSize: 12, color: 'text.disabled', flexShrink: 0 }} />
+        {source.kb_id && <ChevronRightIcon sx={{ fontSize: 12, color: 'text.disabled', flexShrink: 0 }} />}
       </Box>
     </Box>
   )
@@ -1471,12 +1495,12 @@ function EmptyChat({ onPrompt }: { onPrompt: (p: string) => void }) {
   return (
     <Box sx={{ maxWidth: 520, mx: 'auto', py: 6, px: 2 }}>
       <Box sx={{ textAlign: 'center', mb: 4 }}>
-        <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: alpha(accent, 0.15),
-                   border: `1px solid ${alpha(accent, 0.25)}`, mx: 'auto', mb: 2,
+        <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: 'background.default',
+                   border: `1px solid ${theme.palette.divider}`, mx: 'auto', mb: 2,
                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography sx={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: accent }}>K</Typography>
+          <KnovexMark size={26} />
         </Box>
-        <Typography sx={{ fontFamily: SERIF, fontSize: 20, fontWeight: 400, color: 'text.primary', mb: 0.5 }}>
+        <Typography sx={{ fontSize: 20, fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
           Start a conversation
         </Typography>
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>

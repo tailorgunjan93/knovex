@@ -22,14 +22,17 @@ from __future__ import annotations
 import asyncio
 import csv
 import hashlib
+import html as _htmllib
 import io
 import logging
+import re
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from backend.adapters import docnest_adapter
 from backend.adapters.document_parsers import (
     IParagraphAdapter,
     IPDFAdapter,
@@ -182,6 +185,63 @@ class CSVParser(IFileParser):
         return chunks
 
 
+def _try_docnest(file_path: Path) -> list[Chunk] | None:
+    """
+    Best-effort: parse via docnest-ai (normalisation + OCR) when it's installed.
+
+    Document ingestion is docnest's domain, not Knovex's — so when the engine is
+    available we delegate to it (this is how we get OCR for scans/design PDFs
+    without owning any of it). All docnest contact goes through the
+    ``docnest_adapter`` anti-corruption seam. Returns Chunks, or None when
+    docnest is absent or can't handle the file, so the caller falls back to the
+    lightweight adapter.
+    """
+    sections = docnest_adapter.parse_document(file_path)
+    if not sections:
+        return None
+    chunks: list[Chunk] = []
+    idx = 0
+    for sec in sections:
+        for c in PlainTextParser._split_into_chunks(sec.text, max_chars=1200):
+            if not c.content:
+                continue
+            chunks.append(Chunk(
+                content=c.content,
+                chunk_index=idx,
+                section=sec.section,
+                page=sec.page,
+            ))
+            idx += 1
+    return chunks or None
+
+
+def _pages_need_ocr(pages: list) -> bool:
+    """Decide whether a PDF warrants the (slow) OCR pipeline.
+
+    Signal: the PyMuPDF adapter rasterises *image-dominant* pages (>= ~55%
+    image coverage) into a ``page-raster`` figure precisely because they have no
+    recoverable text layer — exactly the pages OCR can rescue. So if any page is
+    a raster page, the document has scanned/image content worth OCR'ing.
+
+    A born-digital text PDF (even one with small inline figures) has no raster
+    pages, so it stays on the fast path. This is a cheap, content-based check on
+    pages we already extracted — no extra parsing.
+    """
+    return any(p.is_html and "page-raster" in p.text for p in pages)
+
+
+def _html_to_plain(html: str) -> str:
+    """
+    Strip HTML to plain text for indexing. Drops <img> tags entirely (so base64
+    data URIs never enter the index) and all other markup; unescapes entities
+    and collapses whitespace. An image-only page → "".
+    """
+    s = re.sub(r"<img\b[^>]*>", " ", html, flags=re.IGNORECASE)   # drop images (base64)
+    s = re.sub(r"<[^>]+>", " ", s)                                # strip remaining tags
+    s = _htmllib.unescape(s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 @register_parser
 class PDFParser(IFileParser):
     """
@@ -200,11 +260,34 @@ class PDFParser(IFileParser):
         return frozenset({"pdf"})
 
     def parse(self, file_path: Path) -> list[Chunk]:
+        # Smart routing: a born-digital PDF has a usable text layer, so the fast
+        # PyMuPDF path extracts it in milliseconds. We only pay for docnest's
+        # heavy OCR pipeline when the document actually needs it — i.e. it has
+        # image-dominant / scanned pages with no recoverable text. This keeps
+        # text PDFs instant while still reading scans/decks when OCR is installed.
         pages = self._adapter.extract_pages(file_path)
+
+        if _pages_need_ocr(pages):
+            ocr = _try_docnest(file_path)   # docnest OCR; None when unavailable
+            if ocr is not None:
+                return ocr
+            # OCR not installed → fall through; image pages simply yield no text.
+
+        return self._chunks_from_pages(pages)
+
+    @staticmethod
+    def _chunks_from_pages(pages: list) -> list[Chunk]:
+        """Build chunks from PyMuPDF page text (the fast path)."""
         chunks: list[Chunk] = []
         chunk_idx = 0
         for page in pages:
-            sub_chunks = PlainTextParser._split_into_chunks(page.text, max_chars=1200)
+            # Index PLAIN TEXT — never the display HTML. Otherwise base64 <img>
+            # data URIs (image/raster pages) get stored as "content", polluting
+            # FTS + embeddings and feeding the assistant garbage.
+            page_text = _html_to_plain(page.text) if page.is_html else page.text
+            if not page_text.strip():
+                continue   # image-only page with no extractable text → no chunk
+            sub_chunks = PlainTextParser._split_into_chunks(page_text, max_chars=1200)
             for c in sub_chunks:
                 if c.content:
                     chunks.append(Chunk(
@@ -288,22 +371,12 @@ class UDFParser(IFileParser):
         return frozenset({"udf"})
 
     def parse(self, file_path: Path) -> list[Chunk]:
-        # Prefer docnest-ai native UDF support
-        try:
-            from docnest.parsers import get_parser as dn_get_parser  # type: ignore
-            parser = dn_get_parser("udf")
-            parsed_doc = parser.parse(str(file_path))
-            chunks = []
-            for i, chunk in enumerate(parsed_doc.chunks):
-                chunks.append(Chunk(
-                    content=chunk.text,
-                    chunk_index=i,
-                    section=getattr(chunk, "section", ""),
-                    page=getattr(chunk, "page", None),
-                ))
-            return chunks
-        except Exception:
-            pass  # Fall through to ZIP fallback
+        # Prefer docnest-ai when installed (via the anti-corruption seam). It
+        # may decline .udf (the factory parses documents, not docnest's own
+        # archive format) — then we fall through to the ZIP extractor below.
+        dn = _try_docnest(file_path)
+        if dn is not None:
+            return dn
 
         # Fallback: extract text from ZIP entries
         import zipfile

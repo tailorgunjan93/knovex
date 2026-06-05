@@ -143,6 +143,21 @@ def get_llm_service() -> LLMService:
     return LLMService()
 
 
+@lru_cache(maxsize=1)
+def get_pdf_adapter():
+    """
+    Provide the process-singleton CachingPDFAdapter.
+
+    The cache (memoised page extraction) lives HERE, not in ReaderService —
+    because ReaderService is built per-request. Sharing one adapter for the
+    whole process means a PDF is parsed once and every subsequent page turn is
+    served from cache (Reader perf fix). Keyed by (path, mtime, size), so an
+    edited file re-parses automatically.
+    """
+    from backend.adapters.document_parsers import CachingPDFAdapter, PyMuPDFAdapter
+    return CachingPDFAdapter(PyMuPDFAdapter())
+
+
 def get_reader_service(
     backend=Depends(get_sqlite_backend),
 ):
@@ -150,8 +165,9 @@ def get_reader_service(
     Provide ReaderService wired with file repository, SQLite backend, LLMService,
     and SearchService (for optional web search in inline Q&A).
 
-    Not cached: ReaderService is stateless; the expensive singletons
-    (LLMService, pdf/para adapters) are cheap to construct (no I/O).
+    Not cached: ReaderService is stateless. The one piece of state that MUST
+    persist across requests — the PDF page cache — is injected as a singleton
+    (get_pdf_adapter), so a per-request ReaderService is correct.
 
     DIP: ReaderService receives IFileRepository + ILLMClient adapters,
          not concrete implementations.
@@ -164,6 +180,7 @@ def get_reader_service(
         file_repo=file_repo,
         backend=backend,
         llm_svc=get_llm_service(),
+        pdf_adapter=get_pdf_adapter(),
         search_svc=get_search_service(),
     )
 
@@ -320,6 +337,24 @@ def get_watcher_service():
     )
 
 
+def get_highlight_repository(backend=Depends(get_sqlite_backend)):
+    """Provide the reader-highlights repository (per-request, cheap)."""
+    from backend.storage.repositories.highlight_repository import SQLiteHighlightRepository
+    return SQLiteHighlightRepository(backend)
+
+
+@lru_cache(maxsize=1)
+def get_ocr_provision_service():
+    """Provide the OcrProvisionService singleton.
+
+    Singleton because it holds the install state machine + background task and
+    must survive across requests. Constructing it auto-detects (and adopts) an
+    OCR env provisioned by a previous run.
+    """
+    from backend.core.ocr_provision_service import OcrProvisionService
+    return OcrProvisionService(env_home=app_config.data_dir / "ocr")
+
+
 # ---------------------------------------------------------------------------
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------
@@ -331,6 +366,9 @@ from backend.core.learn_service import LearnService  # noqa: E402
 from backend.core.reader_service import ReaderService  # noqa: E402
 from backend.core.search_service import SearchService  # noqa: E402
 from backend.core.summarizer_service import SummariserService  # noqa: E402
+from backend.storage.repositories.highlight_repository import (  # noqa: E402
+    SQLiteHighlightRepository,
+)
 
 SettingsServiceDep   = Annotated[SettingsService,   Depends(get_settings_service)]
 LLMServiceDep        = Annotated[LLMService,         Depends(get_llm_service)]
@@ -341,3 +379,4 @@ SummariserServiceDep = Annotated[SummariserService,   Depends(get_summariser_ser
 SearchServiceDep     = Annotated[SearchService,       Depends(get_search_service)]
 LearnServiceDep      = Annotated[LearnService,        Depends(get_learn_service)]
 HttpClientDep        = Annotated[IHttpClient,         Depends(get_http_client)]
+HighlightRepoDep     = Annotated[SQLiteHighlightRepository, Depends(get_highlight_repository)]

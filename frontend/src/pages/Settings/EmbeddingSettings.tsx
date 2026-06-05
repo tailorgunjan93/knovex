@@ -27,6 +27,7 @@ import MemoryIcon from '@mui/icons-material/Memory'
 import CloudIcon from '@mui/icons-material/Cloud'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { settingsApi, type EmbeddingSettings, type AppSettings } from '@/api/settings.api'
+import { BRAND } from '@/theme/tokens'
 
 const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
 
@@ -127,7 +128,12 @@ export default function EmbeddingSettingsTab({ settings }: Props) {
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <Box>
+    <Box sx={{ maxWidth: 720 }}>
+      <Typography sx={{ fontSize: 20, fontWeight: 700, mb: 0.5 }}>Dense search</Typography>
+      <Typography sx={{ fontSize: 13.5, color: 'text.secondary', lineHeight: 1.6, mb: 2.5 }}>
+        Add semantic vector search on top of keyword (FTS5). Optional — keyword search works without any model.
+      </Typography>
+
       {/* Master toggle */}
       <Box sx={{ p: 2.5, mb: 2.5, borderRadius: 2,
                  border: `1px solid ${enabled ? alpha(accent, 0.35) : theme.palette.divider}`,
@@ -307,13 +313,14 @@ export default function EmbeddingSettingsTab({ settings }: Props) {
         )}
         <Box
           onClick={handleSave}
-          sx={{ height: 34, px: 2, borderRadius: 1.25, cursor: 'pointer',
-                bgcolor: saveMutation.isPending ? alpha(accent, 0.5) : accent,
-                color: '#fff', display: 'flex', alignItems: 'center', gap: 0.75,
-                '&:hover': { filter: 'brightness(1.08)' } }}
+          sx={{ height: 38, px: 2.5, borderRadius: 99, cursor: 'pointer',
+                background: BRAND.gradient, color: BRAND.onAccent,
+                display: 'flex', alignItems: 'center', gap: 0.75,
+                opacity: saveMutation.isPending ? 0.6 : 1,
+                '&:hover': { filter: 'brightness(1.05)' } }}
         >
-          {saveMutation.isPending && <CircularProgress size={11} sx={{ color: '#fff' }} />}
-          <Typography sx={{ fontSize: 13, fontWeight: 600 }}>Save embedding settings</Typography>
+          {saveMutation.isPending && <CircularProgress size={11} sx={{ color: BRAND.onAccent }} />}
+          <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Save embedding settings</Typography>
         </Box>
       </Box>
     </Box>

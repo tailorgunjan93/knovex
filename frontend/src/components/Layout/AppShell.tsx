@@ -28,10 +28,14 @@ import CloseIcon              from '@mui/icons-material/Close'
 import SystemUpdateAltIcon    from '@mui/icons-material/SystemUpdateAlt'
 import { useQuery }           from '@tanstack/react-query'
 import Sidebar                from './Sidebar'
-import TopBar                 from './TopBar'
+import CommandPalette         from '@/components/CommandPalette'
+import type { Command }       from '@/components/CommandPalette/commands'
+import WelcomeScreen          from '@/components/Onboarding/WelcomeScreen'
 import { getTheme }           from '@/theme'
 import { useSettingsStore, useThemeMode } from '@/store/settings.store'
 import { settingsApi }        from '@/api/settings.api'
+
+const THEME_CYCLE: Record<string, string> = { dark: 'medium', medium: 'light', light: 'dark' }
 
 interface UpdateInfo {
   version:      string
@@ -39,20 +43,34 @@ interface UpdateInfo {
 }
 
 export default function AppShell() {
-  const { setSettings } = useSettingsStore()
+  const { settings, setSettings } = useSettingsStore()
   const themeMode       = useThemeMode()
   const navigate        = useNavigate()
 
   const [updateInfo,    setUpdateInfo]    = useState<UpdateInfo | null>(null)
   const [bannerVisible, setBannerVisible] = useState(false)
+  const [savingName,    setSavingName]    = useState(false)
 
   // ── Load settings on mount ─────────────────────────────────────────────────
-  const { data } = useQuery({
+  const { data, isLoading: settingsLoading } = useQuery({
     queryKey: ['settings'],
     queryFn:  settingsApi.get,
     staleTime: 60_000,
   })
   useEffect(() => { if (data) setSettings(data) }, [data, setSettings])
+
+  // ── First-run onboarding: show Welcome until `onboarded` is true ────────────
+  // Only decide once settings have actually loaded, so we never flash the
+  // welcome screen for an already-onboarded user.
+  const needsOnboarding = !settingsLoading && settings != null && settings.onboarded === false
+
+  const completeOnboarding = (name: string) => {
+    setSavingName(true)
+    settingsApi.update({ display_name: name, onboarded: true })
+      .then(setSettings)
+      .catch(() => {/* keep showing welcome on failure */})
+      .finally(() => setSavingName(false))
+  }
 
   // ── Wire Electron IPC navigation ──────────────────────────────────────────
   useEffect(() => {
@@ -60,6 +78,35 @@ export default function AppShell() {
     const cleanup = window.knovex.onNavigate((route) => navigate(route))
     return cleanup
   }, [navigate])
+
+  // ── Command palette (Ctrl/Cmd+K) ───────────────────────────────────────────
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const cycleTheme = () => {
+    const next = THEME_CYCLE[themeMode] ?? 'dark'
+    settingsApi.update({ theme: next }).then(setSettings).catch(() => {})
+  }
+
+  // Command set — extend here to add KB/file/recent-lesson sources (OCP).
+  const commands: Command[] = useMemo(() => [
+    { id: 'nav-library',  title: 'Go to Library',     keywords: 'kb knowledge base collections', kind: 'navigate', hint: 'Go', run: () => navigate('/kb') },
+    { id: 'nav-chat',     title: 'Ask Knovex',         keywords: 'chat question ask',             kind: 'navigate', hint: 'Go', run: () => navigate('/chat') },
+    { id: 'nav-reader',   title: 'Open Reader',        keywords: 'pdf document read file',        kind: 'navigate', hint: 'Go', run: () => navigate('/reader') },
+    { id: 'nav-learn',    title: 'Start Learning',     keywords: 'lesson quiz flashcard guided',  kind: 'navigate', hint: 'Go', run: () => navigate('/learn') },
+    { id: 'nav-progress', title: 'View Progress',      keywords: 'stats streak mastery heatmap',  kind: 'navigate', hint: 'Go', run: () => navigate('/progress') },
+    { id: 'nav-settings', title: 'Open Settings',      keywords: 'preferences keys providers',    kind: 'navigate', hint: 'Go', run: () => navigate('/settings') },
+    { id: 'theme-cycle',  title: 'Cycle theme',        keywords: 'dark light mid appearance',     kind: 'theme',    hint: 'Theme', run: cycleTheme },
+  ], [navigate, themeMode])
 
   // ── Auto-update banner ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -133,10 +180,11 @@ export default function AppShell() {
           </Box>
         </Collapse>
 
-        {/* ── Top bar ── */}
-        <TopBar />
-
-        {/* ── Sidebar + main content ── */}
+        {/* ── Sidebar + main content ──
+           No app TopBar: the lab design is rail + content only, and the Electron
+           window uses the native OS frame (no frame:false / titleBarStyle), so
+           window controls + dragging come from the OS — the old TopBar's macOS
+           dots and drag region were decorative/redundant. */}
         <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           <Sidebar />
           <Box
@@ -153,6 +201,14 @@ export default function AppShell() {
           </Box>
         </Box>
       </Box>
+
+      {/* ── Command palette (Ctrl/Cmd+K) ── */}
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+
+      {/* ── First-run onboarding overlay ── */}
+      {needsOnboarding && (
+        <WelcomeScreen onComplete={completeOnboarding} saving={savingName} />
+      )}
     </ThemeProvider>
   )
 }

@@ -10,14 +10,18 @@
  */
 
 import { createTheme, type Theme, alpha } from '@mui/material/styles'
+import { BRAND as TOKENS } from './tokens'
 
 // ─── Brand tokens ─────────────────────────────────────────────────────────────
+// Copper family sourced from the shared single-source-of-truth tokens
+// (src/theme/tokens.ts). The MUI-specific semantic colors below are kept local
+// and unchanged to avoid any visual regression to the existing themes.
 
 const BRAND = {
   // Amber accent — matches oklch(0.78 0.13 60) / KnovexUI #dda76a
-  copper:      '#DDA76A',
-  copperDark:  '#B5803E',
-  copperLight: '#EABC8A',
+  copper:      TOKENS.copper,
+  copperDark:  TOKENS.copperDark,
+  copperLight: TOKENS.copperLight,
 
   error:   '#EF4444',
   warning: '#F59E0B',
@@ -146,9 +150,11 @@ export const darkTheme = createTheme({
     ...sharedComponents,
     MuiPaper: {
       styleOverrides: {
+        // De-boxed: no global border — surfaces read via elevation/background,
+        // not a 1px outline (the redesign's "elevation over borders"). Components
+        // that genuinely need a hairline set it explicitly.
         root: {
           backgroundImage: 'none',
-          border: '1px solid #26252B',
         },
         elevation1: { backgroundColor: '#111114' },
         elevation2: { backgroundColor: '#16161A' },
@@ -210,7 +216,6 @@ export const mediumTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          border: '1px solid #3A3842',
         },
         elevation1: { backgroundColor: '#23222A' },
         elevation2: { backgroundColor: '#2A2932' },
@@ -271,7 +276,6 @@ export const lightTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          border: '1px solid #DDD6C8',
         },
         elevation1: { backgroundColor: '#FFFBF3' },
         elevation2: { backgroundColor: '#EFEAE0' },

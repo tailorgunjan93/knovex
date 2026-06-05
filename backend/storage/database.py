@@ -162,6 +162,22 @@ CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
     VALUES (new.rowid, new.content, new.section);
 END;
 
+-- Reader highlights (user-created, persisted, reload with the document)
+CREATE TABLE IF NOT EXISTS highlights (
+    id          TEXT    PRIMARY KEY,
+    kb_id       TEXT    NOT NULL,
+    file_id     TEXT    NOT NULL,
+    page        INTEGER NOT NULL DEFAULT 1,
+    text        TEXT    NOT NULL,
+    color       TEXT    NOT NULL DEFAULT 'yellow',
+    note        TEXT    NOT NULL DEFAULT '',
+    created_at  TEXT    NOT NULL,
+    FOREIGN KEY (file_id) REFERENCES file_records(id) ON DELETE CASCADE,
+    FOREIGN KEY (kb_id)   REFERENCES knowledge_bases(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_highlights_file ON highlights(file_id, page);
+
 INSERT OR IGNORE INTO user_stats (id, xp, level, streak, last_activity, badges)
 VALUES (1, 0, 1, 0, NULL, '[]');
 """

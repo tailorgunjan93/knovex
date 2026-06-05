@@ -29,6 +29,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime
 
+from backend.adapters.json_repair_adapter import repair_json_object
 from backend.core.domain.learn import (
     VALID_DIFFICULTIES,
     VALID_FORMATS,
@@ -110,6 +111,7 @@ class LearnService:
         model: str,
         credentials: ProviderCredentials,
         context_text: str = "",
+        language: str = "English",
     ) -> AsyncGenerator[str, None]:
         """
         Create a LearnSession, generate content, stream SSE events.
@@ -142,7 +144,7 @@ class LearnService:
             if format in _TEXT_FORMATS:
                 # Stream tokens in real-time AND accumulate for saving — one LLM call.
                 accumulated = ""
-                messages = self._build_prompt(format, topic, difficulty, context_text)
+                messages = self._build_prompt(format, topic, difficulty, context_text, language)
                 try:
                     async for token in self._llm_svc.stream(
                         messages=messages,
@@ -162,7 +164,7 @@ class LearnService:
                 # Token budget: guided > quiz/flashcard > simpler formats
                 _json_token_budget = {"guided": 4096, "quiz": 3000, "flashcard": 2500}
                 json_max_tokens = _json_token_budget.get(format, 2048)
-                messages = self._build_prompt(format, topic, difficulty, context_text)
+                messages = self._build_prompt(format, topic, difficulty, context_text, language)
                 try:
                     raw = await self._llm_svc.complete(
                         messages=messages,
@@ -180,17 +182,23 @@ class LearnService:
                 try:
                     new_content = json.loads(cleaned)
                 except json.JSONDecodeError:
-                    # LLM hit token limit mid-JSON — attempt repair by truncating
-                    # to the last complete top-level closing brace.
-                    repaired = _repair_truncated_json(cleaned)
+                    # Malformed LLM JSON — most often an unescaped quote inside a
+                    # string value ("Expecting ',' delimiter") or truncation by a
+                    # token limit. _parse_llm_json chains both repairs.
                     try:
-                        new_content = json.loads(repaired)
+                        new_content = _parse_llm_json(cleaned)
                         logger.warning(
-                            "Repaired truncated JSON for format=%s topic=%r "
-                            "(original len=%d repaired len=%d)",
-                            format, topic, len(cleaned), len(repaired),
+                            "Repaired malformed LLM JSON for format=%s topic=%r (len=%d)",
+                            format, topic, len(cleaned),
                         )
                     except json.JSONDecodeError as exc:
+                        # Log the FULL raw payload so a genuinely novel malformation
+                        # can be diagnosed precisely (the user-facing error truncates).
+                        logger.error(
+                            "Unrepairable LLM JSON for format=%s topic=%r: %s\n"
+                            "FULL RAW (len=%d):\n%s",
+                            format, topic, exc, len(raw), raw,
+                        )
                         raise ValueError(
                             f"LLM returned invalid JSON: {exc}\n\nRaw response:\n{raw[:200]}"
                         ) from exc
@@ -363,9 +371,24 @@ class LearnService:
         topic: str,
         difficulty: str,
         context_text: str,
+        language: str = "English",
     ) -> list[dict[str, str]]:
-        """Return messages list for the LLM call."""
+        """Return messages list for the LLM call.
+
+        Multilingual (generate-in-language): when *language* is anything other
+        than English we append an instruction to write all human-readable text
+        in that language while keeping JSON keys in English — so the downstream
+        JSON parser and the renderer keep working unchanged. Default English
+        adds nothing, so existing behavior is untouched.
+        """
         system = _SYSTEM_PROMPTS[format].format(topic=topic, difficulty=difficulty)
+        if language and language.strip().lower() != "english":
+            system += (
+                f"\n\nIMPORTANT: Write all human-readable text (questions, answers, "
+                f"explanations, titles, body copy) in {language}. "
+                f"Keep all JSON keys/field names in English exactly as specified — "
+                f"translate only the values, never the keys."
+            )
         user_parts = [f"Topic: {topic}"]
         if context_text:
             user_parts.append(f"\nContext from knowledge base:\n{context_text[:3000]}")
@@ -459,6 +482,113 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         ']}}'
     ),
 }
+
+
+def _escape_inner_quotes(text: str) -> str:
+    """
+    Escape double-quotes that appear *inside* a JSON string value where the model
+    forgot to escape them (e.g. quoting a term mid-sentence: the "boundary" layer).
+
+    This is the root cause of "Expecting ',' delimiter" parse failures: the stray
+    quote terminates the string early. We distinguish a *genuine* closing quote —
+    which in valid JSON is always followed (after optional whitespace) by a
+    structural delimiter (``, : } ]``) or end-of-input — from a stray content
+    quote, which is followed by anything else and is therefore escaped.
+
+    Valid JSON is returned unchanged (the lookahead never misfires), so this is
+    safe to run on every response. Known limitation: a quoted phrase immediately
+    followed by a comma inside a value (``"yes", he said``) is ambiguous and may
+    still be misread; such cases fall through to the truncation repair / error.
+    """
+    out: list[str] = []
+    in_string = False
+    escape_next = False
+    n = len(text)
+    i = 0
+
+    while i < n:
+        ch = text[i]
+        if escape_next:
+            out.append(ch)
+            escape_next = False
+            i += 1
+            continue
+        if ch == "\\":
+            out.append(ch)
+            escape_next = True
+            i += 1
+            continue
+        if ch == '"':
+            if not in_string:
+                in_string = True
+                out.append(ch)
+            else:
+                # Closing quote, or stray inner quote? Look ahead past whitespace.
+                j = i + 1
+                while j < n and text[j] in " \t\r\n":
+                    j += 1
+                c1 = text[j] if j < n else ""
+
+                if c1 in (":", "}", "]", '"', ""):
+                    # A real closing quote is followed by a structural delimiter,
+                    # by another string (adjacent ", treated as a missing comma —
+                    # don't merge the fields), or by end-of-input.
+                    closing = True
+                elif c1 == ",":
+                    # A comma is ambiguous: a *field separator* is followed by the
+                    # next key/value (a quote, a container, or a literal); a comma
+                    # that is part of prose is followed by ordinary text.
+                    k = j + 1
+                    while k < n and text[k] in " \t\r\n":
+                        k += 1
+                    c2 = text[k] if k < n else ""
+                    closing = c2 in ('"', "{", "[", "-", "t", "f", "n", "") or c2.isdigit()
+                else:
+                    closing = False
+
+                if closing:
+                    in_string = False
+                    out.append(ch)
+                else:
+                    out.append('\\"')  # literal content quote → escape it
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+
+    return "".join(out)
+
+
+def _parse_llm_json(text: str) -> dict:
+    """
+    Parse possibly-malformed LLM JSON. Cheap, content-preserving repairs run
+    first (escape stray inner quotes → close truncation → both); if those still
+    fail — typically a STRUCTURAL break the model introduced, e.g. a flattened
+    array missing per-element braces — fall back to the wrapped json_repair
+    library, which recovers a usable object from badly broken JSON.
+
+    Returns the parsed dict, or raises json.JSONDecodeError if nothing recovers
+    a non-empty object (so callers can surface a clean error event).
+    """
+    candidates = (
+        text,
+        _escape_inner_quotes(text),
+        _repair_truncated_json(text),
+        _repair_truncated_json(_escape_inner_quotes(text)),
+    )
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+
+    # Robust structural repair via the anti-corruption wrapper. json_repair
+    # never raises; it returns an empty value for hopeless input, so validate.
+    repaired = repair_json_object(text)
+    if isinstance(repaired, dict) and repaired:
+        return repaired
+
+    raise json.JSONDecodeError("Could not repair malformed JSON", text, 0)
 
 
 def _repair_truncated_json(text: str) -> str:

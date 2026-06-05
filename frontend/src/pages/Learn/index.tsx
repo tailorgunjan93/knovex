@@ -7,7 +7,7 @@
  * Formats: guided · quiz · flashcard · mindmap · timeline · story · eli5 · speedlearn · brainstorm
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Alert,
@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 import AutoStoriesIcon from '@mui/icons-material/AutoStories'
 import QuizIcon from '@mui/icons-material/Quiz'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import StyleIcon from '@mui/icons-material/Style'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import TimelineIcon from '@mui/icons-material/Timeline'
@@ -46,6 +47,7 @@ import ChildCareIcon from '@mui/icons-material/ChildCare'
 import BoltIcon from '@mui/icons-material/Bolt'
 import EmojiObjectsIcon from '@mui/icons-material/EmojiObjects'
 import SchoolIcon from '@mui/icons-material/School'
+import TranslateIcon from '@mui/icons-material/Translate'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import StopIcon from '@mui/icons-material/Stop'
 import StarIcon from '@mui/icons-material/Star'
@@ -82,22 +84,37 @@ import {
 import { kbApi } from '../../api/kb.api'
 import { readerApi } from '../../api/reader.api'
 import GuidedViewer from './GuidedViewer'
+import AnimatedView from './AnimatedView'
+import { lessonOutline, lessonConcepts, type OutlineItem } from './lessonStructure'
+import { BRAND } from '@/theme/tokens'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
+// Generic active/hover accent fill — brand copper (paired with primary.main borders).
+const ACCENT = BRAND.copper
 const SERIF = '"Instrument Serif", Georgia, serif'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const FORMATS: Array<{ id: LearnFormat; label: string; icon: React.ReactNode; desc: string; color: string }> = [
-  { id: 'guided',     label: 'Guided',      icon: <SchoolIcon />,       desc: 'Personal tutor — learn step by step at your pace', color: '#6366F1' },
-  { id: 'quiz',       label: 'Quiz',        icon: <QuizIcon />,         desc: 'Test your knowledge with MCQ & earn XP',            color: '#7C3AED' },
-  { id: 'flashcard',  label: 'Flashcards',  icon: <StyleIcon />,        desc: 'Spaced repetition for long-term memory',            color: '#0EA5E9' },
-  { id: 'mindmap',    label: 'Mind Map',    icon: <AccountTreeIcon />,  desc: 'Visual hierarchy of connected concepts',            color: '#10B981' },
-  { id: 'timeline',   label: 'Timeline',    icon: <TimelineIcon />,     desc: 'Key events in chronological order',                 color: '#F59E0B' },
-  { id: 'story',      label: 'Story',       icon: <MenuBookIcon />,     desc: 'Engaging narrative explanation',                    color: '#EC4899' },
-  { id: 'eli5',       label: 'ELI5',        icon: <ChildCareIcon />,    desc: "Explain Like I'm 5 — simple & clear",               color: '#06B6D4' },
-  { id: 'speedlearn', label: 'Speed Learn', icon: <BoltIcon />,         desc: 'Rapid bullet-point key-concept reference',          color: '#F97316' },
-  { id: 'brainstorm', label: 'Brainstorm',  icon: <EmojiObjectsIcon />, desc: 'Creative connections & surprising facts',           color: '#8B5CF6' },
+// UI-level format id. 'animated' is a presentation of guided content (the
+// animated step-through), not a separate backend format — see backendFormatFor.
+export type UIFormat = LearnFormat | 'animated'
+
+/** Map a UI format to the backend LearnFormat used for generation. */
+export function backendFormatFor(f: UIFormat): LearnFormat {
+  return f === 'animated' ? 'guided' : f
+}
+
+/** Formats whose generated content is a JSON object (vs streamed text). */
+export function isObjectFormat(f: UIFormat): boolean {
+  return ['quiz', 'flashcard', 'mindmap', 'timeline', 'guided', 'animated'].includes(f)
+}
+
+// Offered formats (UI), matching the lab lesson tabs: the four functional modes.
+const FORMATS: Array<{ id: UIFormat; label: string; icon: React.ReactNode; desc: string; color: string }> = [
+  { id: 'guided',    label: 'Guided',     icon: <SchoolIcon />,         desc: 'A conversational tutor walks you through, one beat at a time.', color: '#DDA76A' },
+  { id: 'animated',  label: 'Animated',   icon: <AutoAwesomeIcon />,    desc: 'Watch the concept build itself — visually, step by step.',     color: '#DDA76A' },
+  { id: 'flashcard', label: 'Flashcards', icon: <StyleIcon />,          desc: 'Spaced-repetition cards that adapt to your recall.',           color: '#0EA5E9' },
+  { id: 'quiz',      label: 'Quiz',       icon: <QuizIcon />,           desc: 'Check understanding with adaptive questions.',                  color: '#7C3AED' },
 ]
 
 const DIFFICULTIES: Array<{ id: Difficulty; label: string; color: string; bg: string }> = [
@@ -106,8 +123,12 @@ const DIFFICULTIES: Array<{ id: Difficulty; label: string; color: string; bg: st
   { id: 'expert',       label: 'Expert',       color: '#DC2626', bg: '#FEE2E2' },
 ]
 
-const FORMAT_ICON_MAP: Record<LearnFormat, React.ReactNode> = {
+// Multilingual (generate-in-language). 'English' is the default = no behavior change.
+const LANGUAGES = ['English', 'हिन्दी', 'Español', 'Français', 'Deutsch', 'Português', 'Italiano', '日本語', '中文', '한국어', 'العربية', 'Русский']
+
+const FORMAT_ICON_MAP: Record<UIFormat, React.ReactNode> = {
   guided:     <SchoolIcon fontSize="small" />,
+  animated:   <AutoAwesomeIcon fontSize="small" />,
   quiz:       <QuizIcon fontSize="small" />,
   flashcard:  <StyleIcon fontSize="small" />,
   mindmap:    <AccountTreeIcon fontSize="small" />,
@@ -135,14 +156,21 @@ const BADGE_LABELS: Record<string, string> = {
 
 // ─── Source mode ──────────────────────────────────────────────────────────────
 
-type SourceMode = 'topic' | 'kb' | 'web' | 'upload'
+type SourceMode = 'topic' | 'kb' | 'web' | 'wikipedia' | 'upload'
 
 const SOURCE_MODES: Array<{ id: SourceMode; label: string; icon: React.ReactNode; tip: string }> = [
-  { id: 'topic',  label: 'Topic',   icon: <SubjectIcon fontSize="inherit" />,       tip: 'Learn about any topic using AI knowledge' },
-  { id: 'kb',     label: 'Library', icon: <LibraryBooksIcon fontSize="inherit" />,  tip: 'Learn from a file in your Knowledge Base' },
-  { id: 'web',    label: 'Web',     icon: <LanguageIcon fontSize="inherit" />,       tip: 'Learn from any web page by URL' },
-  { id: 'upload', label: 'Upload',  icon: <UploadFileIcon fontSize="inherit" />,     tip: 'Upload a text file (.txt, .md, .json, .csv)' },
+  { id: 'topic',     label: 'Topic',     icon: <SubjectIcon fontSize="inherit" />,       tip: 'Learn about any topic using AI knowledge' },
+  { id: 'kb',        label: 'From Library', icon: <LibraryBooksIcon fontSize="inherit" />, tip: 'Learn from a file in your Knowledge Base' },
+  { id: 'web',       label: 'Web',       icon: <LanguageIcon fontSize="inherit" />,      tip: 'Learn from any web page by URL' },
+  { id: 'wikipedia', label: 'Wikipedia', icon: <MenuBookIcon fontSize="inherit" />,      tip: 'Learn from the Wikipedia article on a topic' },
+  { id: 'upload',    label: 'Upload',    icon: <UploadFileIcon fontSize="inherit" />,    tip: 'Upload a text file (.txt, .md, .json, .csv)' },
 ]
+
+/** Build the Wikipedia article URL for a topic (used by the 'wikipedia' source). */
+export function wikipediaUrlFor(topic: string): string {
+  const slug = encodeURIComponent(topic.trim().replace(/\s+/g, '_'))
+  return `https://en.wikipedia.org/wiki/${slug}`
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -397,7 +425,7 @@ function QuizView({
                       transition: 'all 0.15s',
                       '&:hover': showResult ? {} : {
                         borderColor: 'primary.main',
-                        bgcolor: alpha('#7C3AED', 0.06),
+                        bgcolor: alpha(ACCENT, 0.06),
                       },
                     }}
                   >
@@ -779,43 +807,235 @@ function FormatCard({
   onClick: () => void
 }) {
   const theme = useTheme()
+  const accent = theme.palette.primary.main
   return (
     <Box
       data-testid={`format-card-${f.id}`}
       onClick={onClick}
       sx={{
-        flex: '1 1 calc(25% - 12px)',
-        minWidth: 120,
-        maxWidth: 200,
-        border: `1.5px solid`,
-        borderColor: selected ? f.color : 'divider',
-        borderRadius: 2,
-        p: 1.75,
+        textAlign: 'left',
+        border: `1px solid`,
+        borderColor: selected ? accent : 'divider',
+        borderRadius: 3,
+        p: 2,
         cursor: 'pointer',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 0.75,
+        bgcolor: selected ? alpha(accent, theme.palette.mode === 'dark' ? 0.12 : 0.08) : 'background.paper',
         transition: 'all 0.15s',
-        bgcolor: selected
-          ? alpha(f.color, theme.palette.mode === 'dark' ? 0.15 : 0.07)
-          : 'transparent',
         '&:hover': {
-          borderColor: f.color,
-          bgcolor: alpha(f.color, theme.palette.mode === 'dark' ? 0.1 : 0.05),
-          transform: 'translateY(-1px)',
-          boxShadow: `0 4px 16px ${alpha(f.color, 0.15)}`,
+          borderColor: selected ? accent : 'text.disabled',
+          transform: 'translateY(-2px)',
         },
       }}
     >
-      <Box sx={{ color: selected ? f.color : 'text.secondary', display: 'flex' }}>
+      <Box sx={{ color: selected ? accent : 'text.secondary', mb: 1, '& svg': { fontSize: 24 } }}>
         {f.icon}
       </Box>
-      <Typography sx={{ fontSize: 13, fontWeight: 700, color: selected ? f.color : 'text.primary' }}>
+      <Typography sx={{ fontSize: 14, fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
         {f.label}
       </Typography>
-      <Typography sx={{ fontSize: 11, color: 'text.disabled', lineHeight: 1.4 }}>
+      <Typography sx={{ fontSize: 12.5, color: 'text.secondary', lineHeight: 1.5 }}>
         {f.desc}
       </Typography>
+    </Box>
+  )
+}
+
+/** In-lesson format tabs — switch the learning mode in place (re-generates). */
+function LessonTabs({ active, disabled, onPick }: {
+  active: UIFormat
+  disabled: boolean
+  onPick: (f: UIFormat) => void
+}) {
+  return (
+    <Box sx={{ display: 'inline-flex', gap: 0.25, p: 0.4, borderRadius: 2.5, bgcolor: 'action.hover' }}>
+      {FORMATS.map(f => {
+        const on = active === f.id
+        return (
+          <Box
+            key={f.id}
+            component="button"
+            data-testid={`lesson-tab-${f.id}`}
+            aria-pressed={on}
+            disabled={disabled}
+            onClick={() => !on && !disabled && onPick(f.id)}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 0.5,
+              height: 28, px: 1.25, borderRadius: 1.5, border: 0,
+              fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+              cursor: disabled || on ? 'default' : 'pointer',
+              bgcolor: on ? 'background.paper' : 'transparent',
+              color: on ? 'text.primary' : 'text.secondary',
+              boxShadow: on ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
+              opacity: disabled && !on ? 0.5 : 1,
+              transition: 'background 0.15s, color 0.15s',
+              '&:hover': disabled || on ? {} : { color: 'text.primary' },
+            }}
+          >
+            <Box sx={{ display: 'flex', '& svg': { fontSize: 15 } }}>{f.icon}</Box>
+            {f.label}
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
+
+/** Collapsed 44px strip for a lesson side-rail (vertical label + expand). */
+function CollapsedRail({ label, side, onOpen }: {
+  label: string; side: 'left' | 'right'; onOpen: () => void
+}) {
+  return (
+    <Box sx={{
+      width: 44, flexShrink: 0, display: { xs: 'none', md: 'flex' },
+      flexDirection: 'column', alignItems: 'center', py: 1.5, gap: 1.5,
+    }}>
+      <Tooltip title="Expand panel" placement={side === 'left' ? 'right' : 'left'} arrow>
+        <IconButton size="small" onClick={onOpen} sx={{ color: 'text.secondary' }}>
+          {side === 'left' ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+        </IconButton>
+      </Tooltip>
+      <Typography sx={{
+        writingMode: 'vertical-rl', transform: side === 'right' ? 'rotate(180deg)' : 'none',
+        fontFamily: MONO, fontSize: 10, color: 'text.disabled', letterSpacing: '0.14em', textTransform: 'uppercase',
+      }}>
+        {label}
+      </Typography>
+    </Box>
+  )
+}
+
+/**
+ * Left rail — the derived lesson outline.
+ *
+ * For step-based formats (guided/animated) the parent passes `activeIndex` +
+ * `onSelect`, turning the rail into a live table-of-contents: completed steps
+ * show a check, the active step is highlighted, and clicking navigates. For
+ * other formats it stays a read-only structural map.
+ */
+function OutlineRail({ items, format, activeIndex, onSelect, title, subtitle, onCollapse }: {
+  items: OutlineItem[]
+  format: UIFormat
+  activeIndex?: number
+  onSelect?: (index: number) => void
+  title?: string
+  subtitle?: string
+  onCollapse: () => void
+}) {
+  const noun = format === 'quiz' ? 'questions'
+    : format === 'flashcard' ? 'cards'
+    : format === 'timeline' ? 'events'
+    : format === 'mindmap' ? 'branches'
+    : 'steps'
+  const interactive = activeIndex !== undefined
+  const doneCount = interactive ? Math.max(0, Math.min(activeIndex!, items.length)) : 0
+  const TEAL = '#3A8D7A'
+
+  return (
+    <Box sx={{ width: 270, flexShrink: 0, overflowY: 'auto', p: 2.25, display: { xs: 'none', md: 'block' } }}>
+      {title && (
+        <Box sx={{ mb: 2 }}>
+          <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.25, color: 'text.primary' }}>
+            {title}
+          </Typography>
+          {subtitle && (
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', lineHeight: 1.5, mt: 0.5,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
+      )}
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.25 }}>
+        <Typography sx={{ flex: 1, fontFamily: MONO, fontSize: 10.5, color: 'text.disabled', letterSpacing: '0.12em' }}>
+          OUTLINE · {items.length} {noun.toUpperCase()}
+        </Typography>
+        {interactive && (
+          <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled', mr: 0.5 }}>
+            {doneCount}/{items.length}
+          </Typography>
+        )}
+        <Tooltip title="Collapse" arrow>
+          <IconButton size="small" onClick={onCollapse} sx={{ color: 'text.disabled' }}>
+            <ChevronLeftIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Stack spacing={0.25}>
+        {items.map((it) => {
+          const done   = interactive && it.index < activeIndex!
+          const active = interactive && it.index === activeIndex!
+          return (
+            <Box
+              key={it.index}
+              data-testid={`outline-item-${it.index}`}
+              aria-current={active ? 'step' : undefined}
+              onClick={interactive ? () => onSelect?.(it.index) : undefined}
+              sx={{
+                display: 'flex', gap: 1.25, alignItems: 'flex-start', p: 1, borderRadius: 2,
+                cursor: interactive ? 'pointer' : 'default',
+                bgcolor: active ? 'action.selected' : 'transparent',
+                transition: 'background 0.15s',
+                '&:hover': interactive ? { bgcolor: active ? 'action.selected' : 'action.hover' } : {},
+              }}
+            >
+              <Box sx={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                display: 'grid', placeItems: 'center',
+                fontFamily: MONO, fontSize: 10, fontWeight: 700,
+                bgcolor: done ? TEAL : active ? alpha(ACCENT, 0.15) : 'action.hover',
+                color:   done ? '#fff' : active ? ACCENT : 'text.secondary',
+                border:  active ? `1px solid ${ACCENT}` : 'none',
+              }}>
+                {done ? <CheckCircleIcon sx={{ fontSize: 13 }} /> : String(it.index + 1).padStart(2, '0')}
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{
+                  fontSize: 13, fontWeight: active ? 600 : 500,
+                  color: active ? 'text.primary' : 'text.secondary', lineHeight: 1.35,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}>
+                  {it.label}
+                </Typography>
+                {it.sub && (
+                  <Typography sx={{ fontFamily: MONO, fontSize: 10.5, color: 'text.disabled' }}>{it.sub}</Typography>
+                )}
+              </Box>
+            </Box>
+          )
+        })}
+      </Stack>
+    </Box>
+  )
+}
+
+/** Right rail — connected concepts derived from the lesson's recurring terms. */
+function ConceptsRail({ concepts, onCollapse }: {
+  concepts: string[]; onCollapse: () => void
+}) {
+  const dotColors = ['#7E8FB0', '#3A8D7A', '#C0905C', '#9AA56A', '#B86D76', '#7C8DB5']
+  return (
+    <Box sx={{ width: 256, flexShrink: 0, overflowY: 'auto', p: 2.25, display: { xs: 'none', lg: 'block' } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.25 }}>
+        <Typography sx={{ flex: 1, fontFamily: MONO, fontSize: 10.5, color: 'text.disabled', letterSpacing: '0.12em' }}>
+          CONNECTED CONCEPTS
+        </Typography>
+        <Tooltip title="Collapse" arrow>
+          <IconButton size="small" onClick={onCollapse} sx={{ color: 'text.disabled' }}>
+            <ChevronRightIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Typography sx={{ fontSize: 12.5, color: 'text.secondary', lineHeight: 1.6, mb: 1.75 }}>
+        Recurring ideas pulled from this lesson.
+      </Typography>
+      <Stack spacing={0.25}>
+        {concepts.map((c, i) => (
+          <Box key={c} sx={{ display: 'flex', gap: 1.25, alignItems: 'center', p: 1, borderRadius: 2 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: dotColors[i % dotColors.length] }} />
+            <Typography sx={{ fontSize: 13, color: 'text.primary', textTransform: 'capitalize' }}>{c}</Typography>
+          </Box>
+        ))}
+      </Stack>
     </Box>
   )
 }
@@ -847,8 +1067,9 @@ export default function LearnPage() {
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [topic, setTopic]         = useState(() => searchParams.get('topic') ?? '')
-  const [format, setFormat]       = useState<LearnFormat>('quiz')
+  const [format, setFormat]       = useState<UIFormat>('guided')
   const [difficulty, setDifficulty] = useState<Difficulty>('intermediate')
+  const [language, setLanguage]     = useState<string>('English')
 
   // ── Consume ?topic= URL param (set by Chat "Turn into lesson") ─────────────
   useEffect(() => {
@@ -865,7 +1086,7 @@ export default function LearnPage() {
   const [streamError, setStreamError]             = useState<string | null>(null)
   const [lastXP, setLastXP]                       = useState<number | null>(null)
   const [newBadges, setNewBadges]                 = useState<string[]>([])
-  const [activeFormat, setActiveFormat]           = useState<LearnFormat>('quiz')
+  const [activeFormat, setActiveFormat]           = useState<UIFormat>('guided')
 
   // ── Hover state for sidebar delete ─────────────────────────────────────────
   const [hoveredSession, setHoveredSession] = useState<string | null>(null)
@@ -878,7 +1099,16 @@ export default function LearnPage() {
   const [selectedKbId, setSelectedKbId]           = useState('')
   const [selectedFileId, setSelectedFileId]       = useState('')
   const [isDragOver, setIsDragOver]               = useState(false)
-  const [sidebarOpen, setSidebarOpen]             = useState(true)
+  // Collapsed by default so the setup screen matches the lab's clean canvas
+  // (icon rail + centered form); history is one click away via the expand chevron.
+  const [sidebarOpen, setSidebarOpen]             = useState(false)
+
+  // ── Lesson side-rails (Stage B.2) — collapsible outline + connected concepts ─
+  const [outlineOpen, setOutlineOpen]   = useState(true)
+  const [conceptsOpen, setConceptsOpen] = useState(true)
+  // Active step for step-based formats (guided/animated) — lifted so the outline
+  // rail can show done/active marks and navigate. Reset on new content.
+  const [lessonStep, setLessonStep]     = useState(0)
 
   const abortRef    = useRef<AbortController | null>(null)
   const bottomRef   = useRef<HTMLDivElement>(null)
@@ -957,8 +1187,13 @@ export default function LearnPage() {
   }
 
   // ── Stream handler ──────────────────────────────────────────────────────────
-  const handleGenerate = async () => {
+  // `overrideFormat` lets the in-lesson format tabs re-generate the SAME topic /
+  // source / difficulty / language in a different format, switching the stage in
+  // place (Stage B.2) — without re-opening the setup screen.
+  const handleGenerate = async (overrideFormat?: UIFormat) => {
     if (isStreaming) return
+    const genUIFormat: UIFormat = overrideFormat ?? format
+    if (overrideFormat && overrideFormat !== format) setFormat(overrideFormat)
 
     // ── Resolve effective topic + source params ───────────────────────────────
     let effectiveTopic = topic.trim()
@@ -988,6 +1223,13 @@ export default function LearnPage() {
       }
       // context_text left empty — backend will fetch the URL
 
+    } else if (sourceMode === 'wikipedia') {
+      if (!effectiveTopic) return
+      // Wikipedia = the article URL for the topic, fetched by the backend.
+      sourceType = 'url'
+      sourceRef  = wikipediaUrlFor(effectiveTopic)
+      // context_text left empty — backend will fetch the article
+
     } else if (sourceMode === 'upload') {
       if (!uploadText || uploadText === '__UNSUPPORTED__') return
       sourceType  = 'upload'
@@ -1013,18 +1255,21 @@ export default function LearnPage() {
     setLastXP(null)
     setNewBadges([])
     setActiveSessionId(null)
-    setActiveFormat(format)
+    setActiveFormat(genUIFormat)
+    setLessonStep(0)
 
     const controller  = new AbortController()
     abortRef.current  = controller
     let accumulatedText = ''
     let accumulatedJson = ''
-    const isJson = ['quiz', 'flashcard', 'mindmap', 'timeline', 'guided'].includes(format)
+    // 'animated' generates guided content; only the presentation differs.
+    const genFormat = backendFormatFor(genUIFormat)
+    const isJson = isObjectFormat(genFormat)
 
     try {
       await learnApi.streamSession(
         effectiveTopic,
-        format,
+        genFormat,
         difficulty,
         (event) => {
           if (event.type === 'token') {
@@ -1054,6 +1299,7 @@ export default function LearnPage() {
         sourceType,
         sourceRef,
         contextText,
+        language,
       )
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== 'AbortError') {
@@ -1068,6 +1314,7 @@ export default function LearnPage() {
   const handleLoadSession = (session: LearnSession) => {
     setActiveSessionId(session.id)
     setActiveFormat(session.format)
+    setLessonStep(0)
     setTopic(session.topic)
     setFormat(session.format)
     setDifficulty(session.difficulty)
@@ -1091,6 +1338,7 @@ export default function LearnPage() {
     setStreamError(null)
     setLastXP(null)
     setNewBadges([])
+    setLessonStep(0)
     setTopic('')
     setWebUrl('')
     setUploadFile(null)
@@ -1103,19 +1351,32 @@ export default function LearnPage() {
   const displayContent = streamingContent ?? activeSession?.content
   const displayFormat  = activeSessionId ? activeFormat : format
   const displayText    = streamingText || (displayContent as TextContent)?.text || ''
-  const isJsonFormat   = ['quiz', 'flashcard', 'mindmap', 'timeline', 'guided'].includes(displayFormat)
+  const isJsonFormat   = isObjectFormat(displayFormat)
   const hasContent     = !!(displayContent || streamingText)
   const selectedDiff   = DIFFICULTIES.find(d => d.id === difficulty)!
+  const lessonActive   = hasContent && !isStreaming
+
+  // Derived lesson rails — structural outline + recurring concepts (no fake data).
+  const outline  = useMemo(() => lessonOutline(displayFormat, displayContent), [displayFormat, displayContent])
+  const concepts = useMemo(() => lessonConcepts(displayFormat, displayContent), [displayFormat, displayContent])
+  // Step-based formats get a live, navigable outline (active/done states).
+  const isStepFormat = displayFormat === 'guided' || displayFormat === 'animated'
+  const lessonIntro  = isStepFormat ? (displayContent as GuidedContent | undefined)?.intro : undefined
 
   const isGenerateEnabled = !isStreaming && (() => {
     switch (sourceMode) {
-      case 'topic':  return !!topic.trim()
-      case 'web':    return !!webUrl.trim()
-      case 'kb':     return !!selectedKbId && !!selectedFileId
-      case 'upload': return !!uploadText && uploadText !== '__UNSUPPORTED__'
+      case 'topic':     return !!topic.trim()
+      case 'web':       return !!webUrl.trim()
+      case 'wikipedia': return !!topic.trim()
+      case 'kb':        return !!selectedKbId && !!selectedFileId
+      case 'upload':    return !!uploadText && uploadText !== '__UNSUPPORTED__'
       default:       return false
     }
   })()
+
+  // Single-field source modes get the lab's unified rounded input bar; the
+  // multi-field modes (web/kb/upload) keep their stacked inputs.
+  const isBarMode = sourceMode === 'topic' || sourceMode === 'wikipedia'
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -1289,22 +1550,12 @@ export default function LearnPage() {
           px: 2.5,
           pt: hasContent && !isStreaming ? 1.25 : 2,
           pb: hasContent && !isStreaming ? 0.75 : 1.5,
-          borderBottom: `1px solid ${theme.palette.divider}`,
+          // Seamless canvas on the setup screen (matches the lab); only the
+          // in-lesson header keeps a separator above the 3-pane stage.
+          borderBottom: lessonActive ? `1px solid ${theme.palette.divider}` : 'none',
         }}>
-          {/* Eyebrow — hidden when content is active to save vertical space */}
-          {!(hasContent && !isStreaming) && (
-            <Typography sx={{
-              fontFamily: MONO,
-              fontSize: 10,
-              color: 'text.disabled',
-              textTransform: 'uppercase',
-              letterSpacing: '0.14em',
-              mb: 0.75,
-            }}>
-              — LEARN · GROW · RETAIN
-            </Typography>
-          )}
-
+          {/* Center the setup form to a readable column (lab); full-width in a lesson. */}
+          <Box sx={{ maxWidth: lessonActive ? 'none' : 880, mx: lessonActive ? 0 : 'auto' }}>
           {/* Title row */}
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: hasContent && !isStreaming ? 0 : 1, flexWrap: 'wrap' }}>
             {hasContent ? (
@@ -1338,18 +1589,26 @@ export default function LearnPage() {
                 </Box>
               </Box>
             ) : (
-              <Typography component="h1" sx={{
-                fontFamily: SERIF,
-                fontWeight: 400,
-                fontSize: { xs: 24, sm: 28, md: 32 },
-                letterSpacing: '-0.01em',
-                lineHeight: 1.05,
-              }}>
-                Start{' '}
-                <Box component="em" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
-                  learning
-                </Box>
-              </Typography>
+              <Box>
+                <Typography sx={{
+                  fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em',
+                  color: 'text.disabled', mb: 0.75,
+                }}>
+                  — LEARN
+                </Typography>
+                <Typography component="h1" sx={{
+                  fontWeight: 700,
+                  fontSize: { xs: 24, sm: 28, md: 32 },
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.05,
+                }}>
+                  What do you want to{' '}
+                  <Box component="em" sx={{ fontStyle: 'normal', color: 'primary.main' }}>
+                    learn
+                  </Box>
+                  ?
+                </Typography>
+              </Box>
             )}
             {hasContent && !isStreaming && (
               <Button
@@ -1363,11 +1622,18 @@ export default function LearnPage() {
             )}
           </Box>
 
+          {/* In-lesson format tabs — switch the mode in place (re-generates) */}
+          {lessonActive && (
+            <Box sx={{ mt: 1 }}>
+              <LessonTabs active={displayFormat} disabled={isStreaming} onPick={handleGenerate} />
+            </Box>
+          )}
+
           {/* ── Source mode selector + input ──────────────────────────────────── */}
           {/* Hidden when content is showing — frees vertical space for the learning panel */}
-          {!(hasContent && !isStreaming) && <Box sx={{ mb: 1.25 }}>
-            {/* Source mode pills */}
-            <Box sx={{ display: 'flex', gap: 0.5, mb: 0.75, flexWrap: 'wrap' }}>
+          {!(hasContent && !isStreaming) && <Box sx={{ mb: 1.25, display: 'flex', flexDirection: 'column-reverse', gap: 1.5 }}>
+            {/* Source mode pills — rendered BELOW the input bar (column-reverse), lab order */}
+            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
               {SOURCE_MODES.map(sm => {
                 const active = sourceMode === sm.id
                 return (
@@ -1380,13 +1646,13 @@ export default function LearnPage() {
                         borderRadius: 1,
                         border: '1px solid',
                         borderColor: active ? 'primary.main' : 'divider',
-                        bgcolor: active ? alpha('#7C3AED', theme.palette.mode === 'dark' ? 0.18 : 0.08) : 'transparent',
+                        bgcolor: active ? alpha(ACCENT, theme.palette.mode === 'dark' ? 0.18 : 0.08) : 'transparent',
                         cursor: isStreaming ? 'default' : 'pointer',
                         transition: 'all 0.15s',
                         fontSize: 13,
                         '&:hover': isStreaming ? {} : {
                           borderColor: 'primary.main',
-                          bgcolor: alpha('#7C3AED', theme.palette.mode === 'dark' ? 0.12 : 0.05),
+                          bgcolor: alpha(ACCENT, theme.palette.mode === 'dark' ? 0.12 : 0.05),
                         },
                       }}
                     >
@@ -1402,23 +1668,54 @@ export default function LearnPage() {
               })}
             </Box>
 
-            {/* Source input + action button */}
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {/* Source input + action button — unified rounded bar for single-field modes (lab) */}
+            <Box sx={{
+              display: 'flex', gap: isBarMode ? 1.5 : 1,
+              alignItems: isBarMode ? 'center' : 'flex-start', flexWrap: 'wrap',
+              ...(isBarMode && {
+                p: 1, pl: 2, borderRadius: 3, bgcolor: 'background.paper',
+                border: '1px solid', borderColor: 'divider',
+                transition: 'border-color 0.15s', '&:focus-within': { borderColor: 'primary.main' },
+              }),
+            }}>
+
+              {/* Leading icon (single-field bar only) */}
+              {isBarMode && (
+                <Box sx={{ color: 'text.disabled', display: 'flex', flexShrink: 0, '& svg': { fontSize: 20 } }}>
+                  {sourceMode === 'wikipedia' ? <MenuBookIcon /> : <SchoolIcon />}
+                </Box>
+              )}
 
               {/* ── Input area (changes per source mode) ── */}
-              <Box sx={{ flex: 1, minWidth: 200 }}>
+              <Box sx={{ flex: 1, minWidth: isBarMode ? 0 : 200 }}>
 
-                {/* TOPIC mode */}
+                {/* TOPIC mode — borderless input inside the unified bar */}
                 {sourceMode === 'topic' && (
                   <TextField
-                    placeholder="What do you want to learn?"
+                    placeholder="Type a topic, or pick a source…"
                     value={topic}
                     onChange={e => setTopic(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && !e.shiftKey && isGenerateEnabled && handleGenerate()}
-                    size="small"
                     disabled={isStreaming}
                     fullWidth
-                    sx={{ '& .MuiOutlinedInput-root': { fontSize: 13 } }}
+                    variant="standard"
+                    InputProps={{ disableUnderline: true }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: 15, p: 0, color: 'text.primary' } }}
+                  />
+                )}
+
+                {/* WIKIPEDIA mode — fetches the article via the URL source */}
+                {sourceMode === 'wikipedia' && (
+                  <TextField
+                    placeholder="Wikipedia article or topic (e.g. Photosynthesis)"
+                    value={topic}
+                    onChange={e => setTopic(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && isGenerateEnabled && handleGenerate()}
+                    disabled={isStreaming}
+                    fullWidth
+                    variant="standard"
+                    InputProps={{ disableUnderline: true }}
+                    sx={{ '& .MuiInputBase-input': { fontSize: 15, p: 0, color: 'text.primary' } }}
                   />
                 )}
 
@@ -1542,13 +1839,13 @@ export default function LearnPage() {
                         cursor: isStreaming ? 'default' : 'pointer',
                         transition: 'all 0.15s',
                         bgcolor: isDragOver
-                          ? alpha('#7C3AED', 0.06)
+                          ? alpha(ACCENT, 0.06)
                           : uploadFile
                           ? alpha('#10B981', 0.05)
                           : 'transparent',
                         '&:hover': isStreaming ? {} : {
                           borderColor: 'primary.main',
-                          bgcolor: alpha('#7C3AED', 0.04),
+                          bgcolor: alpha(ACCENT, 0.04),
                         },
                       }}
                     >
@@ -1593,8 +1890,8 @@ export default function LearnPage() {
                 )}
               </Box>
 
-              {/* ── Generate / Stop button ── */}
-              <Box sx={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {/* ── Generate / Stop button (gradient pill, lab) ── */}
+              <Box sx={{ flexShrink: 0 }}>
                 {isStreaming ? (
                   <Button
                     variant="outlined"
@@ -1602,18 +1899,23 @@ export default function LearnPage() {
                     size="small"
                     startIcon={<StopIcon sx={{ fontSize: 14 }} />}
                     onClick={() => abortRef.current?.abort()}
-                    sx={{ height: 36, fontSize: 12 }}
+                    sx={{ height: 40, fontSize: 13, borderRadius: 99, px: 2, textTransform: 'none' }}
                   >
                     Stop
                   </Button>
                 ) : (
                   <Button
-                    variant="contained"
                     size="small"
+                    disableElevation
                     disabled={!isGenerateEnabled}
-                    onClick={handleGenerate}
-                    endIcon={<ArrowForwardIcon sx={{ fontSize: 14 }} />}
-                    sx={{ height: 36, fontSize: 12, px: 1.75 }}
+                    onClick={() => handleGenerate()}
+                    endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      height: 40, fontSize: 13, fontWeight: 700, borderRadius: 99, px: 2.5,
+                      textTransform: 'none', background: BRAND.gradient, color: BRAND.onAccent,
+                      '&:hover': { background: BRAND.gradient, filter: 'brightness(1.05)' },
+                      '&.Mui-disabled': { background: 'action.disabledBackground', color: 'text.disabled' },
+                    }}
                   >
                     Generate
                   </Button>
@@ -1622,79 +1924,30 @@ export default function LearnPage() {
 
             </Box>
           </Box>}
+          </Box>{/* end centered setup column */}
 
-          {/* Format selector row — hidden when content is showing */}
-          {!(hasContent && !isStreaming) && <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-            {FORMATS.map(f => {
-              const active = format === f.id
-              return (
-                <Box
-                  key={f.id}
-                  onClick={() => !isStreaming && setFormat(f.id)}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.6,
-                    px: 1.1, py: 0.5,
-                    borderRadius: 1.25,
-                    border: `1px solid`,
-                    borderColor: active ? f.color : 'transparent',
-                    bgcolor: active ? alpha(f.color, 0.1) : 'transparent',
-                    cursor: isStreaming ? 'default' : 'pointer',
-                    transition: 'all 0.15s',
-                    '&:hover': isStreaming ? {} : {
-                      borderColor: f.color,
-                      bgcolor: alpha(f.color, 0.06),
-                    },
-                  }}
-                >
-                  <Box sx={{ fontSize: 14, color: active ? f.color : 'text.disabled', display: 'flex' }}>
-                    {f.icon}
-                  </Box>
-                  <Typography sx={{
-                    fontSize: 12,
-                    fontWeight: active ? 700 : 400,
-                    color: active ? f.color : 'text.secondary',
-                  }}>
-                    {f.label}
-                  </Typography>
-                </Box>
-              )
-            })}
-
-            <Box sx={{ width: 1, height: 20, bgcolor: 'divider', mx: 0.5 }} />
-
-            {/* Difficulty */}
-            {DIFFICULTIES.map(d => {
-              const active = difficulty === d.id
-              return (
-                <Box
-                  key={d.id}
-                  onClick={() => !isStreaming && setDifficulty(d.id)}
-                  sx={{
-                    px: 1.1, py: 0.5,
-                    borderRadius: 1.25,
-                    border: `1px solid`,
-                    borderColor: active ? d.color : 'transparent',
-                    bgcolor: active ? d.bg : 'transparent',
-                    cursor: isStreaming ? 'default' : 'pointer',
-                    transition: 'all 0.15s',
-                    '&:hover': isStreaming ? {} : { borderColor: d.color },
-                  }}
-                >
-                  <Typography sx={{
-                    fontSize: 12,
-                    fontWeight: active ? 700 : 400,
-                    color: active ? d.color : 'text.secondary',
-                  }}>
-                    {d.label}
-                  </Typography>
-                </Box>
-              )
-            })}
-          </Box>}
         </Box>
 
-        {/* ─── Content area ───────────────────────────────────────────────────── */}
-        <Box sx={{ flex: 1, overflowY: 'auto', p: hasContent && !isStreaming ? 2 : 3 }}>
+        {/* ─── Content area (+ lesson rails) ──────────────────────────────────── */}
+        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+
+          {/* Left rail — derived lesson outline */}
+          {lessonActive && outline.length > 0 && (
+            outlineOpen
+              ? <OutlineRail
+                  items={outline}
+                  format={displayFormat}
+                  activeIndex={isStepFormat ? Math.min(lessonStep, outline.length - 1) : undefined}
+                  onSelect={isStepFormat ? setLessonStep : undefined}
+                  title={topic || undefined}
+                  subtitle={lessonIntro}
+                  onCollapse={() => setOutlineOpen(false)}
+                />
+              : <CollapsedRail label={`Outline · ${outline.length}`} side="left" onOpen={() => setOutlineOpen(true)} />
+          )}
+
+          {/* Center — streaming / error / content views */}
+          <Box data-testid="lesson-stage" sx={{ flex: 1, overflowY: 'auto', p: hasContent && !isStreaming ? 2 : 3 }}>
 
           {/* Streaming indicator */}
           {isStreaming && (
@@ -1741,71 +1994,83 @@ export default function LearnPage() {
 
           {/* ── EMPTY STATE ─────────────────────────────────────────────────── */}
           {!isStreaming && !hasContent && !streamError && (
-            <Box sx={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', minHeight: '60%', gap: 3,
-            }}>
-              <Box sx={{ textAlign: 'center' }}>
-                <AutoStoriesIcon sx={{ fontSize: 52, color: 'text.disabled', mb: 1 }} />
-                <Typography sx={{ fontSize: 18, fontWeight: 700, color: 'text.primary', mb: 0.5 }}>
-                  What do you want to learn today?
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5, maxWidth: 860, mx: 'auto', width: '100%' }}>
+              {/* Format card grid (lab: FORMAT eyebrow + 3-col, left-aligned) */}
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 1.5 }}>
+                  FORMAT
                 </Typography>
-                <Typography sx={{ fontSize: 13.5, color: 'text.secondary', maxWidth: 500, lineHeight: 1.7 }}>
-                  Type a topic, pick a file from your Library, paste a URL, or upload a document.
-                  Choose a format and difficulty above, then hit Generate.
-                  Earn XP and unlock badges as you go.
-                </Typography>
-                {/* Source mode quick-select chips in empty state */}
-                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', mt: 1.5, flexWrap: 'wrap' }}>
-                  {SOURCE_MODES.map(sm => (
-                    <Chip
-                      key={sm.id}
-                      icon={<Box sx={{ fontSize: 14, display: 'flex', lineHeight: 1 }}>{sm.icon}</Box>}
-                      label={sm.label}
-                      size="small"
-                      variant={sourceMode === sm.id ? 'filled' : 'outlined'}
-                      onClick={() => setSourceMode(sm.id)}
-                      color={sourceMode === sm.id ? 'primary' : 'default'}
-                      sx={{ fontSize: 12, cursor: 'pointer' }}
+                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' } }}>
+                  {FORMATS.map(f => (
+                    <FormatCard
+                      key={f.id}
+                      f={f}
+                      selected={format === f.id}
+                      onClick={() => setFormat(f.id)}
                     />
                   ))}
                 </Box>
               </Box>
 
-              {/* Format card grid */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'center', maxWidth: 720 }}>
-                {FORMATS.map(f => (
-                  <FormatCard
-                    key={f.id}
-                    f={f}
-                    selected={format === f.id}
-                    onClick={() => setFormat(f.id)}
-                  />
-                ))}
+              {/* Difficulty */}
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 1 }}>
+                  DIFFICULTY
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  {DIFFICULTIES.map(d => (
+                    <Box
+                      key={d.id}
+                      onClick={() => setDifficulty(d.id)}
+                      sx={{
+                        px: 1.5, py: 0.6,
+                        borderRadius: 1.5,
+                        border: `1.5px solid`,
+                        borderColor: difficulty === d.id ? d.color : 'divider',
+                        bgcolor: difficulty === d.id ? d.bg : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                        '&:hover': { borderColor: d.color },
+                      }}
+                    >
+                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: difficulty === d.id ? d.color : 'text.secondary' }}>
+                        {d.label}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
               </Box>
 
-              {/* Difficulty row */}
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                {DIFFICULTIES.map(d => (
-                  <Box
-                    key={d.id}
-                    onClick={() => setDifficulty(d.id)}
-                    sx={{
-                      px: 1.5, py: 0.6,
-                      borderRadius: 1.5,
-                      border: `1.5px solid`,
-                      borderColor: difficulty === d.id ? d.color : 'divider',
-                      bgcolor: difficulty === d.id ? d.bg : 'transparent',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      '&:hover': { borderColor: d.color },
-                    }}
-                  >
-                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: difficulty === d.id ? d.color : 'text.secondary' }}>
-                      {d.label}
-                    </Typography>
-                  </Box>
-                ))}
+              {/* Language (generate-in-language) — pills, matching the lab */}
+              <Box>
+                <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 1, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <TranslateIcon sx={{ fontSize: 13 }} /> LANGUAGE
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {LANGUAGES.map(l => {
+                    const active = language === l
+                    return (
+                      <Box
+                        key={l}
+                        onClick={() => setLanguage(l)}
+                        sx={{
+                          px: 1.5, py: 0.6,
+                          borderRadius: 1.5,
+                          border: '1.5px solid',
+                          borderColor: active ? 'primary.main' : 'divider',
+                          bgcolor: active ? alpha(ACCENT, theme.palette.mode === 'dark' ? 0.16 : 0.08) : 'transparent',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                          '&:hover': { borderColor: 'primary.main' },
+                        }}
+                      >
+                        <Typography sx={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? 'primary.main' : 'text.secondary' }}>
+                          {l}
+                        </Typography>
+                      </Box>
+                    )
+                  })}
+                </Box>
               </Box>
             </Box>
           )}
@@ -1867,9 +2132,10 @@ export default function LearnPage() {
                 </Paper>
               )}
               {displayFormat === 'guided' && (
-                <Paper variant="outlined" sx={{ borderRadius: 2.5, overflow: 'hidden' }}>
-                  <GuidedViewer content={displayContent as GuidedContent} />
-                </Paper>
+                <GuidedViewer content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
+              )}
+              {displayFormat === 'animated' && (
+                <AnimatedView content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
               )}
             </Box>
           )}
@@ -1888,6 +2154,14 @@ export default function LearnPage() {
           )}
 
           <Box ref={bottomRef} />
+          </Box>
+
+          {/* Right rail — connected concepts derived from the lesson */}
+          {lessonActive && concepts.length > 0 && (
+            conceptsOpen
+              ? <ConceptsRail concepts={concepts} onCollapse={() => setConceptsOpen(false)} />
+              : <CollapsedRail label="Concepts" side="right" onOpen={() => setConceptsOpen(true)} />
+          )}
         </Box>
       </Box>
     </Box>

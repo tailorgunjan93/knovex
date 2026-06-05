@@ -1,0 +1,18 @@
+﻿{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "knovex-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5174"],
+      "cwd": "D:\\Learning\\knovex\\frontend",
+      "port": 5174
+    },
+    {
+      "name": "portfolio",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve", "-p", "4001", "D:\\Learning\\portfolio-site"],
+      "port": 4001
+    }
+  ]
+}

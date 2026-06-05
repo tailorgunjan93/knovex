@@ -20,6 +20,7 @@ import { KeyboardEvent, useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Box,
+  Chip,
   CircularProgress,
   Divider,
   FormControlLabel,
@@ -56,11 +57,13 @@ interface Props {
   showWebSearch?: boolean
   /** Pre-fills the question input (e.g. from text selection toolbar) */
   initialQuestion?: string
+  /** The page the reader is currently on — grounds answers in that page. */
+  currentPage?: number
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearch = false, initialQuestion }: Props) {
+export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearch = false, initialQuestion, currentPage }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
@@ -96,8 +99,15 @@ export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearc
 
   // ── Streaming logic ────────────────────────────────────────────────────────
 
-  const handleSubmit = async () => {
-    const question = input.trim()
+  // Quick-prompt chips (lab "Ask about this page"): one-tap framed questions.
+  const QUICK_PROMPTS = [
+    { label: 'Go deeper',  q: 'Go deeper on this — explain it in more detail with an example.' },
+    { label: 'Simplify',   q: 'Explain this in simpler, plain language.' },
+    { label: 'Example',    q: 'Give a concrete, real-world example of this.' },
+  ]
+
+  const handleSubmit = async (preset?: string) => {
+    const question = (preset ?? input).trim()
     if (!question || isStreaming) return
 
     setInput('')
@@ -119,7 +129,7 @@ export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearc
 
     try {
       let accumulated = ''
-      for await (const token of readerApi.askStream(kbId, fileId, question, withWeb)) {
+      for await (const token of readerApi.askStream(kbId, fileId, question, withWeb, currentPage)) {
         accumulated += token
         setMessages(prev => {
           const updated = [...prev]
@@ -196,7 +206,7 @@ export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearc
       >
         <Box flex={1}>
           <Typography variant="subtitle2" fontWeight={700}>
-            Ask about this file
+            Ask about this page
           </Typography>
           <Typography variant="caption" color="text.disabled" noWrap>
             {fileName}
@@ -276,6 +286,21 @@ export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearc
         </Box>
       )}
 
+      {/* Quick prompts — one-tap framed questions (lab "Ask about this page") */}
+      <Box sx={{ px: 2, pt: 1, display: 'flex', gap: 0.75, flexWrap: 'wrap', flexShrink: 0 }}>
+        {QUICK_PROMPTS.map(p => (
+          <Chip
+            key={p.label}
+            label={p.label}
+            size="small"
+            variant="outlined"
+            disabled={isStreaming}
+            onClick={() => handleSubmit(p.q)}
+            sx={{ fontSize: 11.5, height: 26, borderRadius: 99, cursor: 'pointer' }}
+          />
+        ))}
+      </Box>
+
       {/* Input */}
       <Box sx={{ px: 2, py: 1.5, flexShrink: 0 }}>
         <TextField
@@ -304,7 +329,7 @@ export default function InlineQA({ kbId, fileId, fileName, onClose, showWebSearc
                       <IconButton
                         size="small"
                         color="primary"
-                        onClick={handleSubmit}
+                        onClick={() => handleSubmit()}
                         disabled={!input.trim()}
                       >
                         <SendIcon fontSize="small" />

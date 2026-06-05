@@ -209,6 +209,55 @@ class BraveAdapter(IWebSearchAdapter):
 
 
 # ---------------------------------------------------------------------------
+# Wikipedia — free encyclopedic search (MediaWiki API, no key)
+# ---------------------------------------------------------------------------
+
+class WikipediaAdapter(IWebSearchAdapter):
+    """Free encyclopedic grounding via the MediaWiki search API (no key)."""
+
+    _API = "https://en.wikipedia.org/w/api.php"
+
+    async def search(
+        self,
+        query: str,
+        num_results: int = 5,
+        api_key: str = "",
+        base_url: str = "",
+    ) -> list[SearchResult]:
+        try:
+            import re
+
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    self._API,
+                    params={
+                        "action": "query", "list": "search", "srsearch": query,
+                        "format": "json", "srlimit": num_results,
+                    },
+                    headers={"User-Agent": "Knovex/1.0 (knowledge base)"},
+                )
+                if resp.status_code != 200:
+                    logger.warning("Wikipedia returned %d", resp.status_code)
+                    return []
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Wikipedia search failed: %s", exc)
+            return []
+
+        out: list[SearchResult] = []
+        for hit in data.get("query", {}).get("search", []):
+            title = hit.get("title", "")
+            snippet = re.sub(r"<[^>]+>", "", hit.get("snippet", ""))  # strip HTML
+            out.append(SearchResult(
+                title=title,
+                url=f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                snippet=snippet,
+            ))
+        return out
+
+
+# ---------------------------------------------------------------------------
 # Stub for tests
 # ---------------------------------------------------------------------------
 
@@ -237,6 +286,7 @@ class StubWebSearchAdapter(IWebSearchAdapter):
 
 _ADAPTERS: dict[str, IWebSearchAdapter] = {
     "duckduckgo": DuckDuckGoAdapter(),
+    "wikipedia":  WikipediaAdapter(),
     "serper":     SerperAdapter(),
     "brave":      BraveAdapter(),
 }

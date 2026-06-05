@@ -139,6 +139,7 @@ async def stream_learn_session(
             model=llm.model,
             credentials=credentials,
             context_text=context_text,
+            language=body.language,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

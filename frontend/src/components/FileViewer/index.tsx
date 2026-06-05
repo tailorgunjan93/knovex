@@ -26,7 +26,7 @@
  *   uploadStatus         — shows upload progress strip below breadcrumb
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
@@ -59,10 +59,16 @@ import ChatBubbleOutlineIcon  from '@mui/icons-material/ChatBubbleOutline'
 import AutoAwesomeIcon        from '@mui/icons-material/AutoAwesome'
 import MenuBookIcon           from '@mui/icons-material/MenuBook'
 import LanguageIcon           from '@mui/icons-material/Language'
-import PushPinOutlinedIcon    from '@mui/icons-material/PushPinOutlined'
 import TravelExploreIcon      from '@mui/icons-material/TravelExplore'
-import { useQuery }           from '@tanstack/react-query'
-import { readerApi, type ContentBlock } from '../../api/reader.api'
+import BorderColorOutlinedIcon from '@mui/icons-material/BorderColorOutlined'
+import DeleteOutlineIcon      from '@mui/icons-material/DeleteOutline'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  readerApi,
+  type ContentBlock,
+  type Highlight,
+  type HighlightColor,
+} from '../../api/reader.api'
 import InlineQA               from '../../pages/KnowledgeBase/components/InlineQA'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -70,6 +76,33 @@ import InlineQA               from '../../pages/KnowledgeBase/components/InlineQ
 const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
 const SERIF = '"Instrument Serif", Georgia, serif'
 const ACCENT = '#F59E0B'  // amber — chapter numbers, drop caps
+
+/**
+ * Compute the next page for a keyboard arrow press, clamped to [1, totalPages].
+ * Returns `null` when the key is not an arrow or the move would be a no-op
+ * (already at an edge). Pure + exported so page navigation is unit-tested
+ * without rendering the whole viewer.
+ */
+export function pageStep(key: string, page: number, totalPages: number): number | null {
+  const delta = key === 'ArrowRight' ? 1 : key === 'ArrowLeft' ? -1 : 0
+  if (delta === 0) return null
+  const next = Math.min(totalPages, Math.max(1, page + delta))
+  return next === page ? null : next
+}
+
+// PDF/raster pages render on a fixed WHITE sheet (like Acrobat / Preview) so a
+// dark slide — carousels, design decks, scans — is shown as a clearly-bounded
+// page instead of melting into the dark reading surface. Colours here are
+// theme-independent dark-ink-on-white; the embedded page colours render as-is.
+const PAGE_INK  = '#1A1410'
+const PAGE_RULE = 'rgba(0,0,0,0.10)'
+const pdfSheetSx = {
+  bgcolor: '#FFFFFF',
+  borderRadius: 2,
+  px: { xs: 2.5, md: 4 },
+  py: { xs: 3, md: 3.5 },
+  boxShadow: '0 6px 28px -10px rgba(0,0,0,0.5)',
+} as const
 
 const FORMAT_LABEL: Record<string, string> = {
   pdf: 'PDF', docx: 'DOCX', txt: 'TXT', md: 'MD', csv: 'CSV', udf: 'UDF',
@@ -115,8 +148,65 @@ interface Props {
   uploadStatus?: UploadStatus
 }
 
-type ReaderTab    = 'page' | 'outline'
+type ReaderTab    = 'page' | 'outline' | 'highlights'
 type ReadingMode  = 'normal' | 'focus' | 'split'
+
+// Translucent tints per highlight color — legible over both light & dark text.
+const HL_TINT: Record<HighlightColor, string> = {
+  yellow: 'rgba(245,200,66,0.40)',
+  green:  'rgba(58,141,122,0.34)',
+  blue:   'rgba(96,165,250,0.32)',
+  pink:   'rgba(184,109,118,0.34)',
+  purple: 'rgba(139,92,246,0.32)',
+}
+// Solid swatch colors for the picker / list dots.
+const HL_SWATCH: Record<HighlightColor, string> = {
+  yellow: '#F5C842', green: '#3A8D7A', blue: '#60A5FA', pink: '#B86D76', purple: '#8B5CF6',
+}
+const HL_ORDER: HighlightColor[] = ['yellow', 'green', 'blue', 'pink', 'purple']
+
+interface PageMark { text: string; color: HighlightColor }
+
+/**
+ * Wrap occurrences of each highlight's text in <mark> tints. Pure + exported so
+ * the matching logic is unit-tested without rendering the viewer. Longer needles
+ * are applied first so an overlapping shorter phrase can't pre-split them.
+ */
+export function markText(text: string, marks?: PageMark[]): ReactNode {
+  if (!marks || marks.length === 0) return text
+  const needles = marks
+    .map(m => ({ needle: m.text.trim(), color: m.color }))
+    .filter(m => m.needle.length >= 2)
+    .sort((a, b) => b.needle.length - a.needle.length)
+  if (needles.length === 0) return text
+
+  let segments: ReactNode[] = [text]
+  for (const { needle, color } of needles) {
+    segments = segments.flatMap((seg) => {
+      if (typeof seg !== 'string') return [seg]
+      const out: ReactNode[] = []
+      let rest = seg
+      let idx = rest.indexOf(needle)
+      let k = 0
+      while (idx !== -1) {
+        if (idx > 0) out.push(rest.slice(0, idx))
+        out.push(
+          <mark
+            key={`${needle}-${k++}`}
+            style={{ background: HL_TINT[color], color: 'inherit', borderRadius: 2, padding: '0 1px' }}
+          >
+            {rest.slice(idx, idx + needle.length)}
+          </mark>,
+        )
+        rest = rest.slice(idx + needle.length)
+        idx = rest.indexOf(needle)
+      }
+      if (rest) out.push(rest)
+      return out
+    })
+  }
+  return segments
+}
 
 // ─── Block renderers ──────────────────────────────────────────────────────────
 
@@ -124,11 +214,14 @@ export function RenderBlock({
   block,
   dropCap,
   sectionNum,
+  marks,
 }: {
   block: ContentBlock
   dropCap?: boolean
   /** Ordinal of this heading among all level-1/2 headings on the page (drives section label) */
   sectionNum?: number
+  /** Current-page highlights to render as inline <mark> tints over matching text. */
+  marks?: PageMark[]
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
@@ -172,7 +265,7 @@ export function RenderBlock({
               color: isTop ? (isDark ? '#E8DCC8' : '#1A1410') : 'text.primary',
             }}
           >
-            {content}
+            {markText(content, marks)}
           </Typography>
         </Box>
       )
@@ -203,7 +296,7 @@ export function RenderBlock({
             }),
           }}
         >
-          {String(block.content)}
+          {markText(String(block.content), marks)}
         </Typography>
       )
 
@@ -296,76 +389,40 @@ export function RenderBlock({
       )
 
       if (isHtml) {
-        // ── HTML rendering (PDF — dict-based, semantic markup) ─────────────
+        // ── HTML rendering (PDF — dict-based, semantic markup) on white sheet ─
         return (
           <Box sx={{ mb: 5 }}>
             {pageHeader}
+            <Box sx={pdfSheetSx}>
             <Box
               dangerouslySetInnerHTML={{ __html: String(block.content) }}
               sx={{
-                // ── Base text ─────────────────────────────────────────────────
+                // ── Base text — dark ink on the white sheet ───────────────────
                 fontSize: '1.0625rem',
                 lineHeight: 1.85,
-                color: 'text.primary',
+                color: PAGE_INK,
 
-                // Inherit font; em sizes are relative to the base above.
-                // Strip background-color AND, in dark mode, all inline color overrides.
-                //
-                // Why strip color in dark mode?
-                //   PDF spans emit style="color:#555" — looks fine on cream paper,
-                //   becomes near-invisible on a dark surface. Heading rules below
-                //   re-apply correct theme-aware colors explicitly via h1–h4 selectors.
+                // Inherit font + sizes. Strip only inline backgrounds so spans
+                // don't paint odd boxes on the sheet; the original PDF text
+                // colours render as-is (legible now that the sheet is white).
                 '& *': {
                   fontFamily: `${SERIF} !important`,
                   backgroundColor: 'transparent !important',
-                  ...(isDark && { color: 'inherit !important' }),
                   maxWidth: '100%',
                 },
 
                 // ── Paragraphs ────────────────────────────────────────────────
-                '& p': {
-                  mb: 1.75,
-                  lineHeight: 1.85,
-                  color: 'text.primary',
-                },
+                '& p': { mb: 1.75, lineHeight: 1.85, color: PAGE_INK },
 
-                // ── Semantic headings (generated by backend based on font-size ratio) ──
+                // ── Semantic headings (generated by backend from font-size ratio) ──
                 '& h1': {
-                  fontSize: '1.8rem',
-                  fontWeight: 700,
-                  lineHeight: 1.15,
-                  mt: 5,
-                  mb: 1.5,
-                  pb: 0.5,
-                  borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
-                  color: isDark ? '#E8DCC8' : '#1A1410',
+                  fontSize: '1.8rem', fontWeight: 700, lineHeight: 1.15,
+                  mt: 5, mb: 1.5, pb: 0.5,
+                  borderBottom: `1px solid ${PAGE_RULE}`, color: PAGE_INK,
                 },
-                '& h2': {
-                  fontSize: '1.4rem',
-                  fontWeight: 700,
-                  lineHeight: 1.2,
-                  mt: 4,
-                  mb: 1.25,
-                  color: isDark ? '#E8DCC8' : '#1A1410',
-                },
-                '& h3': {
-                  fontSize: '1.15rem',
-                  fontWeight: 600,
-                  lineHeight: 1.3,
-                  mt: 3,
-                  mb: 1,
-                  color: 'text.primary',
-                },
-                '& h4': {
-                  fontSize: '1.0rem',
-                  fontWeight: 600,
-                  lineHeight: 1.35,
-                  mt: 2.5,
-                  mb: 0.75,
-                  color: 'text.primary',
-                },
-                // Accent-coloured spans (luminance 0.25–0.85) keep their colour.
-                // Dark / near-white spans are stripped server-side, inheriting theme colour.
+                '& h2': { fontSize: '1.4rem', fontWeight: 700, lineHeight: 1.2, mt: 4, mb: 1.25, color: PAGE_INK },
+                '& h3': { fontSize: '1.15rem', fontWeight: 600, lineHeight: 1.3, mt: 3, mb: 1, color: PAGE_INK },
+                '& h4': { fontSize: '1.0rem', fontWeight: 600, lineHeight: 1.35, mt: 2.5, mb: 0.75, color: PAGE_INK },
                 '& span': { lineHeight: 'inherit' },
 
                 // ── Inline marks ──────────────────────────────────────────────
@@ -374,92 +431,59 @@ export function RenderBlock({
 
                 // ── Tables ───────────────────────────────────────────────────
                 '& table': {
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  mb: 2.5,
-                  fontSize: '0.9rem',
-                  tableLayout: 'auto',
-                  display: 'block',
-                  overflowX: 'auto',
+                  width: '100%', borderCollapse: 'collapse', mb: 2.5,
+                  fontSize: '0.9rem', tableLayout: 'auto', display: 'block', overflowX: 'auto',
                 },
                 '& th': {
-                  border: '1px solid',
-                  borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)',
-                  px: '10px', py: '6px',
-                  textAlign: 'left',
-                  fontWeight: 700,
-                  bgcolor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-                  color: 'text.primary',
-                  verticalAlign: 'top',
-                  wordBreak: 'break-word',
+                  border: `1px solid ${PAGE_RULE}`, px: '10px', py: '6px',
+                  textAlign: 'left', fontWeight: 700,
+                  bgcolor: 'rgba(0,0,0,0.05)', color: PAGE_INK,
+                  verticalAlign: 'top', wordBreak: 'break-word',
                 },
                 '& td': {
-                  border: '1px solid',
-                  borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-                  px: '10px', py: '6px',
-                  verticalAlign: 'top',
-                  wordBreak: 'break-word',
-                  color: 'text.primary',
+                  border: `1px solid ${PAGE_RULE}`, px: '10px', py: '6px',
+                  verticalAlign: 'top', wordBreak: 'break-word', color: PAGE_INK,
                 },
-                '& tr:nth-of-type(even) td': {
-                  bgcolor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
-                },
+                '& tr:nth-of-type(even) td': { bgcolor: 'rgba(0,0,0,0.02)' },
 
                 // ── Images & captions ─────────────────────────────────────────
                 '& figure': { my: 3, mx: 0 },
                 '& img': {
-                  maxWidth: '100%',
-                  height: 'auto',
-                  display: 'block',
-                  borderRadius: '6px',
-                  boxShadow: isDark
-                    ? '0 2px 16px rgba(0,0,0,0.55)'
-                    : '0 2px 10px rgba(0,0,0,0.12)',
+                  maxWidth: '100%', height: 'auto', display: 'block',
+                  borderRadius: '6px', boxShadow: '0 2px 10px rgba(0,0,0,0.12)',
                 },
-                '& figcaption': {
-                  fontSize: '0.8rem',
-                  color: 'text.disabled',
-                  mt: 0.75,
-                  fontStyle: 'italic',
-                },
+                '& figcaption': { fontSize: '0.8rem', color: 'rgba(0,0,0,0.5)', mt: 0.75, fontStyle: 'italic' },
 
                 // ── Lists ─────────────────────────────────────────────────────
                 '& ul, & ol': { pl: 2.5, mb: 1.75 },
                 '& li': { mb: 0.6, lineHeight: 1.8 },
-                // Resume pattern: job-title <p> directly before its <ul>
-                // Pull the list closer so title + bullets feel like one unit
                 '& p + ul': { mt: 0.25 },
-                // Sub-heading <p> (job title) inside a list-heavy block
                 '& ul + p': { mt: 2.5 },
 
                 // ── Links ─────────────────────────────────────────────────────
-                '& a': {
-                  color: 'primary.main',
-                  textDecoration: 'none',
-                  '&:hover': { textDecoration: 'underline' },
-                },
+                '& a': { color: '#B5803E', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } },
               }}
             />
+            </Box>
           </Box>
         )
       }
 
-      // ── Plain-text rendering (fallback / non-HTML PDFs) ───────────────────
+      // ── Plain-text rendering (fallback / non-HTML PDFs) on white sheet ────
       return (
         <Box sx={{ mb: 5 }}>
           {pageHeader}
-          <Typography
-            component="p"
-            sx={{
-              fontSize: '1.0625rem',
-              lineHeight: 1.85,
-              color: 'text.primary',
-              whiteSpace: 'pre-wrap',
-              letterSpacing: '0.01em',
-            }}
-          >
-            {String(block.content)}
-          </Typography>
+          <Box sx={pdfSheetSx}>
+            <Typography
+              component="p"
+              sx={{
+                fontSize: '1.0625rem', lineHeight: 1.85, color: PAGE_INK,
+                whiteSpace: 'pre-wrap', letterSpacing: '0.01em',
+              }}
+            >
+              {String(block.content)}
+            </Typography>
+          </Box>
         </Box>
       )
     }
@@ -534,8 +558,6 @@ function IngestPipeline({
     <Box
       sx={{
         px: 2,
-        borderBottom: '1px solid',
-        borderColor: 'divider',
         flexShrink: 0,
         bgcolor: isDark
           ? alpha('#F59E0B', 0.04)
@@ -691,7 +713,6 @@ const SELECTION_ACTIONS = [
   { id: 'simplify',  label: 'Simplify',   color: '#FCD34D', Icon: AutoAwesomeIcon       },
   { id: 'define',    label: 'Define',     color: '#60A5FA', Icon: MenuBookIcon          },
   { id: 'web',       label: 'Web',        color: '#34D399', Icon: LanguageIcon          },
-  { id: 'save',      label: 'Save',       color: '#F87171', Icon: PushPinOutlinedIcon   },
   { id: 'findInKB',  label: 'Find in KB', color: '#94A3B8', Icon: TravelExploreIcon     },
 ] as const
 
@@ -700,9 +721,11 @@ type SelectionActionId = (typeof SELECTION_ACTIONS)[number]['id']
 function SelectionToolbar({
   sel,
   onAction,
+  onHighlight,
 }: {
   sel: SelectionState
   onAction: (id: SelectionActionId, text: string) => void
+  onHighlight: (color: HighlightColor, text: string) => void
 }) {
   if (!sel.visible) return null
 
@@ -778,6 +801,94 @@ function SelectionToolbar({
             </Box>
             {label}
           </Box>
+        </Box>
+      ))}
+
+      {/* Highlight color swatches — click to save a colored highlight */}
+      <Box sx={{ width: 1, height: 18, bgcolor: 'rgba(255,255,255,0.08)', mx: 0.25, flexShrink: 0 }} />
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6 }}>
+        <BorderColorOutlinedIcon sx={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', mr: 0.1 }} />
+        {HL_ORDER.map(color => (
+          <Box
+            key={color}
+            component="button"
+            aria-label={`Highlight ${color}`}
+            data-testid={`hl-swatch-${color}`}
+            onClick={() => onHighlight(color, sel.text)}
+            sx={{
+              width: 14, height: 14, borderRadius: '50%', p: 0, cursor: 'pointer',
+              border: '1px solid rgba(255,255,255,0.25)', bgcolor: HL_SWATCH[color],
+              transition: 'transform 0.1s',
+              '&:hover': { transform: 'scale(1.2)' },
+            }}
+          />
+        ))}
+      </Box>
+    </Box>
+  )
+}
+
+// ─── Highlights tab ─────────────────────────────────────────────────────────
+
+function HighlightsTab({
+  highlights,
+  currentPage,
+  onJump,
+  onDelete,
+}: {
+  highlights: Highlight[]
+  currentPage: number
+  onJump: (page: number) => void
+  onDelete: (id: string) => void
+}) {
+  if (highlights.length === 0) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, gap: 1.25 }}>
+        <BorderColorOutlinedIcon sx={{ fontSize: 30, color: 'text.disabled' }} />
+        <Typography sx={{ fontSize: 14, fontWeight: 600, color: 'text.secondary' }}>No highlights yet</Typography>
+        <Typography sx={{ fontSize: 12.5, color: 'text.disabled', textAlign: 'center', maxWidth: 320, lineHeight: 1.6 }}>
+          Select any text in the page, then pick a colour from the toolbar to save a highlight. It'll be here every time you open this document.
+        </Typography>
+      </Box>
+    )
+  }
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Typography sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.12em', color: 'text.disabled', mb: 0.5 }}>
+        {highlights.length} HIGHLIGHT{highlights.length === 1 ? '' : 'S'}
+      </Typography>
+      {highlights.map(h => (
+        <Box
+          key={h.id}
+          onClick={() => onJump(h.page)}
+          sx={{
+            display: 'flex', gap: 1.25, alignItems: 'flex-start', p: 1.5, borderRadius: 2,
+            cursor: 'pointer', bgcolor: h.page === currentPage ? 'action.selected' : 'transparent',
+            border: '1px solid', borderColor: 'divider', transition: 'background 0.15s',
+            '&:hover': { bgcolor: 'action.hover', '& .hl-del': { opacity: 1 } },
+          }}
+        >
+          <Box sx={{ width: 4, alignSelf: 'stretch', borderRadius: 2, bgcolor: HL_SWATCH[h.color], flexShrink: 0 }} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.5,
+              display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {h.text}
+            </Typography>
+            <Typography sx={{ fontFamily: MONO, fontSize: 10, color: 'text.disabled', mt: 0.5 }}>
+              p. {h.page}
+            </Typography>
+          </Box>
+          <Tooltip title="Delete highlight" arrow>
+            <IconButton
+              className="hl-del"
+              size="small"
+              aria-label="Delete highlight"
+              onClick={(e) => { e.stopPropagation(); onDelete(h.id) }}
+              sx={{ opacity: 0, transition: 'opacity 0.15s', color: 'text.disabled', '&:hover': { color: 'error.main' } }}
+            >
+              <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       ))}
     </Box>
@@ -864,9 +975,6 @@ export default function FileViewer({
       case 'web':
         window.open(`https://www.google.com/search?q=${encodeURIComponent(text)}`, '_blank', 'noopener')
         break
-      case 'save':
-        // Annotation storage — coming soon; show visual feedback for now
-        break
       case 'findInKB':
         setQaInitialQ(`Search the knowledge base for everything related to: "${text}"`)
         setQaOpen(true)
@@ -874,6 +982,7 @@ export default function FileViewer({
     }
   }, [])
 
+  const qc = useQueryClient()
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['file-content', kbId, fileId, page],
     queryFn:  () => readerApi.getContent(kbId, fileId, page),
@@ -882,6 +991,56 @@ export default function FileViewer({
 
   const totalPages = data?.total_pages ?? 1
   const blocks     = data?.content.blocks ?? []
+
+  // ── Highlights (user-created, persisted) ────────────────────────────────────
+  const { data: highlights = [] } = useQuery({
+    queryKey: ['highlights', kbId, fileId],
+    queryFn:  () => readerApi.listHighlights(kbId, fileId),
+    staleTime: 30_000,
+  })
+  const pageMarks: PageMark[] = highlights
+    .filter(h => h.page === page)
+    .map(h => ({ text: h.text, color: h.color }))
+
+  const createHighlight = useMutation({
+    mutationFn: (vars: { text: string; color: HighlightColor }) =>
+      readerApi.createHighlight(kbId, fileId, { page, text: vars.text, color: vars.color }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['highlights', kbId, fileId] }),
+  })
+  const deleteHighlight = useMutation({
+    mutationFn: (id: string) => readerApi.deleteHighlight(kbId, fileId, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['highlights', kbId, fileId] }),
+  })
+
+  // ── Prefetch adjacent pages (±1) ───────────────────────────────────────────
+  // Pairs with the backend page cache so a page turn is served from memory and
+  // feels instant. Only runs once totalPages is known; bounds-checked.
+  useEffect(() => {
+    if (!data) return
+    const neighbours = [page - 1, page + 1].filter(p => p >= 1 && p <= totalPages && p !== page)
+    for (const p of neighbours) {
+      qc.prefetchQuery({
+        queryKey: ['file-content', kbId, fileId, p],
+        queryFn:  () => readerApi.getContent(kbId, fileId, p),
+        staleTime: 60_000,
+      })
+    }
+  }, [data, page, totalPages, kbId, fileId, qc])
+
+  // ── Keyboard page turns (← / →) ─────────────────────────────────────────────
+  // Mirrors the design lab. Ignored while typing in a field so it never hijacks
+  // the Q&A composer; paired with the ±1 prefetch above, turns feel instant.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) return
+      if (t && t.isContentEditable) return
+      const next = pageStep(e.key, page, totalPages)
+      if (next !== null) { e.preventDefault(); setPage(next) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [page, totalPages])
 
   // Split mode: auto-open Q&A
   const effectiveQaOpen = qaOpen || readingMode === 'split'
@@ -928,8 +1087,6 @@ export default function FileViewer({
           sx={{
             px: 2,
             py: 0.75,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
             flexShrink: 0,
             minHeight: 44,
             bgcolor: isDark
@@ -1033,7 +1190,7 @@ export default function FileViewer({
             )}
 
             {/* Q&A toggle */}
-            <Tooltip title={effectiveQaOpen ? 'Close Q&A' : 'Ask about this file'}>
+            <Tooltip title={effectiveQaOpen ? 'Close Q&A' : 'Ask about this page'}>
               <IconButton
                 size="small"
                 color={effectiveQaOpen ? 'primary' : 'default'}
@@ -1122,9 +1279,9 @@ export default function FileViewer({
 
           <Divider orientation="vertical" flexItem sx={{ mx: 0.5, opacity: 0.5 }} />
 
-          {/* Tabs: Page | Outline */}
+          {/* Tabs: Page | Outline | Highlights */}
           <Stack direction="row" spacing={0} sx={{ flex: 1 }}>
-            {(['page', 'outline'] as ReaderTab[]).map(tab => (
+            {(['page', 'outline', 'highlights'] as ReaderTab[]).map(tab => (
               <Box
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1143,7 +1300,9 @@ export default function FileViewer({
                   userSelect: 'none',
                 }}
               >
-                {tab === 'page' ? 'Page' : 'Outline'}
+                {tab === 'page' ? 'Page'
+                  : tab === 'outline' ? 'Outline'
+                  : `Highlights${highlights.length ? ` · ${highlights.length}` : ''}`}
               </Box>
             ))}
           </Stack>
@@ -1198,7 +1357,14 @@ export default function FileViewer({
               </Box>
             )}
 
-            {activeTab === 'outline' ? (
+            {activeTab === 'highlights' ? (
+              <HighlightsTab
+                highlights={highlights}
+                currentPage={page}
+                onJump={(p) => { setPage(p); setActiveTab('page') }}
+                onDelete={(id) => deleteHighlight.mutate(id)}
+              />
+            ) : activeTab === 'outline' ? (
               <OutlineTab blocks={blocks} />
             ) : isLoading ? (
               <ContentSkeleton />
@@ -1233,6 +1399,7 @@ export default function FileViewer({
                       block={block}
                       dropCap={i === dropCapIndex}
                       sectionNum={sectionNum}
+                      marks={pageMarks}
                     />
                   )
                 })
@@ -1253,12 +1420,21 @@ export default function FileViewer({
             }}
             showWebSearch={showWebSearch}
             initialQuestion={qaInitialQ}
+            currentPage={page}
           />
         )}
       </Box>
 
       {/* ── Selection toolbar (fixed, floats above selected text) ────────────── */}
-      <SelectionToolbar sel={selState} onAction={handleSelectionAction} />
+      <SelectionToolbar
+        sel={selState}
+        onAction={handleSelectionAction}
+        onHighlight={(color, text) => {
+          setSelState(s => ({ ...s, visible: false }))
+          window.getSelection()?.removeAllRanges()
+          if (text.trim().length >= 2) createHighlight.mutate({ text: text.trim(), color })
+        }}
+      />
 
       {/* ── Row 4: Bottom bar ─────────────────────────────────────────────── */}
       <Stack
@@ -1267,8 +1443,6 @@ export default function FileViewer({
         sx={{
           px: 2,
           height: 40,
-          borderTop: '1px solid',
-          borderColor: 'divider',
           flexShrink: 0,
           bgcolor: isDark
             ? alpha(theme.palette.background.paper, 0.6)
