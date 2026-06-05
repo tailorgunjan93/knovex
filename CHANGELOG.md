@@ -11,6 +11,44 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.11.0] — 2026-06-05
+
+The visual redesign release — plus a real OCR pipeline, multi-provider LLM,
+multi-engine search, and a much sturdier reader. Motto holds: **Secure · Fast ·
+Reliable · Cost-Effective.**
+
+### Added
+
+- **Full visual redesign** across every screen (Library, Reader, Learn, Chat,
+  Progress, Settings) to the locked amber/copper "design lab" identity — three
+  themes (Dark · Charcoal · Parchment), unified headers, input bars, and rails.
+- **Learn** Stage B.2: lesson outline + connected-concepts rails with
+  click-to-navigate, format tabs, and a Wikipedia source pill.
+- **Multi-provider LLM** settings — per-provider API keys, activate, live model
+  dropdowns, and per-card Test Connection.
+- **Multi-engine web search** — DuckDuckGo, Wikipedia, Serper, Brave with result
+  blending (RRF-style interleave) and a Wikipedia adapter.
+- **Reader**: persisted highlights, a page-scoped "Ask about this page"
+  assistant, and image-dominant PDF pages rendered as a composited pixmap (no
+  more black dot-grid boxes).
+- **OCR / advanced ingestion via docnest** (`docnest-ai >= 0.7.0`): scanned and
+  image-only PDFs — including **Devanagari/Hindi** (EasyOCR) — are read via a
+  content-routed pipeline (text PDFs stay on the fast path; only image/scanned
+  pages pay OCR). Provisioned **on demand** into app-data with `uv` (out-of-process
+  sidecar) since docnest/torch is too large to bundle. Settings → App → "OCR pack"
+  card installs/manages it.
+
+### Fixed
+
+- Recurring "LLM returned invalid JSON" on guided/animated generation — robust
+  repair via the `json_repair` library behind an anti-corruption adapter.
+- PDF ingestion indexed display HTML (71 KB base64 image blobs) instead of plain
+  text, polluting FTS + embeddings; now indexes plain text only.
+- Reader upload no longer times out at 2 minutes during slow OCR ingestion —
+  polling waits while the backend reports progress.
+
+---
+
 ## [0.10.0] — 2026-05-29
 
 Fix "Failed to uninstall old application files.: 2" on Windows auto-update
