@@ -73,7 +73,7 @@ jobs:
           cache: pip
 
       - name: Install Python dependencies + PyInstaller
-        run: pip install --upgrade pip && pip install -r backend/requirements.txt pyinstaller
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt pyinstaller
 
       - name: Build backend binary (PyInstaller)
         shell: bash
