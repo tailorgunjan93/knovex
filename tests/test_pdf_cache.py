@@ -72,7 +72,8 @@ def test_cache_invalidates_when_file_changes(tmp_path: Path):
     assert inner.calls == 1
 
     # Rewrite the file with different content + bump mtime → must re-parse.
-    import os, time
+    import os
+    import time
     time.sleep(0.01)
     path.write_bytes(b"%PDF-1.4 second-and-longer")
     os.utime(path, None)

@@ -90,9 +90,7 @@ def _provider_configured(provider_id: str, cfg: dict[str, Any]) -> bool:
         return True
     if provider_id == "ollama" and cfg.get("base_url"):
         return True
-    if provider_id == "bedrock" and cfg.get("aws_access_key_id") and cfg.get("aws_secret_access_key"):
-        return True
-    return False
+    return bool(provider_id == "bedrock" and cfg.get("aws_access_key_id") and cfg.get("aws_secret_access_key"))
 
 
 def _default_settings() -> dict[str, Any]:

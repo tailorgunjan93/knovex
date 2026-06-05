@@ -49,7 +49,8 @@ def _image_dominant_pdf(tmp_path):
     pix.clear_with(40)                      # dark fill
     page.insert_image(fitz.Rect(0, 0, 300, 300), pixmap=pix)
     p = tmp_path / "image.pdf"
-    doc.save(str(p)); doc.close()
+    doc.save(str(p))
+    doc.close()
     return p
 
 
@@ -58,7 +59,8 @@ def _text_pdf(tmp_path):
     page = doc.new_page(width=400, height=500)
     page.insert_text((50, 80), "This page is mostly text, no big images at all.")
     p = tmp_path / "text.pdf"
-    doc.save(str(p)); doc.close()
+    doc.save(str(p))
+    doc.close()
     return p
 
 

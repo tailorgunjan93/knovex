@@ -14,12 +14,10 @@ Proves:
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from backend.core.learn_service import LearnService
-from tests.test_learn import InMemoryLearnRepository, _make_llm_svc, _drain, _creds
+from tests.test_learn import InMemoryLearnRepository, _creds, _drain, _make_llm_svc
 
 
 def _svc() -> LearnService:

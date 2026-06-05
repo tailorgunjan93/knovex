@@ -29,6 +29,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime
 
+from backend.adapters.json_repair_adapter import repair_json_object
 from backend.core.domain.learn import (
     VALID_DIFFICULTIES,
     VALID_FORMATS,
@@ -39,7 +40,6 @@ from backend.core.domain.learn import (
     LearnSession,
     UserStats,
 )
-from backend.adapters.json_repair_adapter import repair_json_object
 from backend.core.llm_service import LLMService
 from backend.core.providers.base import ProviderCredentials
 from backend.storage.repositories.base import EntityNotFoundError

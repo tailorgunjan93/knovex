@@ -22,6 +22,7 @@ total absence at runtime — hence every entry point degrades to ``None``.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -302,16 +303,14 @@ def parse_via_sidecar(
         if proc.returncode != 0:
             detail = (proc.stdout or proc.stderr or "").strip()[:500]
             logger.info("OCR sidecar exited %s: %s", proc.returncode, detail)
-        with open(out_path, "r", encoding="utf-8") as fh:
+        with open(out_path, encoding="utf-8") as fh:
             data = json.load(fh)
     except Exception as exc:  # noqa: BLE001 — launch/timeout/JSON errors all fall back
         logger.info("OCR sidecar failed for %s (%s)", Path(str(file_path)).name, exc)
         return None
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(out_path)
-        except OSError:
-            pass
 
     if not data.get("ok"):
         logger.info("OCR sidecar reported failure: %s", data.get("error"))

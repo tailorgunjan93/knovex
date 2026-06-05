@@ -9,7 +9,6 @@ exercised end-to-end without downloading anything.
 
 from __future__ import annotations
 
-import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 

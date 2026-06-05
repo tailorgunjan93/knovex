@@ -360,15 +360,15 @@ def get_ocr_provision_service():
 # ---------------------------------------------------------------------------
 
 from backend.adapters.http_client import IHttpClient  # noqa: E402
-from backend.storage.repositories.highlight_repository import (  # noqa: E402
-    SQLiteHighlightRepository,
-)
 from backend.core.chat_service import ChatService  # noqa: E402
 from backend.core.kb_service import KBService  # noqa: E402
 from backend.core.learn_service import LearnService  # noqa: E402
 from backend.core.reader_service import ReaderService  # noqa: E402
 from backend.core.search_service import SearchService  # noqa: E402
 from backend.core.summarizer_service import SummariserService  # noqa: E402
+from backend.storage.repositories.highlight_repository import (  # noqa: E402
+    SQLiteHighlightRepository,
+)
 
 SettingsServiceDep   = Annotated[SettingsService,   Depends(get_settings_service)]
 LLMServiceDep        = Annotated[LLMService,         Depends(get_llm_service)]

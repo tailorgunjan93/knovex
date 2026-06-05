@@ -22,7 +22,6 @@ import pytest
 
 from backend.adapters import docnest_adapter as dn
 
-
 # ── Fake docnest matching the REAL 0.6.0 ParserFactory API ────────────────────
 
 def _install_fake_docnest(monkeypatch, *, sections=None, raw_text=None, supports=True, raise_on_parse=False):
@@ -65,9 +64,9 @@ def _install_fake_docnest(monkeypatch, *, sections=None, raw_text=None, supports
 
 class TestParseDocumentMapping:
     def test_maps_sections_to_docnest_sections(self, monkeypatch):
-        Sec = _install_fake_docnest(monkeypatch)   # grab the _Sec factory
-        secs = [Sec(text="Backprop reuses activations.", title="Intro", page=None),
-                Sec(text="Chain rule propagates gradients.", title="Method", page=3)]
+        sec_factory = _install_fake_docnest(monkeypatch)   # grab the _Sec factory
+        secs = [sec_factory(text="Backprop reuses activations.", title="Intro", page=None),
+                sec_factory(text="Chain rule propagates gradients.", title="Method", page=3)]
         _install_fake_docnest(monkeypatch, sections=secs)
 
         out = dn.parse_document("paper.pdf", pdf_engine="pymupdf")
@@ -77,16 +76,16 @@ class TestParseDocumentMapping:
         assert out[1].page == 3
 
     def test_skips_fully_empty_sections(self, monkeypatch):
-        Sec = _install_fake_docnest(monkeypatch)
-        secs = [Sec(text="  ", title=""), Sec(text="real content", title="ok")]
+        sec_factory = _install_fake_docnest(monkeypatch)
+        secs = [sec_factory(text="  ", title=""), sec_factory(text="real content", title="ok")]
         _install_fake_docnest(monkeypatch, sections=secs)
         out = dn.parse_document("x.pdf")
         assert [s.text for s in out] == ["real content"]
 
     def test_heading_only_section_uses_title_as_content(self, monkeypatch):
         """OCR'd headings land in title with empty text — still indexable."""
-        Sec = _install_fake_docnest(monkeypatch)
-        secs = [Sec(text="", title="OCR CONFIRMS DOCNEST WORKS")]
+        sec_factory = _install_fake_docnest(monkeypatch)
+        secs = [sec_factory(text="", title="OCR CONFIRMS DOCNEST WORKS")]
         _install_fake_docnest(monkeypatch, sections=secs)
         out = dn.parse_document("scan.pdf")
         assert out == [dn.DocnestSection(
@@ -95,15 +94,16 @@ class TestParseDocumentMapping:
     def test_drops_docling_structural_placeholders(self, monkeypatch):
         """An image-only page docling can't OCR leaks as a 'Figures' placeholder
         section — that must NOT be indexed as content."""
-        Sec = _install_fake_docnest(monkeypatch)
-        secs = [Sec(text="Figures", title="Figures"), Sec(text="real body text", title="Intro")]
+        sec_factory = _install_fake_docnest(monkeypatch)
+        secs = [sec_factory(text="Figures", title="Figures"),
+                sec_factory(text="real body text", title="Intro")]
         _install_fake_docnest(monkeypatch, sections=secs)
         out = dn.parse_document("invitation.pdf")
         assert [s.text for s in out] == ["real body text"]
 
     def test_all_placeholders_returns_none(self, monkeypatch):
-        Sec = _install_fake_docnest(monkeypatch)
-        _install_fake_docnest(monkeypatch, sections=[Sec(text="Figures", title="Figures")])
+        sec_factory = _install_fake_docnest(monkeypatch)
+        _install_fake_docnest(monkeypatch, sections=[sec_factory(text="Figures", title="Figures")])
         assert dn.parse_document("imageonly.pdf") is None
 
     def test_falls_back_to_raw_text_when_no_sections(self, monkeypatch):
@@ -142,7 +142,8 @@ class TestOcrEngineResolution:
     def test_engine_tesseract_when_no_easyocr_but_binary(self, monkeypatch, tmp_path):
         monkeypatch.delenv("KNOVEX_OCR_ENGINE", raising=False)
         monkeypatch.setattr(dn, "_easyocr_available", lambda: False)
-        exe = tmp_path / "tesseract.exe"; exe.write_text("")
+        exe = tmp_path / "tesseract.exe"
+        exe.write_text("")
         monkeypatch.setenv("KNOVEX_TESSERACT_CMD", str(exe))
         assert dn._resolve_ocr_engine() == "tesseract"
 
@@ -189,7 +190,8 @@ class TestRealDocnest:
             page = doc.new_page()
             page.insert_text((72, 72), line)
         path = tmp_path / "smoke.pdf"
-        doc.save(str(path)); doc.close()
+        doc.save(str(path))
+        doc.close()
 
         # pymupdf engine: real docnest, but no ML model downloads in the test.
         out = dn.parse_document(path, pdf_engine="pymupdf")
@@ -204,13 +206,17 @@ class TestRealDocnest:
         (text baked into an image) is recovered via OCR. docnest's docling
         parser defaults ocr=False, so the adapter must enable it. Slow — downloads
         docling OCR models on first run."""
-        src = fitz.open(); sp = src.new_page(width=600, height=200)
+        src = fitz.open()
+        sp = src.new_page(width=600, height=200)
         sp.insert_text((40, 110), "OCR CONFIRMS DOCNEST WORKS", fontsize=34)
         pix = sp.get_pixmap(dpi=150)
-        img = fitz.open(); ip = img.new_page(width=600, height=200)
+        img = fitz.open()
+        ip = img.new_page(width=600, height=200)
         ip.insert_image(fitz.Rect(0, 0, 600, 200), pixmap=pix)
         path = tmp_path / "image_only.pdf"
-        img.save(str(path)); img.close(); src.close()
+        img.save(str(path))
+        img.close()
+        src.close()
 
         assert fitz.open(str(path))[0].get_text().strip() == "", "PDF must have no text layer"
 

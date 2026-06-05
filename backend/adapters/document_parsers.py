@@ -718,7 +718,7 @@ class CachingPDFAdapter(IPDFAdapter):
         # OrderedDict as an LRU: most-recently-used moved to the end.
         from collections import OrderedDict
         from threading import Lock
-        self._cache: "OrderedDict[tuple, list[PageContent]]" = OrderedDict()
+        self._cache: OrderedDict[tuple, list[PageContent]] = OrderedDict()
         self._lock = Lock()
 
     @staticmethod

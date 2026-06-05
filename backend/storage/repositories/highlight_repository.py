@@ -8,7 +8,7 @@ work with the `Highlight` schema and never touch SQL directly (DIP).
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.models.schemas import Highlight, HighlightCreate
 
@@ -56,7 +56,7 @@ class SQLiteHighlightRepository:
             text=data.text,
             color=data.color,
             note=data.note,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         await self._backend.execute(
             "INSERT INTO highlights (id, kb_id, file_id, page, text, color, note, created_at) "

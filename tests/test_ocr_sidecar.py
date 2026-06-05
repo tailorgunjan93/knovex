@@ -141,7 +141,8 @@ class TestRealSidecar:
         doc = fitz.open()
         doc.new_page().insert_text((72, 72), "Sidecar recovered this sentence.")
         p = tmp_path / "s.pdf"
-        doc.save(str(p)); doc.close()
+        doc.save(str(p))
+        doc.close()
         return p
 
     def test_extract_sections_direct(self, tmp_path):

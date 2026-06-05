@@ -29,10 +29,11 @@ import logging
 import os
 import shutil
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Awaitable, Callable, Protocol
+from typing import Protocol
 
 logger = logging.getLogger("knovex.ocr")
 
@@ -41,7 +42,7 @@ UV_PATH_ENV = "KNOVEX_UV_PATH"
 _LOG_TAIL = 60
 
 
-class OcrState(str, Enum):
+class OcrState(StrEnum):
     NOT_INSTALLED = "not_installed"
     INSTALLING = "installing"
     READY = "ready"
