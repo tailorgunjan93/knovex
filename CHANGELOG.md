@@ -11,6 +11,34 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.11.1] — 2026-06-05
+
+Fix the recurring **"Failed to uninstall old application files. … : 2"** on
+install/update (Known Issue #9 / #2 — present since early versions).
+
+### Bug Fix
+
+**Root cause:** Knovex runs a separate backend process, `knovex-backend.exe`
+(PyInstaller). electron-builder/NSIS closes the Electron app but has no knowledge
+of this child process, so during an update it keeps running and holds open file
+handles inside the install directory. Windows can't delete a running executable,
+the old version's uninstaller aborts with "File is busy" and exits with code 2,
+and electron-builder surfaces it as "Failed to uninstall old application files…: 2".
+The v0.10.0 `oneClick:false` change never addressed this — the lock was the real
+cause.
+
+**Fix:** A custom NSIS script (`desktop/build/installer.nsh`, wired via
+`nsis.include`) force-kills `knovex-backend.exe` in `customInit` (runs before the
+old-version uninstall) and in `customUnInstall`. The backend is never
+auto-respawned, so the handles release and the uninstaller deletes cleanly.
+
+**Verified:** built the real installer and ran install-over-existing with
+`knovex-backend.exe` running — exit 0 across repeated cycles; the same scenario
+without the script reproduces exit 2. Guarded by `tests/test_installer_nsis.py`
+(ties the killed image name to the name the desktop app actually spawns).
+
+---
+
 ## [0.11.0] — 2026-06-05
 
 The visual redesign release — plus a real OCR pipeline, multi-provider LLM,
