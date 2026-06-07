@@ -36,6 +36,14 @@ ROOT = Path(SPECPATH).parent  # noqa: F821 — SPECPATH injected by PyInstaller
 # collect_data_files() picks up ALL json/data files from the litellm package dir.
 _datas = collect_data_files("litellm", include_py_files=False)
 
+# Out-of-process sidecars (ocr_sidecar.py, manim_sidecar.py) are executed by the
+# on-demand pack envs' OWN Python interpreter — they must exist as real .py source
+# in the bundle, next to where the adapter/service resolves them via __file__.
+_datas += [
+    (str(ROOT / "backend" / "adapters" / "ocr_sidecar.py"), "backend/adapters"),
+    (str(ROOT / "backend" / "core" / "manim_sidecar.py"), "backend/core"),
+]
+
 # tiktoken uses a namespace-package plugin pattern: registry.py calls
 #   pkgutil.iter_modules(tiktoken_ext.__path__)
 # to discover encoding modules (e.g. tiktoken_ext.openai_public which defines

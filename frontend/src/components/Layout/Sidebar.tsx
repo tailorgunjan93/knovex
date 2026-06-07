@@ -36,6 +36,7 @@ import { BRAND } from '@/theme/tokens'
 import { useSettingsStore, useThemeMode } from '@/store/settings.store'
 import { settingsApi } from '@/api/settings.api'
 import { resolveDisplayName, initialsOf } from '@/lib/displayName'
+import { useAppVersion } from '@/lib/useAppVersion'
 
 export const RAIL_WIDTH = 64
 
@@ -103,6 +104,7 @@ export default function Sidebar() {
   const themeMode = useThemeMode()
   const { settings, setSettings } = useSettingsStore()
   const qc = useQueryClient()
+  const appVersion = useAppVersion()
 
   const displayName = settings?.display_name
   const isActive = (path: string) => location.pathname.startsWith(path)
@@ -193,6 +195,22 @@ export default function Sidebar() {
           {initialsOf(displayName)}
         </Box>
       </Tooltip>
+
+      {/* App version — visible at the rail foot; click → Settings → About */}
+      {appVersion && (
+        <Tooltip title={`Knovex v${appVersion} — click for details`} placement="right" arrow>
+          <Box
+            onClick={() => navigate('/settings')}
+            sx={{
+              mt: 0.75, cursor: 'pointer', fontSize: 8.5, lineHeight: 1,
+              fontFamily: '"IBM Plex Mono", monospace', color: 'text.disabled',
+              '&:hover': { color: 'text.secondary' },
+            }}
+          >
+            v{appVersion}
+          </Box>
+        </Tooltip>
+      )}
     </Box>
   )
 }

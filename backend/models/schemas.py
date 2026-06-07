@@ -155,12 +155,30 @@ class TestLLMResponse(BaseModel):
     error: str | None = None
 
 
-class OcrStatusResponse(BaseModel):
-    """State of the on-demand OCR pack (docnest provisioned outside the bundle)."""
+class PackStatusResponse(BaseModel):
+    """State of an on-demand pack (OCR / Cinematic) provisioned outside the bundle."""
     state: Literal["not_installed", "installing", "ready", "error", "unavailable"]
     detail: str = ""
     python_path: str | None = None
     log_tail: list[str] = Field(default_factory=list)
+
+
+# Back-compat alias (OCR API + tests referenced this name).
+OcrStatusResponse = PackStatusResponse
+
+
+class ManimRenderRequest(BaseModel):
+    """Render a Cinematic (Manim) animation for a topic."""
+    topic: str = Field(..., min_length=1)
+    difficulty: Literal["beginner", "intermediate", "expert"] = "intermediate"
+
+
+class ManimRenderResponse(BaseModel):
+    ok: bool
+    render_id: str | None = None
+    video_url: str | None = None
+    error: str | None = None
+    attempts: int = 0
 
 
 class OllamaDetectResponse(BaseModel):
@@ -420,7 +438,7 @@ class LearnSessionCreate(BaseModel):
     topic: str = Field(..., min_length=1)
     format: Literal[
         "quiz", "flashcard", "mindmap", "story",
-        "timeline", "eli5", "speedlearn", "brainstorm", "guided",
+        "timeline", "eli5", "speedlearn", "brainstorm", "guided", "animated",
     ]
     source_type: str                    # topic | kb_file | url | upload
     source_ref: str | None = None       # file_id for kb_file, URL string for url

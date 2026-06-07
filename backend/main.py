@@ -142,6 +142,7 @@ def create_app() -> FastAPI:
     from backend.api.health import router as health_router
     from backend.api.kb import router as kb_router
     from backend.api.learn import router as learn_router
+    from backend.api.manim import router as manim_router
     from backend.api.ocr import router as ocr_router
     from backend.api.reader import router as reader_router
     from backend.api.search import router as search_router
@@ -161,6 +162,7 @@ def create_app() -> FastAPI:
     app.include_router(search_router, prefix="/api", tags=["search"])
     app.include_router(learn_router, prefix="/api", tags=["learn"])
     app.include_router(ocr_router, prefix="/api", tags=["ocr"])
+    app.include_router(manim_router, prefix="/api", tags=["manim"])
 
     # -----------------------------------------------------------------------
     # Global exception handler — always returns structured JSON

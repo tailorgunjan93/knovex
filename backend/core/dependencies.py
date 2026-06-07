@@ -355,6 +355,24 @@ def get_ocr_provision_service():
     return OcrProvisionService(env_home=app_config.data_dir / "ocr")
 
 
+@lru_cache(maxsize=1)
+def get_manim_provision_service():
+    """Provide the ManimProvisionService singleton (Cinematic animation pack)."""
+    from backend.core.manim_provision_service import ManimProvisionService
+    return ManimProvisionService(env_home=app_config.data_dir / "manim")
+
+
+@lru_cache(maxsize=1)
+def get_manim_render_service():
+    """Provide the ManimRenderService singleton (LLM → Manim code → MP4)."""
+    from backend.core.manim_render_service import ManimRenderService
+    return ManimRenderService(
+        provision=get_manim_provision_service(),
+        llm_svc=get_llm_service(),
+        output_dir=app_config.data_dir / "cinematic",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Annotated shorthands (reduces boilerplate in route signatures)
 # ---------------------------------------------------------------------------

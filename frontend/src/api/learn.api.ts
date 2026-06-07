@@ -19,6 +19,7 @@ export type LearnFormat =
   | 'speedlearn'
   | 'brainstorm'
   | 'guided'
+  | 'animated'
 
 export type Difficulty = 'beginner' | 'intermediate' | 'expert'
 
@@ -31,7 +32,7 @@ export interface LearnSession {
   source_type: SourceType
   difficulty: Difficulty
   status: 'pending' | 'generating' | 'ready' | 'error'
-  content: QuizContent | FlashcardContent | MindmapContent | TimelineContent | TextContent | GuidedContent | null
+  content: QuizContent | FlashcardContent | MindmapContent | TimelineContent | TextContent | GuidedContent | AnimatedContent | null
   created_at: string
   completed_at: string | null
 }
@@ -104,6 +105,43 @@ export interface GuidedContent {
   intro:       string
   total_steps: number
   steps:       GuidedStep[]
+}
+
+// ─── Animated (motion-graphics scene script) ──────────────────────────────────
+// Coordinate space: x 0..100 (left→right), y 0..100 (top→bottom), center (50,50).
+
+export type SceneEnter = 'fade' | 'rise' | 'pop' | 'draw'
+
+export interface SceneElement {
+  type:  'text' | 'node' | 'circle' | 'arrow' | 'line'
+  // text / node / circle
+  text?:  string
+  label?: string
+  x?:  number
+  y?:  number
+  w?:  number
+  h?:  number
+  r?:  number
+  size?:  'title' | 'heading' | 'body' | 'small'
+  color?: string
+  // arrow / line
+  x1?: number
+  y1?: number
+  x2?: number
+  y2?: number
+  enter?: SceneEnter
+}
+
+export interface AnimatedScene {
+  narration: string
+  duration:  number          // seconds
+  elements:  SceneElement[]
+}
+
+export interface AnimatedContent {
+  topic:  string
+  title:  string
+  scenes: AnimatedScene[]
 }
 
 // ─── SSE event types ──────────────────────────────────────────────────────────
