@@ -87,6 +87,7 @@ import { readerApi } from '../../api/reader.api'
 import GuidedViewer from './GuidedViewer'
 import AnimatedView from './AnimatedView'
 import ScenePlayer from './ScenePlayer'
+import CinematicPanel from './CinematicPanel'
 import { lessonOutline, lessonConcepts, type OutlineItem } from './lessonStructure'
 import { BRAND } from '@/theme/tokens'
 
@@ -2138,7 +2139,15 @@ export default function LearnPage() {
               )}
               {displayFormat === 'animated' && (
                 (displayContent as AnimatedContent)?.scenes
-                  ? <ScenePlayer content={displayContent as AnimatedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
+                  ? <>
+                      <ScenePlayer content={displayContent as AnimatedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
+                      {!isStreaming && (
+                        <CinematicPanel
+                          topic={(displayContent as AnimatedContent).topic || topic}
+                          difficulty={difficulty}
+                        />
+                      )}
+                    </>
                   : <AnimatedView content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
               )}
             </Box>
