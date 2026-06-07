@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { RootErrorBoundary } from './components/ErrorBoundary'
+import BackendGate from './components/BackendGate'
 
 // ── Defensive root-element guard ──────────────────────────────────────────────
 // If for any reason the DOM element is absent (malformed HTML, wrong id, etc.)
@@ -33,7 +34,9 @@ ReactDOM.createRoot(rootEl).render(
   <RootErrorBoundary>
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <BackendGate>
+          <App />
+        </BackendGate>
       </QueryClientProvider>
     </React.StrictMode>
   </RootErrorBoundary>,
