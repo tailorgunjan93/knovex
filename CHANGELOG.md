@@ -11,6 +11,38 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.1] — 2026-06-07
+
+Hotfix: **Learn → Animated** failed with a bare "network error".
+
+### Fixed
+
+- **Learn → Animated "network error" (regression in 0.12.0).** Generating an
+  Animated lesson failed instantly with an unexplained "network error" toast;
+  Guided and all other formats worked.
+  - **Root cause:** two independent allow-lists for the learn format drifted. The
+    API schema (`LearnSessionCreate.format` Literal) accepted `"animated"`, but the
+    domain `VALID_FORMATS` frozenset did **not** — `"animated"` was never added when
+    the format shipped. So the request passed pydantic, the `200` SSE response
+    began, and then `stream_session()` (an async generator) raised `ValueError` on
+    its first iteration — **outside** its own `try/except`, after the response had
+    already started. Starlette aborted the connection mid-stream and the renderer's
+    `fetch` surfaced the dropped body as `TypeError: network error`. The endpoint's
+    pre-existing `try/except ValueError` was dead code (creating a generator never
+    runs its body).
+  - **Fix:** added `"animated"` to `VALID_FORMATS`, and added **eager
+    format/difficulty validation in the endpoint** (before the `StreamingResponse`
+    starts) so any future drift returns a clean `422` instead of dropping the
+    connection mid-stream.
+  - **Guard:** `tests/test_learn_api_integration.py` —
+    `test_animated_format_streams_and_saves` (reproduces the exact failure) plus
+    `TestFormatSourcesOfTruthAgree` (a drift guard asserting the schema Literal and
+    `VALID_FORMATS` stay in lock-step, making this class of bug impossible).
+    Verified end-to-end against a real HTTP SSE backend: `animated` now streams to
+    a clean `done` event.
+
+---
+
 ## [0.12.0] — 2026-06-07
 
 Learn upgrades + a self-healing/launch-resilient app.
