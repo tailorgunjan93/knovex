@@ -68,6 +68,19 @@ class TestBackendIsKilled:
         nsh = _NSH.read_text(encoding="utf-8")
         assert _backend_image_name() in nsh
 
+    def test_custominit_force_removes_old_install(self):
+        """Killing processes isn't enough: electron-builder's uninstaller aborts on
+        transiently-busy files (AV still scanning the freshly-written _internal
+        DLLs), so customInit removes the old install dir itself with a retry loop
+        before the uninstaller runs. Verified against the real backend."""
+        nsh = _NSH.read_text(encoding="utf-8")
+        assert "RMDir /r" in nsh, "customInit must force-remove the old install dir"
+        assert "forceRemoveOldInstall" in nsh, "force-remove macro missing"
+        # Retry loop (don't give up on the first busy file).
+        assert "Sleep 1000" in nsh and "Goto" in nsh, "force-remove must retry"
+        # Guarded so we never delete an unrelated directory.
+        assert r'IfFileExists "$INSTDIR\Knovex.exe"' in nsh, "force-remove must be guarded by Knovex.exe"
+
 
 class TestBackendAutoRestart:
     """main.js must self-heal the backend on unexpected exit, but never fight an

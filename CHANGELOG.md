@@ -11,6 +11,32 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.11.3] — 2026-06-07
+
+Actually fix "Failed to uninstall old application files. … : 2" — verified
+against the real packaged app this time.
+
+### Bug Fix
+
+**Why v0.11.1/0.11.2 didn't fix it:** those were tested with a *stub* backend
+(one 45 KB file) that released instantly and hid the real failure. With the real
+app, the Electron shell spawns **multiple `Knovex.exe` processes** + a backend
+that loads **~120 `_internal` DLLs**, and — critically — even after every process
+is killed, electron-builder's uninstaller **aborts on the first transiently-busy
+file** (antivirus still scanning the freshly-written DLLs / 188 MB exe) within
+its ~5s retry budget → the "uninstall old files: 2" dialog.
+
+**Fix:** `customInit` now kills the app + backend **and removes the old install
+directory itself** with a retry loop (the Win32 delete that reliably succeeds in
+~2s), so electron-builder's uninstaller has nothing left to choke on. Guarded by
+`Knovex.exe` so it can never delete an unrelated folder.
+
+**Verified:** built the installer with the **real backend** and reinstalled over
+the **running real app** — exit 0 across 3 cycles (the same scenario reproduced
+the hang/exit-2 without the fix). Guard: `tests/test_installer_nsis.py`.
+
+---
+
 ## [0.11.2] — 2026-06-06
 
 Self-healing backend — the app no longer gets stuck on "network error" if the
