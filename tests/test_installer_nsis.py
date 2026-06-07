@@ -54,7 +54,36 @@ class TestBackendIsKilled:
         assert "!macro customInit" in nsh, "customInit hook (pre-uninstall) missing"
         assert "!macro customUnInstall" in nsh, "customUnInstall hook missing"
 
+    def test_kills_app_before_backend(self):
+        """The app (Knovex.exe) must be killed BEFORE the backend so its
+        auto-restart (main.js) can't respawn the backend mid-install."""
+        nsh = _NSH.read_text(encoding="utf-8")
+        assert "/IM Knovex.exe" in nsh, "must also kill the Electron app (Knovex.exe)"
+        assert nsh.index("/IM Knovex.exe") < nsh.index("/IM knovex-backend.exe"), (
+            "Knovex.exe must be killed before knovex-backend.exe"
+        )
+
     def test_kill_target_matches_spawned_process(self):
         """Guard against drift: the name killed == the name spawned by main.js."""
         nsh = _NSH.read_text(encoding="utf-8")
         assert _backend_image_name() in nsh
+
+
+class TestBackendAutoRestart:
+    """main.js must self-heal the backend on unexpected exit, but never fight an
+    intentional shutdown (quit/update)."""
+
+    def test_main_js_restarts_and_suppresses_correctly(self):
+        main = _MAIN.read_text(encoding="utf-8")
+        assert "maybeRestartBackend" in main, "auto-restart helper missing"
+        # Called from the backend exit handler.
+        assert "maybeRestartBackend(code)" in main
+        # Suppressed during intentional shutdown.
+        assert "backendShuttingDown" in main
+        assert "app.isQuitting || backendShuttingDown" in main, (
+            "auto-restart must bail out during quit/update"
+        )
+        # killBackendAndWait (update path) must set the suppress flag.
+        assert re.search(r"function killBackendAndWait\(\)\s*\{\s*\n\s*backendShuttingDown = true", main), (
+            "killBackendAndWait must set backendShuttingDown to suppress respawn"
+        )
