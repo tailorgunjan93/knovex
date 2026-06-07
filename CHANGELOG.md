@@ -11,6 +11,37 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.0] — 2026-06-07
+
+Learn upgrades + a self-healing/launch-resilient app.
+
+### Added
+
+- **Guided → master-teacher prompt:** intuition-first, one idea building on the
+  last, vivid concrete examples, names+busts the common misconception, Socratic
+  check-ins.
+- **Animated → real motion-graphics:** "Animated" is now its own format that emits
+  a scene script (text/nodes/circles/arrows on a 0–100 stage), rendered by a new
+  `ScenePlayer` (Framer Motion + SVG, autoplay + controls). No longer just guided
+  on autoplay.
+- **Cinematic (HD) pack:** optional, on-demand Manim renderer for true
+  3Blue1Brown-style videos — installed on first use (uv env: manim + ffmpeg, no
+  LaTeX), with an LLM-writes-Manim → render → error-repair pipeline. Quality is
+  model-dependent (use a strong LLM).
+- **App version** shown as a clickable badge at the sidebar foot.
+
+### Fixed
+
+- **No more "network error" on launch:** a startup gate shows "Starting Knovex…"
+  and waits for the backend before rendering (cold-start requests no longer fail).
+
+### Internal
+
+- Generalised on-demand provisioning into a shared `EnvPackProvisionService`
+  (OCR + Cinematic share one engine); PyInstaller bundles the pack sidecars.
+
+---
+
 ## [0.11.3] — 2026-06-07
 
 Actually fix "Failed to uninstall old application files. … : 2" — verified
