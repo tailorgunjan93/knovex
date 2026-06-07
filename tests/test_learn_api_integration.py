@@ -48,6 +48,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
+from typing import get_args
 from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import FastAPI
@@ -55,8 +56,9 @@ from httpx import ASGITransport, AsyncClient
 
 from backend.api.learn import router as learn_router
 from backend.core.dependencies import get_learn_service, get_settings_service
-from backend.core.domain.learn import LearnSession, UserStats
+from backend.core.domain.learn import VALID_FORMATS, LearnSession, UserStats
 from backend.core.learn_service import LearnService
+from backend.models.schemas import LearnSessionCreate
 from backend.storage.repositories.learn_repository import ILearnRepository
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -177,6 +179,22 @@ SAMPLE_GUIDED = {
 
 SAMPLE_FLASHCARD = {
     "cards": [{"front": "What is ATP?", "back": "Energy currency of the cell", "hint": "Energy"}]
+}
+
+SAMPLE_ANIMATED = {
+    "topic": "Circular motion",
+    "title": "Circular Motion",
+    "scenes": [
+        {
+            "narration": "An object moving in a circle is pulled toward the centre.",
+            "duration": 5,
+            "elements": [
+                {"type": "text", "text": "Circular Motion", "x": 50, "y": 12, "size": "title"},
+                {"type": "circle", "x": 50, "y": 55, "r": 20},
+                {"type": "arrow", "x1": 70, "y1": 55, "x2": 50, "y2": 55, "enter": "draw"},
+            ],
+        }
+    ],
 }
 
 
@@ -464,6 +482,38 @@ class TestSSEStreaming:
         assert session.content is not None
         assert "steps" in session.content
 
+    async def test_animated_format_streams_and_saves(self):
+        """
+        Regression for v0.12.0 "network error" on Learn → Animated.
+
+        'animated' is accepted by the LearnSessionCreate schema Literal, so the
+        request passes pydantic and the 200 SSE response begins — but the format
+        was MISSING from domain VALID_FORMATS, so stream_session() raised
+        ValueError on first iteration, OUTSIDE its try/except, after the response
+        had already started. Starlette then aborted the connection mid-stream and
+        the renderer's fetch surfaced it as "network error" (no error event, no
+        done event). This test fails (no done event) until 'animated' is added to
+        VALID_FORMATS.
+        """
+        client, repo = await _make_client(complete_json=SAMPLE_ANIMATED)
+        async with client:
+            r = await client.post("/api/learn/sessions/stream", json={
+                "topic": "Circular motion", "format": "animated", "source_type": "topic",
+                "difficulty": "beginner", "source_ref": None, "context_text": "",
+            })
+        assert r.status_code == 200
+        events = _parse_sse(r.text)
+        done_events = [e for e in events if e["type"] == "done"]
+        error_events = [e for e in events if e["type"] == "error"]
+        assert not error_events, f"animated emitted an error event: {error_events}"
+        assert len(done_events) == 1, "animated stream produced no done event"
+        session = await repo.find_by_id(done_events[0]["session_id"])
+        assert session is not None
+        assert session.status == "ready"
+        assert session.format == "animated"
+        assert session.content is not None
+        assert "scenes" in session.content
+
     async def test_llm_error_emits_error_event(self):
         client, _ = await _make_client(fail=True)
         async with client:
@@ -742,6 +792,7 @@ class TestUserStatsEndpoint:
             ("quiz",       SAMPLE_QUIZ),
             ("flashcard",  SAMPLE_FLASHCARD),
             ("guided",     SAMPLE_GUIDED),
+            ("animated",   SAMPLE_ANIMATED),
         ]
         for fmt, payload in formats:
             client, repo = await _make_client(complete_json=payload)
@@ -755,3 +806,38 @@ class TestUserStatsEndpoint:
             assert len(done_events) == 1, f"No done event for format={fmt}"
             session = await repo.find_by_id(done_events[0]["session_id"])
             assert session.status == "ready", f"Session not ready for format={fmt}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Drift guard — the two sources of truth for "valid format" must agree
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestFormatSourcesOfTruthAgree:
+    """
+    The API schema (LearnSessionCreate.format Literal) and the domain
+    VALID_FORMATS frozenset are two independent allow-lists. If they drift, a
+    format accepted by the schema but missing from VALID_FORMATS passes pydantic,
+    starts a 200 SSE response, then raises ValueError mid-stream — surfacing in
+    the UI as an unexplained "network error" (this is exactly how 'animated'
+    broke in v0.12.0). Keeping them in lock-step makes that class of bug
+    impossible.
+    """
+
+    @staticmethod
+    def _schema_formats() -> set[str]:
+        return set(get_args(LearnSessionCreate.model_fields["format"].annotation))
+
+    def test_every_schema_format_is_a_valid_domain_format(self):
+        missing = self._schema_formats() - set(VALID_FORMATS)
+        assert not missing, (
+            f"Formats accepted by the API schema but missing from domain "
+            f"VALID_FORMATS: {sorted(missing)} — these would 200 then drop the "
+            f"connection mid-stream ('network error')."
+        )
+
+    def test_no_orphan_domain_formats(self):
+        orphan = set(VALID_FORMATS) - self._schema_formats()
+        assert not orphan, (
+            f"Formats in domain VALID_FORMATS but not accepted by the API schema: "
+            f"{sorted(orphan)} — unreachable via the API."
+        )

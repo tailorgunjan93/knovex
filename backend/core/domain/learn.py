@@ -13,6 +13,14 @@ Formats:
     eli5        — Explain Like I'm 5
     speedlearn  — rapid bullet-point summary
     brainstorm  — creative connections and surprising facts
+    guided      — step-by-step personal-tutor lesson (JSON)
+    animated    — motion-graphics scene script for the SVG ScenePlayer (JSON)
+
+NOTE: this set is the domain allow-list and MUST stay in lock-step with the
+LearnSessionCreate.format Literal in backend/models/schemas.py. A format accepted
+by the schema but missing here passes pydantic, starts the 200 SSE response, then
+raises ValueError mid-stream → the client sees an unexplained "network error".
+tests/test_learn_api_integration.py::TestFormatSourcesOfTruthAgree guards this.
 """
 
 from __future__ import annotations
@@ -22,7 +30,7 @@ from datetime import datetime
 
 VALID_FORMATS = frozenset({
     "quiz", "flashcard", "mindmap", "timeline",
-    "story", "eli5", "speedlearn", "brainstorm", "guided",
+    "story", "eli5", "speedlearn", "brainstorm", "guided", "animated",
 })
 
 VALID_DIFFICULTIES = frozenset({"beginner", "intermediate", "expert"})

@@ -32,6 +32,7 @@ from backend.core.dependencies import (
     LearnServiceDep,
     SettingsServiceDep,
 )
+from backend.core.domain.learn import VALID_DIFFICULTIES, VALID_FORMATS
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
     LearnSessionCreate,
@@ -94,6 +95,25 @@ async def stream_learn_session(
           "xp_earned": N,  "new_badges": [...]}``        — stream complete
     - ``{"type": "error",  "error": "..."}``             — error mid-stream
     """
+    # Eager validation BEFORE the StreamingResponse starts.
+    # stream_session() is an async generator, so its internal format/difficulty
+    # checks don't run until the first iteration — by which point the 200 SSE
+    # response has already begun and a raised ValueError aborts the connection
+    # mid-stream (the client sees a bare "network error"). Validating here turns
+    # any invalid/drifted format into a clean 422 the UI can show. The schema
+    # Literal already blocks unknown formats, but this is the belt-and-suspenders
+    # seam that also catches schema/domain drift (e.g. 'animated' pre-v0.12.1).
+    if body.format not in VALID_FORMATS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid format '{body.format}'. Must be one of: {sorted(VALID_FORMATS)}",
+        )
+    if body.difficulty not in VALID_DIFFICULTIES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid difficulty '{body.difficulty}'.",
+        )
+
     current = await settings_svc.get()
     llm = current.llm
     credentials = ProviderCredentials(
