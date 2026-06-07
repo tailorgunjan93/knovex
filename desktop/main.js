@@ -50,6 +50,16 @@ let backendProcess = null
 let backendReady = false
 let backendStderrLines = []   // rolling buffer — last 30 lines for error dialog
 
+// ── Backend self-healing ──────────────────────────────────────────────────────
+// If knovex-backend.exe dies unexpectedly (crash, OOM, killed), the app restarts
+// it instead of sitting on a "network error". Suppressed during intentional
+// shutdown (app quit, update/uninstall) so we never fight the installer — the
+// NSIS script also kills the app first, so a respawn can't re-lock files.
+let backendShuttingDown = false       // set true when WE kill it on purpose
+const backendRestartTimes = []        // timestamps of recent auto-restarts
+const MAX_RESTARTS_PER_WINDOW = 5
+const RESTART_WINDOW_MS = 60_000
+
 // ─── Backend spawn ────────────────────────────────────────────────────────────
 
 function getBackendExecutable() {
@@ -174,17 +184,60 @@ function spawnBackend() {
     if (backendStderrLines.length > 30) backendStderrLines = backendStderrLines.slice(-30)
   })
 
-  backendProcess.on('exit', (code) => {
-    console.log('[backend] exited with code:', code)
-    logStream.write(`=== backend exited code=${code} ===\n`)
+  backendProcess.on('exit', (code, signal) => {
+    console.log('[backend] exited with code:', code, 'signal:', signal)
+    logStream.write(`=== backend exited code=${code} signal=${signal} ===\n`)
     logStream.end()
     backendReady = false
+    maybeRestartBackend(code)
   })
 
   backendProcess.on('error', (err) => {
     console.error('[backend] spawn error:', err.message)
     logStream.write(`=== spawn error: ${err.message} ===\n`)
   })
+}
+
+/**
+ * Restart the backend after an UNEXPECTED exit, so the app self-heals instead of
+ * showing a permanent "network error". Never restarts during intentional
+ * shutdown (quit/update). Caps restarts to MAX_RESTARTS_PER_WINDOW within
+ * RESTART_WINDOW_MS so a hard crash-loop (or an occupied port) surfaces a clear
+ * error instead of spinning forever.
+ */
+function maybeRestartBackend(code) {
+  if (app.isQuitting || backendShuttingDown) return   // intentional — leave it dead
+
+  const now = Date.now()
+  while (backendRestartTimes.length && now - backendRestartTimes[0] > RESTART_WINDOW_MS) {
+    backendRestartTimes.shift()
+  }
+  if (backendRestartTimes.length >= MAX_RESTARTS_PER_WINDOW) {
+    console.error('[backend] crash-looping — gave up after %d restarts', MAX_RESTARTS_PER_WINDOW)
+    mainWindow?.webContents.send('app:backend-failed', {
+      attempts: MAX_RESTARTS_PER_WINDOW,
+      lastExitCode: code,
+      stderr: backendStderrLines.slice(-15).join('\n'),
+    })
+    return
+  }
+  backendRestartTimes.push(now)
+
+  const delay = Math.min(1000 * backendRestartTimes.length, 5000)  // linear backoff, cap 5s
+  console.warn('[backend] unexpected exit (code=%s) — restarting in %dms (%d/%d)',
+    code, delay, backendRestartTimes.length, MAX_RESTARTS_PER_WINDOW)
+  mainWindow?.webContents.send('app:backend-restarting', { attempt: backendRestartTimes.length })
+
+  setTimeout(() => {
+    if (app.isQuitting || backendShuttingDown) return
+    spawnBackend()
+    waitForBackend()
+      .then(() => {
+        console.log('[backend] recovered after restart')
+        mainWindow?.webContents.send('app:backend-restarted')
+      })
+      .catch(() => { /* its own exit handler will retry within the cap */ })
+  }, delay)
 }
 
 // ─── Health polling ───────────────────────────────────────────────────────────
@@ -443,6 +496,7 @@ function setupAutoUpdater() {
  * before the installer tries to overwrite them.
  */
 function killBackendAndWait() {
+  backendShuttingDown = true   // we're killing it on purpose — don't auto-restart
   return new Promise((resolve) => {
     if (!backendProcess || backendProcess.killed) {
       resolve()
@@ -592,6 +646,7 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   app.isQuitting = true
+  backendShuttingDown = true   // suppress auto-restart while quitting
 })
 
 app.on('quit', () => {

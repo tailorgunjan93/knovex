@@ -11,6 +11,27 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.11.2] — 2026-06-06
+
+Self-healing backend — the app no longer gets stuck on "network error" if the
+backend process dies.
+
+### Added
+
+- **Backend auto-restart:** if `knovex-backend.exe` exits unexpectedly (crash,
+  OOM, killed), the desktop app restarts it automatically (linear backoff, capped
+  at 5 restarts per 60s; a hard crash-loop surfaces a clear error instead of
+  spinning forever). Suppressed during intentional shutdown (quit/update).
+
+### Fixed
+
+- Auto-restart could have re-broken the v0.11.1 install fix (a respawned backend
+  re-locks files mid-install). The NSIS script now kills the Electron app
+  (`Knovex.exe`, with its child tree) **before** the backend, so a respawn can't
+  fight the installer.
+
+---
+
 ## [0.11.1] — 2026-06-05
 
 Fix the recurring **"Failed to uninstall old application files. … : 2"** on

@@ -23,9 +23,13 @@
 ; ============================================================================
 
 !macro killKnovexBackend
-  DetailPrint "Stopping Knovex backend (knovex-backend.exe)…"
-  ; /F force, /T kill child tree, /IM by image name. Hidden; ignore the result
-  ; (fine if it isn't running).
+  DetailPrint "Closing Knovex…"
+  ; Kill the Electron app FIRST. Its /T tree-kill takes the child backend with
+  ; it AND stops the app's auto-restart (main.js) from respawning the backend
+  ; mid-install — which would re-lock files and bring the error back.
+  nsExec::Exec 'taskkill /F /T /IM Knovex.exe'
+  Pop $0
+  ; Then any orphaned backend (app already closed, backend lingering).
   nsExec::Exec 'taskkill /F /T /IM knovex-backend.exe'
   Pop $0
   ; Let Windows release the file handles before files are removed.
