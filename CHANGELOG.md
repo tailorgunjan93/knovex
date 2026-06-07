@@ -11,6 +11,36 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.2] — 2026-06-07
+
+Resilience: stop transient blips from showing a bare "network error".
+
+### Changed
+
+- **Resilient SSE streaming for Chat and Learn.** Both now share
+  `frontend/src/lib/streaming/sseStream.ts`, which:
+  - **retries the connection** (and `502/503/504`) a few times with linear
+    backoff — but **only before the `200` response body starts**, so a request the
+    server already accepted is never re-submitted (no duplicate LLM generation or
+    chat messages);
+  - replaces the bare `network error` toast with actionable messages —
+    *"Can't reach Knovex — the backend may still be starting up. Please try again
+    in a moment."* (connection) and *"The connection was interrupted while
+    generating a response. Please try again."* (mid-stream drop);
+  - preserves `AbortError` so cancel logic is unchanged.
+  This makes the post-launch / post-update cold-start window self-heal silently
+  instead of surfacing an error.
+
+### Tests
+
+- `sseStream.test.ts` (7): happy path, transient-retry-then-success,
+  retry-exhaustion message, `503` retry, non-retryable `422` (no retry),
+  mid-stream drop (no retry + clear message), `AbortError` passthrough.
+- Restored two reader/FileViewer tests that previously existed only in the working
+  tree so CI runs them: `OutlineTab.test.tsx`, `RenderBlock.test.tsx` (31 tests).
+
+---
+
 ## [0.12.1] — 2026-06-07
 
 Hotfix: **Learn → Animated** failed with a bare "network error".
