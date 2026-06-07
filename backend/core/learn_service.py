@@ -162,7 +162,7 @@ class LearnService:
             else:
                 # JSON format: generate with complete(), stream as tokens
                 # Token budget: guided > quiz/flashcard > simpler formats
-                _json_token_budget = {"guided": 4096, "quiz": 3000, "flashcard": 2500}
+                _json_token_budget = {"animated": 5000, "guided": 4096, "quiz": 3000, "flashcard": 2500}
                 json_max_tokens = _json_token_budget.get(format, 2048)
                 messages = self._build_prompt(format, topic, difficulty, context_text, language)
                 try:
@@ -454,10 +454,20 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "Aim for 300-400 words. Be creative and thought-provoking. Use markdown."
     ),
     "guided": (
-        "You are a world-class personal tutor creating an interactive step-by-step guided lesson "
-        "on '{topic}' for a {difficulty} level learner. "
-        "Teach like a patient, engaging human teacher — one concept at a time, building understanding incrementally.\n"
-        "Generate 5-7 clear lesson steps. Each step covers ONE idea.\n"
+        "You are the best teacher in the world on '{topic}' — combine the clarity of Feynman, "
+        "the intuition-first style of 3Blue1Brown, and the warmth of a favourite mentor. "
+        "You have taught this concept thousands of times to {difficulty}-level learners and know "
+        "exactly where people get confused. Create an interactive, step-by-step guided lesson.\n"
+        "TEACHING PRINCIPLES (apply to every step):\n"
+        "- Intuition before formalism: build the mental picture first, define terms only as needed.\n"
+        "- One idea per step, and each step must build on the previous one (reference it).\n"
+        "- Use a CONCRETE, specific, vivid example — never a generic placeholder.\n"
+        "- Name the COMMON MISCONCEPTION for this idea and correct it, woven into the explanation.\n"
+        "- The analogy must be genuinely illuminating (maps to the concept's structure), not decorative.\n"
+        "- key_insight is the 'aha' — the thing they'll remember in a year.\n"
+        "- check_in is a Socratic question that makes them think, not recall.\n"
+        "- Warm, encouraging, plain language; define any jargon the first time it appears.\n"
+        "Generate 5-7 steps. Each step covers ONE idea and follows the principles above.\n"
         "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences.\n"
         "Format:\n"
         '{{"topic": "...", '
@@ -480,6 +490,30 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '}}'
         '}}'
         ']}}'
+    ),
+    "animated": (
+        "You are a motion-graphics explainer in the style of 3Blue1Brown and Kurzgesagt, "
+        "directing an ANIMATED visual lesson on '{topic}' for a {difficulty} level learner. "
+        "You think visually: every idea becomes shapes, arrows, and labels that build up on screen "
+        "while a narrator speaks. Design 5-8 scenes that progressively reveal the concept.\n"
+        "CANVAS: a 2D stage. x goes 0 (left) to 100 (right); y goes 0 (top) to 100 (bottom); "
+        "center is (50,50). Keep elements inside 5..95 and never overlap labels.\n"
+        "ELEMENT TYPES (use only these):\n"
+        "  text  — {{\"type\":\"text\",\"text\":\"...\",\"x\":50,\"y\":12,\"size\":\"title|heading|body|small\",\"color\":\"accent|primary|muted\",\"enter\":\"fade|rise|pop\"}}\n"
+        "  node  — a labelled box: {{\"type\":\"node\",\"label\":\"...\",\"x\":30,\"y\":50,\"w\":26,\"h\":16,\"color\":\"accent|blue|green|amber|muted\",\"enter\":\"fade|rise|pop|draw\"}}\n"
+        "  circle— {{\"type\":\"circle\",\"label\":\"...\",\"x\":50,\"y\":50,\"r\":12,\"color\":\"...\",\"enter\":\"draw|pop|fade\"}}\n"
+        "  arrow — {{\"type\":\"arrow\",\"x1\":40,\"y1\":50,\"x2\":60,\"y2\":50,\"label\":\"optional\",\"enter\":\"draw\"}}\n"
+        "  line  — {{\"type\":\"line\",\"x1\":..,\"y1\":..,\"x2\":..,\"y2\":..,\"color\":\"...\",\"enter\":\"draw\"}}\n"
+        "RULES: max 6 elements per scene; reuse positions across scenes so elements feel persistent; "
+        "each scene's narration is 1-2 spoken sentences; duration is seconds (3-7).\n"
+        "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences.\n"
+        "Format:\n"
+        '{{"topic":"...","title":"short lesson title",'
+        '"scenes":[{{'
+        '"narration":"what the narrator says for this scene",'
+        '"duration":5,'
+        '"elements":[{{"type":"text","text":"...","x":50,"y":12,"size":"title","color":"accent","enter":"rise"}}]'
+        '}}]}}'
     ),
 }
 

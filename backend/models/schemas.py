@@ -420,7 +420,7 @@ class LearnSessionCreate(BaseModel):
     topic: str = Field(..., min_length=1)
     format: Literal[
         "quiz", "flashcard", "mindmap", "story",
-        "timeline", "eli5", "speedlearn", "brainstorm", "guided",
+        "timeline", "eli5", "speedlearn", "brainstorm", "guided", "animated",
     ]
     source_type: str                    # topic | kb_file | url | upload
     source_ref: str | None = None       # file_id for kb_file, URL string for url

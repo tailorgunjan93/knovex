@@ -1,9 +1,9 @@
 /**
- * Animated format wiring + AnimatedView step maths.
+ * Animated format wiring + step maths.
  *
- * 'animated' is a UI-only format: it must generate GUIDED content on the
- * backend (there is no 'animated' backend format) but render the distinct
- * animated step-through. These guard that mapping and the step clamping.
+ * 'animated' is now its own backend format (a motion-graphics scene script
+ * rendered by ScenePlayer) — not a re-presentation of guided content. These
+ * guard the (now identity) mapping and the step clamping.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -11,8 +11,8 @@ import { backendFormatFor, isObjectFormat } from '../index'
 import { clampStep } from '../AnimatedView'
 
 describe('backendFormatFor', () => {
-  it('maps animated → guided (no backend "animated" format exists)', () => {
-    expect(backendFormatFor('animated')).toBe('guided')
+  it('animated is its own backend format', () => {
+    expect(backendFormatFor('animated')).toBe('animated')
   })
 
   it('passes through real backend formats unchanged', () => {

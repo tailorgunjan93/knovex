@@ -70,6 +70,7 @@ import {
   type FlashCard,
   type FlashcardContent,
   type GuidedContent,
+  type AnimatedContent,
   type LearnFormat,
   type LearnSession,
   type MindmapContent,
@@ -85,6 +86,7 @@ import { kbApi } from '../../api/kb.api'
 import { readerApi } from '../../api/reader.api'
 import GuidedViewer from './GuidedViewer'
 import AnimatedView from './AnimatedView'
+import ScenePlayer from './ScenePlayer'
 import { lessonOutline, lessonConcepts, type OutlineItem } from './lessonStructure'
 import { BRAND } from '@/theme/tokens'
 
@@ -95,13 +97,13 @@ const SERIF = '"Instrument Serif", Georgia, serif'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// UI-level format id. 'animated' is a presentation of guided content (the
-// animated step-through), not a separate backend format — see backendFormatFor.
-export type UIFormat = LearnFormat | 'animated'
+// UI-level format id. 'animated' is now its own backend format (a motion-graphics
+// scene script rendered by ScenePlayer), not a re-presentation of guided content.
+export type UIFormat = LearnFormat
 
 /** Map a UI format to the backend LearnFormat used for generation. */
 export function backendFormatFor(f: UIFormat): LearnFormat {
-  return f === 'animated' ? 'guided' : f
+  return f
 }
 
 /** Formats whose generated content is a JSON object (vs streamed text). */
@@ -2135,7 +2137,9 @@ export default function LearnPage() {
                 <GuidedViewer content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
               )}
               {displayFormat === 'animated' && (
-                <AnimatedView content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
+                (displayContent as AnimatedContent)?.scenes
+                  ? <ScenePlayer content={displayContent as AnimatedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
+                  : <AnimatedView content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
               )}
             </Box>
           )}
