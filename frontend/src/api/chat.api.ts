@@ -4,6 +4,7 @@
  */
 
 import apiClient, { API_BASE } from './client'
+import { streamSSE } from '@/lib/streaming/sseStream'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,9 +122,9 @@ export const chatApi = {
     kbIds?: string[],
     attachedContext?: string,
   ): Promise<void> {
-    const response = await fetch(
-      `${API_BASE}/api/chat/sessions/${sessionId}/stream`,
-      {
+    await streamSSE({
+      url: `${API_BASE}/api/chat/sessions/${sessionId}/stream`,
+      init: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -134,35 +135,8 @@ export const chatApi = {
         }),
         signal,
       },
-    )
-
-    if (!response.ok) {
-      throw new Error(`Stream failed: HTTP ${response.status}`)
-    }
-
-    const reader = response.body!.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const event = JSON.parse(line.slice(6)) as SSEEvent
-            onEvent(event)
-          } catch {
-            // Ignore malformed SSE lines
-          }
-        }
-      }
-    }
+      onEvent: (data) => onEvent(data as SSEEvent),
+    })
   },
 
   /** Export a session as markdown. */
