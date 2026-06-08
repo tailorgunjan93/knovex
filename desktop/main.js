@@ -26,6 +26,7 @@ const http = require('http')
 const fs = require('fs')
 const { autoUpdater } = require('electron-updater')
 const { waitForHealthy } = require('./lib/backendHealth')
+const { parseWindowState } = require('./lib/windowState')
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -282,20 +283,18 @@ function getWindowStatePath() {
 }
 
 function loadWindowState() {
-  try {
-    const raw = fs.readFileSync(getWindowStatePath(), 'utf8')
-    const state = JSON.parse(raw)
-    // Validate: must have numeric width/height above minimums
-    if (
-      typeof state.width === 'number' && state.width >= WINDOW_MIN_WIDTH &&
-      typeof state.height === 'number' && state.height >= WINDOW_MIN_HEIGHT
-    ) {
-      return state
-    }
-  } catch {
-    // File absent or malformed — use defaults
+  const opts = {
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
+    defaults: { width: WINDOW_DEFAULT_WIDTH, height: WINDOW_DEFAULT_HEIGHT, x: undefined, y: undefined },
   }
-  return { width: WINDOW_DEFAULT_WIDTH, height: WINDOW_DEFAULT_HEIGHT, x: undefined, y: undefined }
+  // Validation/parse logic lives in lib/windowState.js (unit-tested via node:test);
+  // here we only do the file read. Absent file / malformed JSON → defaults.
+  try {
+    return parseWindowState(fs.readFileSync(getWindowStatePath(), 'utf8'), opts)
+  } catch {
+    return { ...opts.defaults }
+  }
 }
 
 function saveWindowState(win) {

@@ -129,10 +129,16 @@ jobs:
 
       # --publish always  →  electron-builder uploads installer + latest*.yml
       # to the GitHub Release automatically, enabling electron-updater auto-update.
+      # Wrapped in scripts/retry.sh (3 attempts, linear backoff): electron-builder
+      # downloads helper binaries from GitHub's CDN at build time; a transient 504
+      # there failed the v0.12.4 Linux job. Retrying absorbs CDN blips so a release
+      # doesn't need a manual re-run. shell: bash so the wrapper is portable to the
+      # Windows runner.
       - name: Package with electron-builder (AppImage)
         if: matrix.platform == 'linux'
         working-directory: desktop
-        run: npx electron-builder --linux AppImage --publish always
+        shell: bash
+        run: bash ../scripts/retry.sh 3 -- npx electron-builder --linux AppImage --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -140,7 +146,8 @@ jobs:
       - name: Package with electron-builder (deb)
         if: matrix.platform == 'linux-deb'
         working-directory: desktop
-        run: npx electron-builder --linux deb --publish always
+        shell: bash
+        run: bash ../scripts/retry.sh 3 -- npx electron-builder --linux deb --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -148,7 +155,8 @@ jobs:
       - name: Package with electron-builder (win/mac)
         if: "!startsWith(matrix.platform, 'linux')"
         working-directory: desktop
-        run: npx electron-builder --${{ matrix.platform }} --publish always
+        shell: bash
+        run: bash ../scripts/retry.sh 3 -- npx electron-builder --${{ matrix.platform }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"

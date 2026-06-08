@@ -78,6 +78,7 @@ Each case: preconditions → steps → expected.
 | LC-4 | Backend port fallback | 8765 busy at launch → app picks a free port, health polls it | 🧪 | manual |
 | LC-5 | Backend auto-restart on crash | Kill backend while running → app respawns it (≤5/60s), recovers | ⏳ | planned (electron E2E) |
 | LC-6 | Health endpoint | `GET /api/health` → 200, `{status, version}` | ✅ | `test_*` health |
+| LC-7 | Window size/position persists across restarts | valid saved bounds restored; corrupt/too-small → safe defaults | ✅ | `desktop/lib/windowState.test.js` |
 
 ### 4.2 Auto-update & tray
 
@@ -110,7 +111,8 @@ Each case: preconditions → steps → expected.
 | KB-1 | Create KB | New KB appears in list | ✅ | `e2e/kb.spec.ts` |
 | KB-2 | Delete KB | KB + files removed | ✅ | `e2e/kb.spec.ts` |
 | KB-3 | Upload via native picker | `dialog:openFile` → `{canceled, filePaths}` handled | ✅ guard | `e2e/electron/ipc.spec.ts` |
-| KB-4 | Upload via drag-and-drop | File ingests | ⏳ | planned |
+| KB-4 | Upload file → ingestion (browser input path) | file uploads + ingests, no error | ✅ | `e2e/real-backend/attach-upload.spec.ts` |
+| KB-4b | True drag-and-drop gesture | dropped file ingests | 🧪 | manual (gesture only; upload path covered by KB-4) |
 | KB-5 | Ingestion status polling | Long ingest → progress, no premature timeout (15-min budget) | ✅ | `pollStatus.test.ts` |
 | KB-6 | Text PDF ingestion | Fast PyMuPDF path; searchable text | ✅ | `test_ingestion_pdf_text.py` |
 | KB-7 | Scanned/image PDF (OCR) | Delegates to docnest OCR; recovers text | ✅ `@slow` | `test_docnest_adapter.py` |
@@ -140,7 +142,7 @@ Each case: preconditions → steps → expected.
 | CH-5 | **Chat with a KB selected** | hybrid retrieval; degrades to FTS5 if numpy/faiss absent (packaged) | ✅ | `test_chat.py`, `test_chat_api_integration.py` |
 | CH-6 | **Web search grounding** | model uses live web results; never "no real-time access" | ✅ prompt guard | `test_chat.py::*web_grounding*` + 🧪 real-model smoke |
 | CH-7 | Wikipedia source | fetches article, answers from it | 🧪 | manual |
-| CH-8 | Attach file as context | extracted text used in answer | ⏳ | planned |
+| CH-8 | Attach file as context | extracted text used in answer | ✅ | `e2e/real-backend/attach-upload.spec.ts` |
 | CH-9 | Sources panel | KB citations + web sources render | ✅ | `e2e/chat.spec.ts` |
 | CH-10 | Export session as markdown | downloads transcript | ✅ | `test_chat.py` |
 | CH-11 | Streaming transient → self-heal | connection blip retries; clear message on hard fail | ✅ | `sseStream.test.ts` |
@@ -222,3 +224,9 @@ These can't be fully automated (need a real LLM/network or human judgement):
 - **Packaged-only paths** — anything gated on bundled deps or `window.knovex`.
 - **Auto-update + NSIS** — only observable after a full build+install.
 - **Web search quality** — DuckDuckGo (free) is non-deterministic; thin snippets.
+- **Packaging download flakiness** — electron-builder fetches helper binaries from
+  GitHub's CDN at build time; a transient 504 can fail a release job. Mitigated by
+  `scripts/retry.sh` (3 attempts, linear backoff) wrapping each package step.
+  If it still fails, re-run the failed job (`gh run rerun <id> --failed`).
+- **System tray** (minimise/restore/quit) — not reliably automatable via Playwright;
+  remains a manual smoke. Window-state *logic* is unit-tested (LC-7).
