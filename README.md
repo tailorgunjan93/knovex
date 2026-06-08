@@ -6,6 +6,7 @@
 
 *Secure · Fast · Reliable · Cost-Effective*
 
+[![Download](https://img.shields.io/badge/⬇_Download-Windows_·_macOS_·_Linux-DDA76A.svg)](https://tailorgunjan93.github.io/knovex/)
 [![Version](https://img.shields.io/badge/version-0.12.7-blue.svg)](CHANGELOG.md)
 [![CI](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml/badge.svg)](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
@@ -18,6 +19,12 @@
 Drop in your documents, ask questions, summarise, search the web, and turn complex topics into animated, gamified learning sessions — all running on your machine.
 
 Built on top of [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid RAG engine with SQLite FTS5 + dense ANN + section-graph retrieval.
+
+### 📥 [Download Knovex](https://tailorgunjan93.github.io/knovex/)
+
+Get the latest installer for **Windows · macOS · Linux** from the download page:
+**https://tailorgunjan93.github.io/knovex/**
+(Already installed? The app auto-updates — or grab any version from [Releases](https://github.com/tailorgunjan93/knovex/releases).)
 
 </div>
 
@@ -312,6 +319,10 @@ knovex/
 ---
 
 ## Getting Started
+
+> **Just want to use Knovex?** No build required — download the installer for your OS
+> from **https://tailorgunjan93.github.io/knovex/**. The steps below are for running
+> from source / development.
 
 ### Prerequisites
 
