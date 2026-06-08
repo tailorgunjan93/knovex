@@ -81,8 +81,16 @@ class LLMProvider(ABC):
                         Pass a StubLLMClient in tests for offline / fast tests.
         """
         if llm_client is None:
-            from backend.adapters.llm_client import LiteLLMAdapter
-            llm_client = LiteLLMAdapter()
+            # KNOVEX_FAKE_LLM=1 → deterministic offline client for end-to-end tests
+            # against the REAL backend (no API keys, no network). Production never
+            # sets this flag. See adapters.llm_client.FakeLLMClient.
+            import os
+            if os.environ.get("KNOVEX_FAKE_LLM"):
+                from backend.adapters.llm_client import FakeLLMClient
+                llm_client = FakeLLMClient()
+            else:
+                from backend.adapters.llm_client import LiteLLMAdapter
+                llm_client = LiteLLMAdapter()
         self._llm_client = llm_client
 
     # ------------------------------------------------------------------

@@ -5,7 +5,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:learn":     "playwright test e2e/learn.spec.ts",
     "test:e2e:progress":  "playwright test e2e/progress.spec.ts",
-    "test:e2e:electron":  "playwright test --config playwright.config.electron.ts"
+    "test:e2e:electron":  "playwright test --config playwright.config.electron.ts",
+    "test:e2e:real":      "playwright test --config playwright.config.realbackend.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"

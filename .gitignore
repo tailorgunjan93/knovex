@@ -70,3 +70,9 @@ logs/
 # OS
 .DS_Store
 Desktop.ini
+
+# E2E (Playwright) — generated, never source
+.e2e-tmp/
+test-results/
+playwright-report/
+playwright-report-electron/

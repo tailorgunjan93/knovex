@@ -113,3 +113,58 @@ jobs:
         # fixed 30s poll budget failed post-update cold starts; now deadline-based
         # + process-liveness-aware (lib/backendHealth.js).
         run: node --test
+
+  # ─── Real-backend streaming E2E ──────────────────────────────────────────────
+  # The definitive guard for the "network error" class: drives the REAL frontend
+  # against the REAL FastAPI backend over real HTTP/SSE, with a deterministic fake
+  # LLM (KNOVEX_FAKE_LLM=1 — no secrets). Mocked-API E2E can't drop a connection;
+  # this can. See docs/rca/2026-06-07-network-error.md.
+  e2e-realbackend:
+    name: E2E — real-backend streaming
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Playwright (root) + frontend deps
+        # root package-lock.json is not committed → use install, not ci.
+        run: |
+          npm install --no-save @playwright/test@^1.60.0
+          npm --prefix frontend ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run real-backend streaming E2E
+        run: npx playwright test --config playwright.config.realbackend.ts
+        env:
+          KNOVEX_PYTHON: python
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-realbackend-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
