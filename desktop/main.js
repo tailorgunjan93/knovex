@@ -28,6 +28,7 @@ const { autoUpdater } = require('electron-updater')
 const { waitForHealthy } = require('./lib/backendHealth')
 const { parseWindowState } = require('./lib/windowState')
 const { createThrottledCheck } = require('./lib/updateThrottle')
+const { isExternalUrl } = require('./lib/externalLink')
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -374,10 +375,24 @@ function createMainWindow() {
     }
   })
 
-  // Open external links in system browser
+  // Open external links in the system browser.
+  // (1) window.open / target="_blank" → handled here.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  // (2) Ordinary in-page <a href="https://…"> clicks (e.g. a link inside a chat
+  // answer or a source citation) would otherwise navigate the app window itself
+  // to the website — and the frameless app shell has no Back button, leaving the
+  // window stuck. Intercept external navigations and hand them to the OS browser
+  // instead. Hash routes / same-origin navigation are left untouched.
+  // (isExternalUrl is unit-tested in lib/externalLink.test.js.)
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isExternalUrl(url, mainWindow.webContents.getURL())) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
   })
 
   // ── DevTools toggle — Ctrl+Shift+I or F12 (works in both dev and prod) ──────

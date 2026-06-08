@@ -11,6 +11,22 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.6] — 2026-06-08
+
+### Fixed
+
+- **Clicking a web-source / in-answer link navigated the app window and got stuck
+  (no way back).** The app shell has no browser chrome, so a plain
+  `<a href="https://…">` click (e.g. a link inside a chat answer) replaced the
+  React app with the website and left no Back button. External links now open in
+  the **system browser** instead: a `will-navigate` guard in the main process
+  sends any external http(s) / mailto / tel navigation to the OS browser and
+  cancels the in-window navigation (hash routes / same-origin are untouched).
+  Logic is unit-tested (`desktop/lib/externalLink.test.js`). This complements the
+  existing `target="_blank"` handler (`setWindowOpenHandler`).
+
+---
+
 ## [0.12.5] — 2026-06-08
 
 ### Added

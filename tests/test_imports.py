@@ -19,7 +19,7 @@ from __future__ import annotations
 
 def test_config_imports():
     from backend.core.config import settings  # noqa: F401
-    assert settings.version == "0.12.5"
+    assert settings.version == "0.12.6"
     assert settings.backend_port == 8765
 
 
