@@ -213,6 +213,30 @@ class TestChatStreaming:
         assert len(errors) == 1
         assert "error" in errors[0]
 
+    async def test_stream_with_kb_survives_missing_dense_stack(self, monkeypatch):
+        """
+        Regression for the chat "network error" (RCA 2026-06-08): chatting with a
+        KB selected triggers hybrid retrieval, which imports the optional dense
+        stack (numpy/faiss). The packaged app excludes those, so the import raised
+        ModuleNotFoundError mid-stream → dropped connection. With the import moved
+        inside the FTS5-fallback try, a KB chat must still stream to a clean `done`.
+        """
+        import sys
+        monkeypatch.setitem(sys.modules, "backend.adapters.vector_index", None)
+        client, _ = await _make_client(tokens=["Answer ", "from ", "FTS."])
+        async with client:
+            sid = await _create_session(client, kb_id="kb1")
+            r = await client.post(f"/api/chat/sessions/{sid}/stream", json={
+                "message": "what is in my docs?", "use_web_search": False,
+                "kb_ids": ["kb1"], "attached_context": None,
+            })
+        assert r.status_code == 200
+        events = _parse_sse(r.text)
+        errors = [e for e in events if e["type"] == "error"]
+        done = [e for e in events if e["type"] == "done"]
+        assert not errors, f"KB chat emitted an error event: {errors}"
+        assert len(done) == 1, "KB chat with missing dense stack did not reach done"
+
     async def test_stream_persists_assistant_message(self):
         client, _ = await _make_client(tokens=["Answer."])
         async with client:

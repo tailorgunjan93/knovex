@@ -376,7 +376,6 @@ class ChatService:
         """
         import asyncio as _asyncio
 
-        from backend.adapters.vector_index import kb_vector_index
         from backend.core.config import settings as app_cfg
 
         # ── FTS5 results (async) ────────────────────────────────────────────
@@ -384,6 +383,14 @@ class ChatService:
 
         # ── Dense results via FAISS ANN ─────────────────────────────────────
         try:
+            # The dense stack (numpy + faiss, via vector_index) is OPTIONAL and is
+            # deliberately NOT bundled in the packaged app. Import it INSIDE this
+            # try so a missing numpy/faiss degrades to FTS5-only instead of raising
+            # ModuleNotFoundError. RCA 2026-06-08: this import previously sat above
+            # the try, so in the packaged app it raised mid-stream during a chat
+            # with a KB selected → the connection dropped → bare "network error".
+            from backend.adapters.vector_index import kb_vector_index
+
             # 1. Embed the query (blocking CPU work → thread pool)
             query_vec: list[float] = await _asyncio.get_event_loop().run_in_executor(
                 None, lambda: self._embedder.embed([query])[0]

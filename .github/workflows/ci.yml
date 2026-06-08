@@ -81,5 +81,35 @@ jobs:
       - name: TypeScript type-check
         run: npx tsc --noEmit
 
+      - name: Unit tests (vitest)
+        # Previously MISSING — the entire vitest suite never ran in CI, so a
+        # frontend regression could merge green. See RCA 2026-06-07 (lesson 9).
+        run: npm test
+
       - name: Build
         run: npm run build
+
+  # ─── Desktop (Electron main process) ─────────────────────────────────────────
+  desktop:
+    name: Desktop — main-process unit tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Unit tests (node:test)
+        # Guards the Electron main-process logic that unit/E2E layers couldn't
+        # see — e.g. the backend health-poll timeout. RCA 2026-06-08 (Bug A): a
+        # fixed 30s poll budget failed post-update cold starts; now deadline-based
+        # + process-liveness-aware (lib/backendHealth.js).
+        run: node --test
