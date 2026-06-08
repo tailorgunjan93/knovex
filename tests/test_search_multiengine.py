@@ -215,6 +215,7 @@ class TestAdapterContracts:
     @pytest.mark.asyncio
     async def test_wikipedia_sends_compliant_user_agent(self, monkeypatch):
         import httpx
+
         from backend.adapters import web_search as ws
         cap: dict = {}
         monkeypatch.setattr(httpx, "AsyncClient", _fake_httpx(cap, 200, {"query": {"search": []}}))
