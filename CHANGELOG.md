@@ -11,6 +11,29 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.5] — 2026-06-08
+
+### Added
+
+- **Update check on window restore + a tray "Check for updates…" item.** The app
+  minimises to the tray on close, so the launch/4-hour auto-check could leave a
+  long-running instance unaware of a new release. Now **restoring the window from
+  the tray triggers a (throttled, ≤1 per 5 min) update check**, and the tray menu
+  has an explicit **"Check for updates…"** that checks immediately and reports the
+  result ("You're up to date" / the new version downloads / a clear error).
+  Throttle logic is unit-tested (`desktop/lib/updateThrottle.test.js`).
+
+### Reliability / CI (shipped from main)
+
+- **Window size/position persistence** hardened: validation extracted to a pure,
+  unit-tested module (`desktop/lib/windowState.js`) — corrupt/too-small saved
+  state now falls back to safe defaults instead of spawning an unusable window.
+- **Release packaging self-heals transient CDN failures**: each electron-builder
+  step retries (3×, backoff) so a GitHub-CDN blip while fetching build helpers no
+  longer fails a release (it did for v0.12.4's Linux job).
+- **Expanded real-backend E2E**: chat attach-file and KB upload→ingestion now run
+  against the real backend in CI.
+
 ## [0.12.4] — 2026-06-08
 
 ### Fixed

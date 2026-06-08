@@ -27,6 +27,7 @@ const fs = require('fs')
 const { autoUpdater } = require('electron-updater')
 const { waitForHealthy } = require('./lib/backendHealth')
 const { parseWindowState } = require('./lib/windowState')
+const { createThrottledCheck } = require('./lib/updateThrottle')
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -58,6 +59,12 @@ let backendStderrLines = []   // rolling buffer — last 30 lines for error dial
 // shutdown (app quit, update/uninstall) so we never fight the installer — the
 // NSIS script also kills the app first, so a respawn can't re-lock files.
 let backendShuttingDown = false       // set true when WE kill it on purpose
+
+// ── Auto-updater triggers ──────────────────────────────────────────────────────
+// Throttled check funnel, wired in setupAutoUpdater(); no-op until then (and in
+// dev). Called by the 4h interval, window restore-from-tray, and the tray menu.
+let triggerUpdateCheck = () => {}
+let manualUpdateCheck = false         // true while a user-initiated check is in flight
 const backendRestartTimes = []        // timestamps of recent auto-restarts
 const MAX_RESTARTS_PER_WINDOW = 5
 const RESTART_WINDOW_MS = 60_000
@@ -354,6 +361,10 @@ function createMainWindow() {
   mainWindow.on('resize', () => saveWindowState(mainWindow))
   mainWindow.on('move',   () => saveWindowState(mainWindow))
 
+  // Restoring the window from the tray re-checks for updates (throttled). Closes
+  // the gap where the X only hides to tray, so "reopen" never looked for updates.
+  mainWindow.on('show', () => triggerUpdateCheck())
+
   // Minimise to tray on close (not quit)
   mainWindow.on('close', (event) => {
     saveWindowState(mainWindow)   // always save before hiding/quitting
@@ -417,6 +428,11 @@ function createTray() {
     },
     { type: 'separator' },
     {
+      label: 'Check for updates…',
+      click: () => { triggerUpdateCheck({ force: true }) },
+    },
+    { type: 'separator' },
+    {
       label: 'Quit',
       click: () => {
         app.isQuitting = true
@@ -448,6 +464,16 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-not-available', () => {
     console.log('[updater] already up to date')
+    if (manualUpdateCheck) {
+      manualUpdateCheck = false
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Knovex',
+        message: 'You’re up to date',
+        detail: `Knovex v${app.getVersion()} is the latest version.`,
+        buttons: ['OK'],
+      })
+    }
   })
 
   autoUpdater.on('download-progress', (progress) => {
@@ -459,6 +485,7 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[updater] update downloaded:', info.version)
+    manualUpdateCheck = false
     // Notify the renderer — it will show a "Restart to update" banner
     mainWindow?.webContents.send('app:update-downloaded', {
       version:      info.version,
@@ -468,19 +495,36 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     console.error('[updater] error:', err.message)
+    if (manualUpdateCheck) {
+      manualUpdateCheck = false
+      dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Knovex — Update check failed',
+        message: 'Couldn’t check for updates right now.',
+        detail: err.message,
+        buttons: ['OK'],
+      })
+    }
   })
 
-  const checkNow = () =>
+  const checkNow = ({ manual }) => {
+    manualUpdateCheck = manual
     autoUpdater.checkForUpdates().catch((err) => {
       console.error('[updater] checkForUpdates failed:', err.message)
     })
+  }
 
-  // Check on startup (after a short delay so the app finishes loading first)
-  setTimeout(checkNow, 8_000)
+  // Single throttled funnel for ALL triggers (startup, 4h interval, window
+  // restore-from-tray, manual menu) so restoring the window can't hammer GitHub.
+  // RCA/UX: closing the window only hides to tray, so "reopen" never re-checked —
+  // now a restore (window 'show') triggers a throttled check.
+  triggerUpdateCheck = createThrottledCheck({ check: checkNow, minIntervalMs: 5 * 60 * 1_000 })
 
-  // Re-check every 4 hours so updates are found even if the app runs for days
-  // without a restart (same cadence as Chrome / Slack / VS Code).
-  setInterval(checkNow, 4 * 60 * 60 * 1_000)
+  // Check on startup (after a short delay so the app finishes loading first).
+  setTimeout(() => triggerUpdateCheck({ force: true }), 8_000)
+
+  // Re-check every 4 hours so updates are found even if the app runs for days.
+  setInterval(() => triggerUpdateCheck(), 4 * 60 * 60 * 1_000)
 }
 
 // ─── Update helpers ───────────────────────────────────────────────────────────
