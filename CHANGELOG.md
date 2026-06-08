@@ -11,6 +11,40 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.3] — 2026-06-08
+
+Two production bugs found in the packaged app's logs. RCA:
+`docs/rca/2026-06-07-network-error.md`.
+
+### Fixed
+
+- **"Backend did not start after 60 attempts" on launch — false negative.** The
+  backend *was* starting (the log showed `Uvicorn running on 127.0.0.1:8765`), but
+  Electron's health poll used a fixed **60-attempt / ~30s** budget. On the first
+  launch after an update, Windows Defender scans the freshly-written ~188 MB exe +
+  ~120 `_internal` DLLs, so the PyInstaller cold start exceeds 30s and polling gave
+  up before the backend bound the port. **Fix:** the poll is now a generous
+  wall-clock **deadline (120s)** instead of an attempt count, and **fails fast if
+  the backend process exits** (a real crash surfaces immediately). Extracted to
+  `desktop/lib/backendHealth.js` with unit tests (`node --test`), now run in CI.
+- **Chat "network error" when a knowledge base is selected.** `_retrieve_hybrid`
+  imported the optional dense stack (`numpy`/`faiss` via `vector_index`) **outside**
+  its FTS5-fallback `try`. The packaged app deliberately excludes those, so the
+  import raised `ModuleNotFoundError` **mid-stream** → the connection dropped → bare
+  "network error". **Fix:** the import now sits inside the `try`, so a missing dense
+  stack degrades to FTS5-only instead of crashing. Tests:
+  `test_chat.py::test_retrieve_hybrid_falls_back_to_fts5_when_dense_stack_missing`,
+  `test_chat_api_integration.py::test_stream_with_kb_survives_missing_dense_stack`.
+
+### CI / process
+
+- Frontend **`vitest`** suite now runs in CI (it previously never did — `tsc`+`build`
+  only).
+- New **desktop** CI job runs the Electron main-process unit tests (`node --test`).
+- Added the restored reader tests + the resilient-SSE tests to the gate.
+
+---
+
 ## [0.12.2] — 2026-06-07
 
 Resilience: stop transient blips from showing a bare "network error".

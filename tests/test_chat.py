@@ -452,6 +452,35 @@ async def test_stream_assistant_message_carries_sources():
 
 
 # ---------------------------------------------------------------------------
+# Hybrid retrieval — graceful degradation when the dense stack is absent
+# ---------------------------------------------------------------------------
+
+async def test_retrieve_hybrid_falls_back_to_fts5_when_dense_stack_missing(monkeypatch):
+    """
+    RCA 2026-06-08: the packaged app does NOT bundle numpy/faiss, so importing
+    `backend.adapters.vector_index` raises ModuleNotFoundError. That import used
+    to sit OUTSIDE the FTS5-fallback try in `_retrieve_hybrid`, so a chat with a
+    KB selected crashed mid-stream → the renderer showed a bare "network error".
+
+    Forcing the import to fail must now degrade to FTS5-only, never raise.
+    """
+    import sys
+
+    fts_row = {
+        "id": "c1", "content": "hello world", "section": "S", "page": 1,
+        "file_id": "f1", "kb_id": "kb1", "file_name": "doc.txt",
+    }
+    svc, _ = _make_svc(backend_rows=[fts_row])
+
+    # Simulate the packaged app: importing the dense stack fails.
+    monkeypatch.setitem(sys.modules, "backend.adapters.vector_index", None)
+
+    # Must not raise — degrades to FTS5.
+    rows = await svc._retrieve_hybrid(["kb1"], "hello")
+    assert isinstance(rows, list)
+
+
+# ---------------------------------------------------------------------------
 # ChatSession domain rules
 # ---------------------------------------------------------------------------
 

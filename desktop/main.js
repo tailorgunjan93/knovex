@@ -25,6 +25,7 @@ const { spawn } = require('child_process')
 const http = require('http')
 const fs = require('fs')
 const { autoUpdater } = require('electron-updater')
+const { waitForHealthy } = require('./lib/backendHealth')
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -242,34 +243,33 @@ function maybeRestartBackend(code) {
 
 // ─── Health polling ───────────────────────────────────────────────────────────
 
-function waitForBackend(retries = 60, interval = 500) {
-  return new Promise((resolve, reject) => {
-    let attempts = 0
+// One health probe: resolves true on HTTP 200, false on any error/timeout.
+function probeHealthOnce() {
+  return new Promise((resolve) => {
+    const req = http.get(HEALTH_URL, (res) => {
+      res.resume()                       // drain so the socket can be reused
+      resolve(res.statusCode === 200)
+    })
+    req.on('error', () => resolve(false))
+    req.setTimeout(3000, () => { req.destroy(); resolve(false) })
+  })
+}
 
-    const check = () => {
-      attempts++
-      const req = http.get(HEALTH_URL, (res) => {
-        if (res.statusCode === 200) {
-          backendReady = true
-          console.log('[backend] ready after', attempts, 'attempts')
-          resolve()
-        } else {
-          retry()
-        }
-      })
-      req.on('error', retry)
-      req.setTimeout(3000, () => { req.destroy(); retry() })
-    }
-
-    const retry = () => {
-      if (attempts >= retries) {
-        reject(new Error(`Backend did not start after ${retries} attempts`))
-      } else {
-        setTimeout(check, interval)
-      }
-    }
-
-    check()
+// Poll the backend until healthy, with a generous wall-clock deadline (NOT a
+// fixed attempt count) so a slow post-update cold start — Defender scanning the
+// freshly-written exe + ~120 _internal DLLs can exceed 30s — isn't mistaken for
+// a failure. Fails fast if the backend PROCESS exits (a real crash). The poll
+// logic is unit-tested in lib/backendHealth.test.js. See RCA 2026-06-08.
+function waitForBackend() {
+  return waitForHealthy({
+    probe: probeHealthOnce,
+    isProcessAlive: () =>
+      !!backendProcess && backendProcess.exitCode === null && !backendProcess.killed,
+    timeoutMs: 120_000,
+    intervalMs: 500,
+  }).then(() => {
+    backendReady = true
+    console.log('[backend] ready')
   })
 }
 
