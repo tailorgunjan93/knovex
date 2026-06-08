@@ -141,3 +141,102 @@ class TestBlendedSearch:
         svc = SearchService(adapter=stub)
         resp = await svc.search_blended("q", engines=[], num_results=5)
         assert [r.url for r in resp.results] == ["u/a"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Adapter contract guards (Serper request shape; Wikipedia User-Agent → 403 fix)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _FakeResp:
+    def __init__(self, status: int, data: dict) -> None:
+        self.status_code = status
+        self._d = data
+        self.text = ""
+
+    def json(self) -> dict:
+        return self._d
+
+    def raise_for_status(self) -> None:
+        pass
+
+
+def _fake_httpx(capture: dict, status: int = 200, data: dict | None = None):
+    """Return a fake httpx.AsyncClient class that records the outgoing request."""
+    class _Client:
+        def __init__(self, *a, **k) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            capture.update(method="POST", url=url, json=json, headers=headers or {})
+            return _FakeResp(status, data or {})
+
+        async def get(self, url, params=None, headers=None):
+            capture.update(method="GET", url=url, params=params, headers=headers or {})
+            return _FakeResp(status, data or {})
+
+    return _Client
+
+
+class TestAdapterContracts:
+    @pytest.mark.asyncio
+    async def test_serper_posts_correct_request_and_parses_organic(self, monkeypatch):
+        from backend.adapters import web_search as ws
+        cap: dict = {}
+        monkeypatch.setattr(
+            ws.httpx if hasattr(ws, "httpx") else __import__("httpx"),
+            "AsyncClient",
+            _fake_httpx(cap, 200, {"organic": [
+                {"title": "T1", "link": "https://a.com", "snippet": "s1"},
+                {"title": "T2", "link": "https://b.com", "snippet": "s2"},
+            ]}),
+        )
+        results = await ws.SerperAdapter().search("news today", num_results=5, api_key="KEY123")
+        assert cap["url"] == "https://google.serper.dev/search"
+        assert cap["headers"].get("X-API-KEY") == "KEY123"
+        assert cap["json"]["q"] == "news today"
+        assert [r.url for r in results] == ["https://a.com", "https://b.com"]
+
+    @pytest.mark.asyncio
+    async def test_serper_without_key_returns_empty(self):
+        from backend.adapters import web_search as ws
+        assert await ws.SerperAdapter().search("q", api_key="") == []
+
+    def test_wikipedia_user_agent_includes_contact_url(self):
+        # Wikimedia 403s a bare product UA; it MUST carry a contact URL.
+        from backend.adapters.web_search import _WIKIPEDIA_UA
+        assert "http" in _WIKIPEDIA_UA.lower(), _WIKIPEDIA_UA
+
+    @pytest.mark.asyncio
+    async def test_wikipedia_sends_compliant_user_agent(self, monkeypatch):
+        import httpx
+        from backend.adapters import web_search as ws
+        cap: dict = {}
+        monkeypatch.setattr(httpx, "AsyncClient", _fake_httpx(cap, 200, {"query": {"search": []}}))
+        await ws.WikipediaAdapter().search("circular motion", num_results=3)
+        assert "http" in cap["headers"].get("User-Agent", "").lower()
+
+
+@pytest.mark.slow
+class TestWikipediaLive:
+    @pytest.mark.asyncio
+    async def test_real_wikipedia_search_returns_results(self):
+        """
+        Live guard for the 403 fix: the real MediaWiki API must accept our UA.
+        Skips (not fails) if the runner can't reach Wikipedia, so a transient
+        network / IP rate-limit never flakes CI — the deterministic UA unit test
+        (test_wikipedia_sends_compliant_user_agent) is the real gate.
+        """
+        from backend.adapters.web_search import WikipediaAdapter
+        try:
+            results = await WikipediaAdapter().search("circular motion", num_results=3)
+        except Exception as exc:  # noqa: BLE001
+            pytest.skip(f"Wikipedia API unreachable from this runner: {exc}")
+        if not results:
+            pytest.skip("Wikipedia returned no results from this runner (network/IP)")
+        assert len(results) >= 1
