@@ -11,6 +11,32 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.7] — 2026-06-08
+
+### Fixed
+
+- **Web search degraded by the Wikipedia engine returning 403 every time.** The
+  Wikipedia adapter sent a bare User-Agent (`Knovex/1.0 (knowledge base)`), which
+  Wikimedia's API policy rejects with **403** — so an enabled engine silently
+  contributed nothing to blended results (verified live: old UA → 403, UA with a
+  contact URL → 200). The User-Agent now includes a contact URL. Guards:
+  `test_search_multiengine.py::test_wikipedia_sends_compliant_user_agent` +
+  `test_wikipedia_user_agent_includes_contact_url` (+ a `@slow` live check).
+
+### Changed
+
+- **Per-engine web-search visibility.** Blended search now logs each engine's
+  result count (`engine=serper returned N`), so it's immediately clear which
+  engine actually contributed — a 0 for a configured engine points at *that*
+  engine, not "search is broken". Added Serper request-shape contract tests.
+
+### Notes
+
+- Investigated a report that **Serper wasn't working**: it is — correctly wired,
+  keyed, decrypted, and persisted (round-trip verified), with no errors in logs.
+  The visible problem was the Wikipedia 403 above plus the lack of per-engine
+  visibility.
+
 ## [0.12.6] — 2026-06-08
 
 ### Fixed

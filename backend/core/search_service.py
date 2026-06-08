@@ -81,7 +81,12 @@ class SearchService:
         async def _one(engine: str, api_key: str) -> list[SearchResult]:
             try:
                 adapter = self._adapter or get_search_adapter(engine)
-                return await adapter.search(query=query, num_results=num_results, api_key=api_key)
+                hits = await adapter.search(query=query, num_results=num_results, api_key=api_key)
+                # Per-engine visibility: makes it obvious which engine actually
+                # contributed (a 0 for a configured engine points at THAT engine,
+                # not "search is broken").
+                logger.info("Blended search: engine=%s returned %d result(s)", engine, len(hits))
+                return hits
             except Exception as exc:   # noqa: BLE001 — one bad engine must not break the blend
                 logger.warning("Blended search: engine=%s failed: %s", engine, exc)
                 return []

@@ -212,6 +212,12 @@ class BraveAdapter(IWebSearchAdapter):
 # Wikipedia — free encyclopedic search (MediaWiki API, no key)
 # ---------------------------------------------------------------------------
 
+# Wikimedia's API policy 403s requests whose User-Agent lacks contact info.
+# A bare product token ("Knovex/1.0 (knowledge base)") is rejected — it must
+# include a contact URL/email. RCA 2026-06-08 (verified: old UA → 403, this → 200).
+_WIKIPEDIA_UA = "Knovex/1.0 (+https://github.com/tailorgunjan93/knovex; AI knowledge base)"
+
+
 class WikipediaAdapter(IWebSearchAdapter):
     """Free encyclopedic grounding via the MediaWiki search API (no key)."""
 
@@ -235,7 +241,7 @@ class WikipediaAdapter(IWebSearchAdapter):
                         "action": "query", "list": "search", "srsearch": query,
                         "format": "json", "srlimit": num_results,
                     },
-                    headers={"User-Agent": "Knovex/1.0 (knowledge base)"},
+                    headers={"User-Agent": _WIKIPEDIA_UA},
                 )
                 if resp.status_code != 200:
                     logger.warning("Wikipedia returned %d", resp.status_code)
