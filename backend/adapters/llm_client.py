@@ -197,3 +197,115 @@ class StubLLMClient(ILLMClient):
         logger.debug("StubLLMClient.stream called (offline mode)")
         for word in self._reply.split():
             yield word + " "
+
+
+# ---------------------------------------------------------------------------
+# Fake client for END-TO-END tests against the REAL backend (no secrets)
+# ---------------------------------------------------------------------------
+
+# Valid canned payloads per Learn format. `complete()` returns the one matching
+# the format detected in the prompt, so the real /learn streaming path produces
+# parseable content end-to-end without any LLM key.
+_CANNED_BY_FORMAT: dict[str, dict] = {
+    "animated": {
+        "topic": "Test topic",
+        "title": "Test Animation",
+        "scenes": [
+            {
+                "narration": "A deterministic scene for end-to-end testing.",
+                "duration": 5,
+                "elements": [
+                    {"type": "text", "text": "E2E animated scene", "x": 50, "y": 20, "size": "title"},
+                    {"type": "circle", "x": 50, "y": 55, "r": 18},
+                    {"type": "arrow", "x1": 68, "y1": 55, "x2": 50, "y2": 55, "enter": "draw"},
+                ],
+            }
+        ],
+    },
+    "guided": {
+        "topic": "Test topic",
+        "intro": "A deterministic guided lesson for end-to-end testing.",
+        "total_steps": 1,
+        "steps": [
+            {
+                "step": 1,
+                "title": "Step one",
+                "explanation": "Explanation text.",
+                "example": "An example.",
+                "analogy": "Like a test fixture.",
+                "key_insight": "The key insight.",
+                "check_in": "Did this make sense?",
+                "quiz_check": None,
+            }
+        ],
+    },
+    "quiz": {
+        "questions": [
+            {"q": "2 + 2 = ?", "options": ["3", "4", "5", "6"], "correct": 1,
+             "explanation": "Basic arithmetic."}
+        ]
+    },
+    "flashcard": {"cards": [{"front": "Q?", "back": "A.", "hint": "hint"}]},
+    "mindmap": {"root": "Root", "branches": [{"label": "Branch", "children": []}]},
+    "timeline": {"events": [{"year": "2026", "title": "Event", "description": "Desc."}]},
+}
+
+
+class FakeLLMClient(ILLMClient):
+    """
+    Deterministic, offline LLM client for END-TO-END tests that exercise the REAL
+    FastAPI backend (no API keys, no network).
+
+    Activated by setting ``KNOVEX_FAKE_LLM=1`` — `LLMProvider.__init__` then uses
+    this client instead of `LiteLLMAdapter`, so every provider becomes
+    deterministic. This lets the real `/api/learn` and `/api/chat` streaming paths
+    run through the actual app + frontend in CI, catching mid-stream-drop bugs that
+    mocked-API E2E (page.route) structurally cannot. See
+    `docs/rca/2026-06-07-network-error.md`.
+
+    `complete()` returns VALID canned JSON for whichever Learn format the prompt
+    describes; `stream()` yields a short canned reply (chat + text formats).
+    """
+
+    @staticmethod
+    def _detect_format(text: str) -> str:
+        t = text.lower()
+        if "scenes" in t and "narration" in t:
+            return "animated"
+        if "key_insight" in t and "steps" in t:
+            return "guided"
+        if "questions" in t and "options" in t:
+            return "quiz"
+        if "cards" in t and "front" in t:
+            return "flashcard"
+        if "branches" in t and ("root" in t or "mindmap" in t):
+            return "mindmap"
+        if "events" in t and "timeline" in t:
+            return "timeline"
+        return "text"
+
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        temperature: float,
+        **provider_kwargs: Any,
+    ) -> str:
+        import json as _json
+
+        text = " ".join(m.get("content", "") for m in messages)
+        fmt = self._detect_format(text)
+        canned = _CANNED_BY_FORMAT.get(fmt)
+        if canned is not None:
+            return _json.dumps(canned)
+        return "This is a deterministic fake completion for end-to-end testing."
+
+    async def stream(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        temperature: float,
+        **provider_kwargs: Any,
+    ) -> AsyncGenerator[str, None]:
+        for tok in ["Hello", "! ", "This ", "is ", "a ", "deterministic ", "reply."]:
+            yield tok
