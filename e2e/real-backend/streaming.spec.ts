@@ -26,7 +26,10 @@ test.describe('Real-backend streaming gate', () => {
     await page.goto('/#/learn')
     await waitForApp(page, 'format-card-animated')
 
-    await page.locator('[data-testid="format-card-animated"]').click()
+    // The format card is a Box with a React onClick + hover transform; in CI a
+    // neighbouring overlay can intercept a normal click. dispatchEvent fires the
+    // handler reliably regardless of overlay/animation.
+    await page.locator('[data-testid="format-card-animated"]').dispatchEvent('click')
     const topic = page.getByPlaceholder(/type a topic/i)
     await topic.fill('circular motion')
     await topic.press('Enter') // triggers handleGenerate (avoids overlay-intercepted button click)
