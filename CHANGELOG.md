@@ -11,6 +11,28 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.4] — 2026-06-08
+
+### Fixed
+
+- **Web search "grounded" but the model refused with "I don't have real-time
+  access".** The search worked (real headline sources were injected into the
+  prompt), but the system prompt never told the model to use them — so
+  `gpt-oss`-class models fell back to their trained refusal. `_build_messages` now
+  adds a **web grounding directive** whenever web results are present (treat as
+  current/real-time, answer from them, never claim lack of access). Guard:
+  `test_chat.py::test_build_messages_adds_web_grounding_directive_when_web_context_present`.
+  RCA: `docs/rca/2026-06-08-web-search-not-grounding.md`.
+
+### QA / process
+
+- Added **`docs/qa/test-plan.md`** — the master test plan and manual-tester-style
+  test-case catalog for every feature, with automation mapping, the mandatory
+  test-first → full-regression → ship process, and a per-release regression
+  checklist.
+
+---
+
 ## [0.12.3] — 2026-06-08
 
 Two production bugs found in the packaged app's logs. RCA:

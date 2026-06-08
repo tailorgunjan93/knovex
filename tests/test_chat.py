@@ -481,6 +481,42 @@ async def test_retrieve_hybrid_falls_back_to_fts5_when_dense_stack_missing(monke
 
 
 # ---------------------------------------------------------------------------
+# Web-search grounding — the system prompt must tell the model to USE web results
+# ---------------------------------------------------------------------------
+
+def test_build_messages_adds_web_grounding_directive_when_web_context_present():
+    """
+    RCA 2026-06-08 (web search): with web results in the prompt, gpt-oss still
+    replied "I don't have real-time access". The system prompt must explicitly
+    instruct the model to use the live results and not claim lack of access.
+    """
+    svc, _ = _make_svc()
+    session = ChatSession(id="s1", title="t")
+    msgs = svc._build_messages(
+        session=session, history=[], user_message="today's news",
+        kb_context="", web_context="[WEB] NPR\nhttps://npr.org\nHeadline text",
+        kb_ids=None, attached_context=None,
+    )
+    system = next(m for m in msgs if m["role"] == "system")["content"].lower()
+    assert "live web results" in system
+    assert "real-time" in system
+    assert "never reply that you lack real-time access" in system
+    # The results themselves ride in the final user message.
+    assert "Web Search Results" in msgs[-1]["content"]
+
+
+def test_build_messages_omits_web_directive_without_web_context():
+    svc, _ = _make_svc()
+    session = ChatSession(id="s1", title="t")
+    msgs = svc._build_messages(
+        session=session, history=[], user_message="hi",
+        kb_context="", web_context="", kb_ids=None, attached_context=None,
+    )
+    system = next(m for m in msgs if m["role"] == "system")["content"].lower()
+    assert "live web results" not in system
+
+
+# ---------------------------------------------------------------------------
 # ChatSession domain rules
 # ---------------------------------------------------------------------------
 

@@ -490,9 +490,27 @@ class ChatService:
             if kb_ids else ""
         )
 
+        # When live web results are attached, the model MUST use them. Without this
+        # directive, models (e.g. gpt-oss) fall back to their trained "I don't have
+        # real-time access" refusal even though fresh headlines are right there in
+        # the prompt. RCA 2026-06-08 (web search). The results are real-time —
+        # retrieved seconds ago — so the model has no excuse to claim otherwise.
+        web_note = (
+            "\n\n━━━ LIVE WEB RESULTS ━━━\n"
+            "Real-time web search results are provided below under \"Web Search "
+            "Results\". They were retrieved just now and reflect CURRENT information. "
+            "Answer the question directly from them: extract the specific facts, "
+            "headlines, or figures requested and attribute them to their source "
+            "(title / URL). You DO have access to this real-time information — never "
+            "reply that you lack real-time access or cannot browse the web. If the "
+            "results don't fully cover the question, answer what they do cover and "
+            "state precisely what's missing."
+            if web_context else ""
+        )
+
         system_content = f"""You are Knovex — an empathetic, intelligent AI assistant. \
 You don't just answer questions; you understand the human behind every message and respond \
-with genuine care, warmth, and precision.{kb_note}
+with genuine care, warmth, and precision.{kb_note}{web_note}
 
 ━━━ EMOTIONAL AWARENESS ━━━
 Read the emotional tone of every message and adapt your style accordingly:
