@@ -31,6 +31,7 @@ from collections.abc import AsyncGenerator
 from backend.core.domain.chat import ChatMessage, ChatSession
 from backend.core.llm_service import LLMService
 from backend.core.providers.base import ProviderCredentials
+from backend.core.research_service import ResearchService
 from backend.core.search_service import SearchService
 from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.chat_repository import IChatRepository
@@ -71,6 +72,8 @@ class ChatService:
         self._llm_svc    = llm_svc
         self._search_svc = search_svc
         self._embedder   = embedder
+        # Research Brief workflow ("agentic mode") reuses the same LLM + search.
+        self._research_svc = ResearchService(llm_svc, search_svc)
 
     # ==================================================================
     # Session management
@@ -138,6 +141,7 @@ class ChatService:
         use_web_search: bool = False,
         force_news: bool = False,
         fetch_url: str | None = None,
+        research: bool = False,
         search_engine: str = "duckduckgo",
         search_api_key: str = "",
         search_engines: list[tuple[str, str]] | None = None,
@@ -162,6 +166,16 @@ class ChatService:
             content=user_message,
         )
         await self._chat_repo.save_message(user_msg)
+
+        # ── Research Brief mode (/research) ────────────────────────────────
+        # An app-orchestrated workflow: plan → parallel search → cited synthesis.
+        # It short-circuits the normal KB/web/LLM flow; we accumulate the brief
+        # text + sources for persistence and translate typed events to SSE.
+        if research:
+            async for ev in self._stream_research(session, user_message, provider, model,
+                                                   credentials, search_engines):
+                yield ev
+            return
 
         # ── 2. KB retrieval (FTS5) ─────────────────────────────────────────
         kb_sources: list[dict] = []
@@ -270,6 +284,40 @@ class ChatService:
         session.touch()
         await self._chat_repo.save(session)
 
+        yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg.id})}\n\n"
+
+    async def _stream_research(
+        self,
+        session: ChatSession,
+        topic: str,
+        provider: str,
+        model: str,
+        credentials: ProviderCredentials,
+        search_engines: list[tuple[str, str]] | None,
+    ) -> AsyncGenerator[str, None]:
+        """Run the Research Brief workflow, forward its events as SSE, persist."""
+        full_reply = ""
+        web_sources: list[dict] = []
+        async for ev in self._research_svc.stream_brief(
+            topic=topic, provider=provider, model=model,
+            credentials=credentials, search_engines=search_engines,
+        ):
+            if ev["type"] == "token":
+                full_reply += ev["content"]
+            elif ev["type"] == "web_sources":
+                web_sources = ev["sources"]
+            yield f"data: {json.dumps(ev)}\n\n"
+
+        assistant_msg = ChatMessage(
+            id=str(uuid.uuid4()),
+            session_id=session.id,
+            role="assistant",
+            content=full_reply,
+            web_sources=web_sources,
+        )
+        await self._chat_repo.save_message(assistant_msg)
+        session.touch()
+        await self._chat_repo.save(session)
         yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg.id})}\n\n"
 
     # ==================================================================

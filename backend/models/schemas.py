@@ -395,6 +395,7 @@ class ChatStreamRequest(BaseModel):
     use_web_search: bool = False
     force_news: bool = False                  # /news command — route the web search to news
     fetch_url: str | None = None              # /summarize <url> — fetch this page into context
+    research: bool = False                    # /research — run the Research Brief workflow
     kb_ids: list[str] | None = None          # override session kb_id; search across multiple KBs
     attached_context: str | None = None      # extracted text from file(s) attached by the user
 

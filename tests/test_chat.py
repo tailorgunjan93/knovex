@@ -489,6 +489,38 @@ async def test_fetch_url_failure_does_not_crash_stream(monkeypatch):
     assert any('"type": "done"' in e for e in events)   # stream completes cleanly
 
 
+async def test_research_mode_delegates_and_persists_brief():
+    """`/research` (research=True) delegates to the Research workflow: emits
+    web_sources + brief tokens, then persists the assistant message + done."""
+    chat_repo = InMemoryChatRepository()
+    llm = MagicMock()
+    llm.complete = AsyncMock(return_value='["q1", "q2"]')
+
+    async def _stream(*a, **k):
+        for t in ["Brief ", "body."]:
+            yield t
+
+    llm.stream = _stream
+    search = SearchService(adapter=StubWebSearchAdapter(results=[SearchResult("A", "https://a", "s")]))
+    svc = ChatService(
+        chat_repo=chat_repo, file_repo=MagicMock(), backend=_make_backend(None),
+        llm_svc=llm, search_svc=search,
+    )
+    session = await svc.create_session()
+    events = await _drain(svc.stream_message(
+        session_id=session.id, user_message="quantum computing",
+        provider="openai", model="gpt-4o-mini", credentials=_make_creds(),
+        research=True,
+    ))
+    assert any('"type": "web_sources"' in e for e in events)
+    assert any('"type": "token"' in e for e in events)
+    assert any('"type": "done"' in e for e in events)
+
+    msgs = await svc.get_messages(session.id)
+    assistant = [m for m in msgs if m.role == "assistant"]
+    assert assistant and "Brief body." in assistant[0].content
+
+
 async def test_stream_emits_error_event_on_llm_failure():
     """LLM error is caught and emitted as an error SSE event; stream doesn't crash."""
     svc, _ = _make_svc()

@@ -44,6 +44,7 @@ def _make_chat_svc(
     fail: bool = False,
     search_results: list[SearchResult] | None = None,
     backend_rows: list[dict] | None = None,
+    plan: str | None = None,
 ) -> tuple[ChatService, InMemoryChatRepository]:
     chat_repo = InMemoryChatRepository()
     llm_svc = MagicMock()
@@ -60,6 +61,8 @@ def _make_chat_svc(
                 yield t
 
     llm_svc.stream = _stream_gen
+    # /research planning uses complete() — return a JSON sub-question array.
+    llm_svc.complete = AsyncMock(return_value=plan or '["q1", "q2"]')
 
     search_svc = SearchService(adapter=StubWebSearchAdapter(results=search_results or []))
 
@@ -87,7 +90,8 @@ def _mock_settings_svc() -> MagicMock:
         ),
         search=MagicMock(engine="duckduckgo", api_key=""),
     ))
-    svc.enabled_search_engines = AsyncMock(return_value=["duckduckgo"])
+    # Correct shape: list of (engine_id, api_key) tuples (search_blended unpacks).
+    svc.enabled_search_engines = AsyncMock(return_value=[("duckduckgo", "")])
     return svc
 
 
@@ -180,6 +184,30 @@ class TestChatStreaming:
         assert len(tokens) >= 1
         assert len(done) == 1
         assert "message_id" in done[0]
+
+    async def test_research_streams_sources_brief_then_done(self):
+        """/research over the REAL HTTP boundary: web_sources + brief tokens, one done."""
+        client, repo = await _make_client(
+            tokens=["Brief ", "body."],
+            plan='["q1", "q2"]',
+            search_results=[SearchResult("A", "https://a", "snippet")],
+        )
+        async with client:
+            sid = await _create_session(client)
+            r = await client.post(f"/api/chat/sessions/{sid}/stream", json={
+                "message": "quantum computing", "research": True,
+            })
+            assert r.status_code == 200
+            events = _parse_sse(r.text)
+            msgs = await repo.find_messages(sid)
+        types = [e["type"] for e in events]
+        assert "web_sources" in types
+        assert "token" in types
+        assert types[-1] == "done"
+        assert [e for e in events if e["type"] == "error"] == []
+        # The brief was persisted as the assistant turn.
+        assistant = [m for m in msgs if m.role == "assistant"]
+        assert assistant and "Brief body." in assistant[0].content
 
     async def test_stream_missing_session_returns_clean_404_not_dropped_connection(self):
         """

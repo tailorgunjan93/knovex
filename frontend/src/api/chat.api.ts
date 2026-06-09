@@ -53,6 +53,8 @@ export type SSEEvent =
   | { type: 'token'; content: string }
   | { type: 'sources'; sources: SourceCitation[] }
   | { type: 'web_sources'; sources: WebSource[] }
+  | { type: 'status'; stage: string; detail?: string }       // /research progress
+  | { type: 'subquestions'; items: string[] }                // /research plan
   | { type: 'done'; message_id: string }
   | { type: 'error'; error: string }
 
@@ -123,6 +125,7 @@ export const chatApi = {
     attachedContext?: string,
     forceNews = false,
     fetchUrl?: string,
+    research = false,
   ): Promise<void> {
     await streamSSE({
       url: `${API_BASE}/api/chat/sessions/${sessionId}/stream`,
@@ -134,6 +137,7 @@ export const chatApi = {
           use_web_search: useWebSearch,
           force_news: forceNews,
           fetch_url: fetchUrl ?? null,
+          research,
           kb_ids: kbIds && kbIds.length > 0 ? kbIds : null,
           attached_context: attachedContext ?? null,
         }),
