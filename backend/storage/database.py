@@ -114,6 +114,26 @@ CREATE TABLE IF NOT EXISTS flashcard_reviews (
     FOREIGN KEY (session_id) REFERENCES learn_sessions(id) ON DELETE CASCADE
 );
 
+-- Spaced-repetition schedule: ONE row per (flashcard session, card index).
+-- Drives the "review due" return loop (GET /api/learn/reviews/due). The
+-- composite PK makes review upserts trivial; the next_review_at index makes the
+-- "what's due now" query fast. ON DELETE CASCADE cleans up with its session.
+CREATE TABLE IF NOT EXISTS srs_schedules (
+    session_id          TEXT    NOT NULL,
+    card_index          INTEGER NOT NULL,
+    ease_factor         REAL    NOT NULL DEFAULT 2.5,
+    interval_days       INTEGER NOT NULL DEFAULT 0,
+    repetitions         INTEGER NOT NULL DEFAULT 0,
+    lapses              INTEGER NOT NULL DEFAULT 0,
+    last_rating         TEXT,
+    next_review_at      TEXT    NOT NULL,
+    last_reviewed_at    TEXT    NOT NULL,
+    PRIMARY KEY (session_id, card_index),
+    FOREIGN KEY (session_id) REFERENCES learn_sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_srs_due ON srs_schedules(next_review_at);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key         TEXT    PRIMARY KEY,
     value       TEXT    NOT NULL,

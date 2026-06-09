@@ -11,6 +11,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- **Spaced-repetition "Review" loop (retention).** Flashcard ratings now persist a
+  per-card schedule (lightweight **SM-2**: ease factor + interval + repetitions, in a
+  new `srs_schedules` table) instead of being thrown away. Cards resurface when due:
+  a dedicated **"Review" item in the sidebar shows a live due-count badge** (the return
+  hook), and the Review page runs the due queue (front → reveal → grade again/hard/good/easy),
+  rescheduling each card. New endpoints `GET /api/learn/reviews/due` and `…/count`.
+  Stale schedules (deleted session/card) self-heal rather than erroring. Tests:
+  `test_srs.py` (SM-2 maths), `test_srs_repository.py` (real-SQLite upsert / due query /
+  FK cascade), due-loop API integration, and `ReviewPage.test.tsx`.
+  **Behaviour change:** first-review intervals are now Anki-like graduating intervals
+  (good → 1 day, easy → 4 days) and compound on success, replacing the old flat
+  again/hard/good/easy → 1/2/4/7-day reset.
+
 - **Settings → "Test" button per search engine.** Probes one engine with a neutral
   query using its saved (decrypted) key and reports the live outcome — result count,
   latency, and a sample title, or a clear error (no key / reachable-but-zero-results).

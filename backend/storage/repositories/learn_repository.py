@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from backend.core.domain.learn import LearnSession, UserStats
+from backend.core.domain.srs import CardSchedule
 from backend.storage.repositories.base import SQLiteRepository
 
 logger = logging.getLogger("knovex.repos.learn")
@@ -56,6 +57,28 @@ class ILearnRepository(SQLiteRepository[LearnSession]):
     @abstractmethod
     async def find_sessions(self, limit: int = 50) -> list[LearnSession]:
         """Return recent sessions ordered by created_at DESC."""
+        ...
+
+    # ── Spaced-repetition schedules (the "review due" loop) ──────────────────
+
+    @abstractmethod
+    async def get_card_schedule(self, session_id: str, card_index: int) -> CardSchedule | None:
+        """Return the schedule for one card, or None if never reviewed."""
+        ...
+
+    @abstractmethod
+    async def save_card_schedule(self, schedule: CardSchedule) -> None:
+        """Upsert one card's schedule (PK = session_id + card_index)."""
+        ...
+
+    @abstractmethod
+    async def find_due_schedules(self, now: datetime, limit: int = 50) -> list[CardSchedule]:
+        """Schedules due at or before *now*, soonest-due first."""
+        ...
+
+    @abstractmethod
+    async def count_due_schedules(self, now: datetime) -> int:
+        """How many cards are due at or before *now* (for the badge)."""
         ...
 
 
@@ -158,6 +181,59 @@ class SQLiteLearnRepository(ILearnRepository):
             ),
         )
 
+    # ── SRS schedules ─────────────────────────────────────────────────────
+
+    async def get_card_schedule(self, session_id: str, card_index: int) -> CardSchedule | None:
+        row = await self._backend.fetchone(
+            "SELECT * FROM srs_schedules WHERE session_id = ? AND card_index = ?",
+            (session_id, card_index),
+        )
+        return _row_to_schedule(row) if row else None
+
+    async def save_card_schedule(self, schedule: CardSchedule) -> None:
+        await self._backend.execute(
+            """
+            INSERT INTO srs_schedules
+                (session_id, card_index, ease_factor, interval_days, repetitions,
+                 lapses, last_rating, next_review_at, last_reviewed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id, card_index) DO UPDATE SET
+                ease_factor      = excluded.ease_factor,
+                interval_days    = excluded.interval_days,
+                repetitions      = excluded.repetitions,
+                lapses           = excluded.lapses,
+                last_rating      = excluded.last_rating,
+                next_review_at   = excluded.next_review_at,
+                last_reviewed_at = excluded.last_reviewed_at
+            """,
+            (
+                schedule.session_id,
+                schedule.card_index,
+                schedule.ease_factor,
+                schedule.interval_days,
+                schedule.repetitions,
+                schedule.lapses,
+                schedule.last_rating,
+                _fmt_dt(schedule.next_review_at),
+                _fmt_dt(schedule.last_reviewed_at),
+            ),
+        )
+
+    async def find_due_schedules(self, now: datetime, limit: int = 50) -> list[CardSchedule]:
+        rows = await self._backend.fetchall(
+            "SELECT * FROM srs_schedules WHERE next_review_at <= ? "
+            "ORDER BY next_review_at ASC LIMIT ?",
+            (_fmt_dt(now), limit),
+        )
+        return [_row_to_schedule(r) for r in rows]
+
+    async def count_due_schedules(self, now: datetime) -> int:
+        row = await self._backend.fetchone(
+            "SELECT COUNT(*) AS n FROM srs_schedules WHERE next_review_at <= ?",
+            (_fmt_dt(now),),
+        )
+        return int(row["n"]) if row else 0
+
 
 # ---------------------------------------------------------------------------
 # Row → entity converters
@@ -181,6 +257,20 @@ def _row_to_session(row: dict[str, Any]) -> LearnSession:
         content=content,
         created_at=_parse_dt(row.get("created_at")) or datetime.utcnow(),
         completed_at=_parse_dt(row.get("completed_at")),
+    )
+
+
+def _row_to_schedule(row: dict[str, Any]) -> CardSchedule:
+    return CardSchedule(
+        session_id=row["session_id"],
+        card_index=int(row["card_index"]),
+        ease_factor=float(row.get("ease_factor") or 2.5),
+        interval_days=int(row.get("interval_days") or 0),
+        repetitions=int(row.get("repetitions") or 0),
+        lapses=int(row.get("lapses") or 0),
+        last_rating=row.get("last_rating"),
+        next_review_at=_parse_dt(row.get("next_review_at")),
+        last_reviewed_at=_parse_dt(row.get("last_reviewed_at")),
     )
 
 

@@ -40,6 +40,7 @@ from backend.core.domain.learn import (
     LearnSession,
     UserStats,
 )
+from backend.core.domain.srs import GRADES, apply_grade, new_schedule
 from backend.core.llm_service import LLMService
 from backend.core.providers.base import ProviderCredentials
 from backend.storage.repositories.base import EntityNotFoundError
@@ -372,22 +373,30 @@ class LearnService:
         card_index: int,
         ease_rating: str,
     ) -> dict:
-        """Rate a flashcard (again/hard/good/easy) for spaced repetition."""
-        from datetime import timedelta
-
+        """
+        Rate a flashcard (again/hard/good/easy) and PERSIST its spaced-repetition
+        schedule (lightweight SM-2). The card then resurfaces in the "review due"
+        loop when its next_review_at arrives. Awards XP for good/easy.
+        """
         session = await self.get_session(session_id)
         if session.format != "flashcard":
             raise ValueError("Session is not a flashcard deck")
-
-        # Spaced repetition intervals by ease
-        intervals = {"again": 1, "hard": 2, "good": 4, "easy": 7}
-        if ease_rating not in intervals:
+        if ease_rating not in GRADES:
             raise ValueError(
-                f"Invalid ease_rating '{ease_rating}'. "
-                f"Must be one of: {', '.join(intervals)}"
+                f"Invalid ease_rating '{ease_rating}'. Must be one of: {', '.join(GRADES)}"
             )
-        days = intervals[ease_rating]
-        next_review = datetime.utcnow() + timedelta(days=days)
+
+        cards = (session.content or {}).get("cards", [])
+        if card_index < 0 or card_index >= len(cards):
+            raise ValueError(f"Card index {card_index} out of range")
+
+        now = datetime.utcnow()
+        schedule = (
+            await self._repo.get_card_schedule(session_id, card_index)
+            or new_schedule(session_id, card_index)
+        )
+        updated = apply_grade(schedule, ease_rating, now)
+        await self._repo.save_card_schedule(updated)
 
         if ease_rating in ("good", "easy"):
             stats = await self._repo.get_user_stats()
@@ -398,8 +407,55 @@ class LearnService:
         return {
             "card_index": card_index,
             "ease_rating": ease_rating,
-            "next_review_at": next_review.isoformat(),
+            "next_review_at": updated.next_review_at.isoformat(),
+            "interval_days": updated.interval_days,
         }
+
+    # ==================================================================
+    # Spaced-repetition "review due" loop
+    # ==================================================================
+
+    async def count_due_reviews(self, now: datetime | None = None) -> int:
+        """Number of flashcards due for review at or before *now* (badge count)."""
+        return await self._repo.count_due_schedules(now or datetime.utcnow())
+
+    async def get_due_reviews(self, limit: int = 20, now: datetime | None = None) -> list[dict]:
+        """
+        Due flashcards with their content, soonest-due first. Each item carries
+        the card text plus its origin so the Review screen can render it and post
+        the next rating back to the right (session_id, card_index).
+
+        A schedule whose session or card has since been deleted is skipped — the
+        loop self-heals rather than 500-ing on stale rows.
+        """
+        now = now or datetime.utcnow()
+        schedules = await self._repo.find_due_schedules(now, limit)
+
+        session_cache: dict[str, LearnSession | None] = {}
+        out: list[dict] = []
+        for sch in schedules:
+            session = session_cache.get(sch.session_id, ...)
+            if session is ...:
+                session = await self._repo.find_by_id(sch.session_id)
+                session_cache[sch.session_id] = session
+            if session is None or not session.content:
+                continue
+            cards = session.content.get("cards", [])
+            if sch.card_index < 0 or sch.card_index >= len(cards):
+                continue
+            card = cards[sch.card_index]
+            out.append({
+                "session_id": sch.session_id,
+                "card_index": sch.card_index,
+                "topic": session.topic,
+                "front": card.get("front", ""),
+                "back": card.get("back", ""),
+                "hint": card.get("hint", ""),
+                "due_at": sch.next_review_at.isoformat() if sch.next_review_at else None,
+                "interval_days": sch.interval_days,
+                "repetitions": sch.repetitions,
+            })
+        return out
 
     # ==================================================================
     # XP / gamification helpers

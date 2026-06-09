@@ -19,6 +19,7 @@ import AppShell from './components/Layout/AppShell'
 import KnowledgeBasePage from './pages/KnowledgeBase'
 import ChatPage from './pages/Chat'
 import LearnPage from './pages/Learn'
+import ReviewPage from './pages/Review'
 import SettingsPage from './pages/Settings'
 import ReaderPage from './pages/Reader'
 import ProgressPage from './pages/Progress'
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/chat/*"     element={<ChatPage />} />
           <Route path="/reader/*"   element={<ReaderPage />} />
           <Route path="/learn/*"    element={<LearnPage />} />
+          <Route path="/review/*"   element={<ReviewPage />} />
           <Route path="/progress/*" element={<ProgressPage />} />
           <Route path="/settings"   element={<SettingsPage />} />
           {/* Catch-all: redirect unknown routes to Library instead of blank screen */}
