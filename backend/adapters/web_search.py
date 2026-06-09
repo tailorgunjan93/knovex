@@ -59,6 +59,28 @@ class IWebSearchAdapter(ABC):
 
 
 # ---------------------------------------------------------------------------
+# News-intent heuristic (shared by every adapter)
+# ---------------------------------------------------------------------------
+
+# A generic web search for "today's news" returns news-site HOMEPAGES (thin meta
+# snippets) and word-matched junk (e.g. a song titled "Give Me All Your Luvin'").
+# News-intent queries are routed to each engine's news-appropriate source instead
+# (Serper /news, DuckDuckGo .news(), Wikipedia ITN feed) — real, dated articles.
+# RCA 2026-06-08.
+_NEWS_HINTS = (
+    "news", "headline", "headlines", "breaking", "today", "tonight",
+    "latest", "current events", "what happened", "right now", "happening",
+    "this morning", "this week", "recent",
+)
+
+
+def is_news_query(query: str) -> bool:
+    """Heuristic: does the user want current news/headlines (vs. evergreen info)?"""
+    q = query.lower()
+    return any(hint in q for hint in _NEWS_HINTS)
+
+
+# ---------------------------------------------------------------------------
 # DuckDuckGo — free, no key required
 # ---------------------------------------------------------------------------
 
@@ -87,15 +109,30 @@ class DuckDuckGoAdapter(IWebSearchAdapter):
             logger.warning("ddgs / duckduckgo-search not installed — returning empty results")
             return []
 
+        news = is_news_query(query)
         try:
             results: list[SearchResult] = []
             with DDGS() as ddgs:
-                for hit in ddgs.text(query, max_results=num_results):
-                    results.append(SearchResult(
-                        title=hit.get("title", ""),
-                        url=hit.get("href", ""),
-                        snippet=hit.get("body", ""),
-                    ))
+                if news:
+                    # .news() returns dated articles (keys: title, url, body,
+                    # source, date) — not homepages. RCA 2026-06-08 parity fix.
+                    for hit in ddgs.news(query, max_results=num_results):
+                        snippet = hit.get("body", "")
+                        meta = ", ".join(x for x in (hit.get("source", ""), hit.get("date", "")) if x)
+                        if meta:
+                            snippet = f"{snippet} ({meta})" if snippet else meta
+                        results.append(SearchResult(
+                            title=hit.get("title", ""),
+                            url=hit.get("url", ""),      # news uses "url"; text uses "href"
+                            snippet=snippet,
+                        ))
+                else:
+                    for hit in ddgs.text(query, max_results=num_results):
+                        results.append(SearchResult(
+                            title=hit.get("title", ""),
+                            url=hit.get("href", ""),
+                            snippet=hit.get("body", ""),
+                        ))
             return results
         except Exception as exc:
             logger.warning("DuckDuckGo search failed: %s", exc)
@@ -105,23 +142,6 @@ class DuckDuckGoAdapter(IWebSearchAdapter):
 # ---------------------------------------------------------------------------
 # Serper — paid Google Search (api.serper.dev)
 # ---------------------------------------------------------------------------
-
-# A generic web search for "today's news" returns news-site HOMEPAGES (thin meta
-# snippets) and word-matched junk (e.g. a song titled "Give Me All Your Luvin'").
-# News-intent queries are routed to Serper's /news endpoint instead, which returns
-# actual recent ARTICLES with title, source and date. RCA 2026-06-08.
-_NEWS_HINTS = (
-    "news", "headline", "headlines", "breaking", "today", "tonight",
-    "latest", "current events", "what happened", "right now", "happening",
-    "this morning", "this week", "recent",
-)
-
-
-def is_news_query(query: str) -> bool:
-    """Heuristic: does the user want current news/headlines (vs. evergreen info)?"""
-    q = query.lower()
-    return any(hint in q for hint in _NEWS_HINTS)
-
 
 class SerperAdapter(IWebSearchAdapter):
     """
@@ -244,9 +264,17 @@ _WIKIPEDIA_UA = "Knovex/1.0 (+https://github.com/tailorgunjan93/knovex; AI knowl
 
 
 class WikipediaAdapter(IWebSearchAdapter):
-    """Free encyclopedic grounding via the MediaWiki search API (no key)."""
+    """
+    Free encyclopedic grounding via the MediaWiki search API (no key).
+
+    News-intent queries route to the REST "featured feed" In-the-news (ITN)
+    items — Wikipedia's own curated current headlines — rather than encyclopedic
+    articles about the *concept* of news. Falls back to encyclopedic search when
+    the feed is unavailable, so behaviour never degrades below today's.
+    """
 
     _API = "https://en.wikipedia.org/w/api.php"
+    _FEED = "https://en.wikipedia.org/api/rest_v1/feed/featured/{y}/{m}/{d}"
 
     async def search(
         self,
@@ -255,6 +283,46 @@ class WikipediaAdapter(IWebSearchAdapter):
         api_key: str = "",
         base_url: str = "",
     ) -> list[SearchResult]:
+        if is_news_query(query):
+            news = await self._news(num_results)
+            if news:
+                return news
+            # Feed unavailable → fall through to encyclopedic grounding.
+        return await self._encyclopedic(query, num_results)
+
+    async def _news(self, num_results: int) -> list[SearchResult]:
+        """In-the-news (ITN) items from the dated REST featured feed."""
+        import re
+        from datetime import UTC, datetime
+
+        import httpx
+        now = datetime.now(UTC)
+        url = self._FEED.format(y=now.year, m=f"{now.month:02d}", d=f"{now.day:02d}")
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, headers={"User-Agent": _WIKIPEDIA_UA})
+                if resp.status_code != 200:
+                    logger.warning("Wikipedia feed returned %d", resp.status_code)
+                    return []
+                data = resp.json()
+        except Exception as exc:
+            logger.warning("Wikipedia news feed failed: %s", exc)
+            return []
+
+        out: list[SearchResult] = []
+        for item in (data.get("news") or [])[:num_results]:
+            story = re.sub(r"<[^>]+>", "", item.get("story", "")).strip()
+            links = item.get("links") or []
+            first = links[0] if links else {}
+            title = ((first.get("titles") or {}).get("normalized")
+                     or first.get("title") or (story[:80] if story else "In the news"))
+            page = (((first.get("content_urls") or {}).get("desktop") or {}).get("page")
+                    or f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}")
+            out.append(SearchResult(title=title, url=page, snippet=story))
+        return out
+
+    async def _encyclopedic(self, query: str, num_results: int) -> list[SearchResult]:
+        """Standard MediaWiki full-text search (the evergreen path)."""
         try:
             import re
 

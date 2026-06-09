@@ -9,6 +9,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Settings → "Test" button per search engine.** Probes one engine with a neutral
+  query using its saved (decrypted) key and reports the live outcome — result count,
+  latency, and a sample title, or a clear error (no key / reachable-but-zero-results).
+  The on-demand counterpart to blended-search per-engine logging (lesson #17): a
+  silently-failing engine in a blend no longer looks like "the whole feature is broken."
+  Endpoint `POST /api/settings/search/engines/{id}/test`. Tests: `test_search_api.py`
+  (success / no-key / zero-results / 404 / saved-key) + `SearchSettings.test.tsx`.
+
+### Changed
+
+- **News-intent routing now covers the free engines too** (parity with Serper `/news`).
+  DuckDuckGo news queries route to `.news()` (dated articles, not homepages); Wikipedia
+  news queries route to the REST "featured feed" **In-the-news** items (Wikipedia's own
+  curated headlines) and fall back to encyclopedic search if the feed is unavailable.
+  The `is_news_query` heuristic is now shared by all three adapters. Tests:
+  `TestDuckDuckGoNewsRouting`, `TestWikipediaNewsRouting`.
+
 ---
 
 ## [0.12.9] — 2026-06-09
