@@ -185,22 +185,44 @@ def _fake_httpx(capture: dict, status: int = 200, data: dict | None = None):
 
 class TestAdapterContracts:
     @pytest.mark.asyncio
-    async def test_serper_posts_correct_request_and_parses_organic(self, monkeypatch):
+    async def test_serper_evergreen_query_uses_search_endpoint(self, monkeypatch):
+        import httpx
+
         from backend.adapters import web_search as ws
         cap: dict = {}
-        monkeypatch.setattr(
-            ws.httpx if hasattr(ws, "httpx") else __import__("httpx"),
-            "AsyncClient",
-            _fake_httpx(cap, 200, {"organic": [
-                {"title": "T1", "link": "https://a.com", "snippet": "s1"},
-                {"title": "T2", "link": "https://b.com", "snippet": "s2"},
-            ]}),
-        )
-        results = await ws.SerperAdapter().search("news today", num_results=5, api_key="KEY123")
+        monkeypatch.setattr(httpx, "AsyncClient", _fake_httpx(cap, 200, {"organic": [
+            {"title": "T1", "link": "https://a.com", "snippet": "s1"},
+            {"title": "T2", "link": "https://b.com", "snippet": "s2"},
+        ]}))
+        results = await ws.SerperAdapter().search("python decorators tutorial", num_results=5, api_key="KEY123")
         assert cap["url"] == "https://google.serper.dev/search"
         assert cap["headers"].get("X-API-KEY") == "KEY123"
-        assert cap["json"]["q"] == "news today"
         assert [r.url for r in results] == ["https://a.com", "https://b.com"]
+
+    @pytest.mark.asyncio
+    async def test_serper_news_query_routes_to_news_endpoint_and_enriches_snippet(self, monkeypatch):
+        # RCA 2026-06-08: news queries must hit /news (real dated articles), not
+        # /search (homepage headers + word-matched junk).
+        import httpx
+
+        from backend.adapters import web_search as ws
+        cap: dict = {}
+        monkeypatch.setattr(httpx, "AsyncClient", _fake_httpx(cap, 200, {"news": [
+            {"title": "Quake hits", "link": "https://npr.org/x", "snippet": "A 7.8 quake…",
+             "source": "NPR", "date": "2 hours ago"},
+        ]}))
+        results = await ws.SerperAdapter().search("today's top news", num_results=5, api_key="K")
+        assert cap["url"] == "https://google.serper.dev/news"
+        assert results[0].url == "https://npr.org/x"
+        # source + date folded into the snippet for the model to ground on.
+        assert "NPR" in results[0].snippet and "2 hours ago" in results[0].snippet
+
+    def test_is_news_query_heuristic(self):
+        from backend.adapters.web_search import is_news_query
+        for yes in ["today's news", "latest headlines", "what happened today", "breaking news"]:
+            assert is_news_query(yes), yes
+        for no in ["python decorators", "history of rome", "how photosynthesis works"]:
+            assert not is_news_query(no), no
 
     @pytest.mark.asyncio
     async def test_serper_without_key_returns_empty(self):

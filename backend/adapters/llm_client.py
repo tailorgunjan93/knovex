@@ -215,11 +215,33 @@ _CANNED_BY_FORMAT: dict[str, dict] = {
                 "narration": "A deterministic scene for end-to-end testing.",
                 "duration": 5,
                 "elements": [
-                    {"type": "text", "text": "E2E animated scene", "x": 50, "y": 20, "size": "title"},
-                    {"type": "circle", "x": 50, "y": 55, "r": 18},
-                    {"type": "arrow", "x1": 68, "y1": 55, "x2": 50, "y2": 55, "enter": "draw"},
+                    {"type": "text", "text": "E2E animated scene", "x": 50, "y": 18, "size": "title", "color": "accent", "enter": "rise"},
+                    {"type": "circle", "label": "core", "x": 50, "y": 56, "r": 16, "color": "accent", "enter": "pop"},
+                    {"type": "arrow", "x1": 72, "y1": 56, "x2": 60, "y2": 56, "enter": "draw"},
                 ],
-            }
+            },
+            {
+                "narration": "The mechanism, built one piece at a time.",
+                "duration": 5,
+                "elements": [
+                    {"type": "text", "text": "How it connects", "x": 50, "y": 16, "size": "heading", "color": "primary", "enter": "fade"},
+                    {"type": "node", "label": "Input", "x": 24, "y": 52, "w": 22, "h": 14, "color": "blue", "enter": "rise"},
+                    {"type": "node", "label": "Process", "x": 50, "y": 52, "w": 22, "h": 14, "color": "accent", "enter": "pop"},
+                    {"type": "node", "label": "Output", "x": 76, "y": 52, "w": 22, "h": 14, "color": "green", "enter": "rise"},
+                    {"type": "arrow", "x1": 35, "y1": 52, "x2": 39, "y2": 52, "enter": "draw"},
+                    {"type": "arrow", "x1": 61, "y1": 52, "x2": 65, "y2": 52, "enter": "draw"},
+                ],
+            },
+            {
+                "narration": "Recap: the three key takeaways.",
+                "duration": 5,
+                "elements": [
+                    {"type": "text", "text": "Recap", "x": 50, "y": 18, "size": "title", "color": "accent", "enter": "pop"},
+                    {"type": "text", "text": "1 · input feeds the core", "x": 50, "y": 42, "size": "body", "color": "muted", "enter": "rise"},
+                    {"type": "text", "text": "2 · the core transforms it", "x": 50, "y": 56, "size": "body", "color": "muted", "enter": "rise"},
+                    {"type": "text", "text": "3 · output is the result", "x": 50, "y": 70, "size": "body", "color": "muted", "enter": "rise"},
+                ],
+            },
         ],
     },
     "guided": {

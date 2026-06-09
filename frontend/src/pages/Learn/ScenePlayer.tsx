@@ -7,6 +7,10 @@
  * center (50,50). Text/nodes/circles are percent-positioned HTML; arrows/lines
  * live in an SVG overlay sized to the stage's measured pixels (so angles and
  * arrowheads don't distort). Pure helpers are exported for unit testing.
+ *
+ * Visual language (v0.12.9): material depth (radial-gradient fills + soft
+ * shadows), a glow on the focal/accent element (staging), expo/spring easing,
+ * and a faint animated grid + vignette for a "studio" feel.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -22,6 +26,9 @@ import { Motion, usePrefersReducedMotion } from '@/lib/motion'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
 
+// Smooth deceleration ( easeOutExpo-ish) — feels deliberate, not snappy.
+const EXPO = [0.16, 1, 0.3, 1] as const
+
 /** Clamp a scene index into [0, total-1]; total 0 → 0. Pure (unit-tested). */
 export function clampScene(idx: number, total: number): number {
   if (total <= 0) return 0
@@ -34,7 +41,7 @@ export function sceneDurationMs(duration: number | undefined): number {
   return Math.min(8, Math.max(3, s)) * 1000
 }
 
-const TEXT_SIZE: Record<string, number> = { title: 30, heading: 21, body: 15, small: 12 }
+const TEXT_SIZE: Record<string, number> = { title: 32, heading: 22, body: 15, small: 12 }
 
 function resolveColor(theme: Theme, c?: string): string {
   switch (c) {
@@ -48,15 +55,19 @@ function resolveColor(theme: Theme, c?: string): string {
   }
 }
 
+function isAccentColor(c?: string): boolean {
+  return c === 'accent' || c === undefined || c === ''
+}
+
 // enter → framer-motion initial/animate for HTML elements
 function htmlEnter(enter: string | undefined, reduce: boolean) {
   if (reduce) return { initial: { opacity: 1 }, animate: { opacity: 1 } }
   switch (enter) {
-    case 'rise': return { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 } }
-    case 'pop':  return { initial: { opacity: 0, scale: 0.6 }, animate: { opacity: 1, scale: 1 } }
+    case 'rise': return { initial: { opacity: 0, y: 22 }, animate: { opacity: 1, y: 0 } }
+    case 'pop':  return { initial: { opacity: 0, scale: 0.4 }, animate: { opacity: 1, scale: 1 } }
     case 'fade':
     case 'draw':
-    default:     return { initial: { opacity: 0 }, animate: { opacity: 1 } }
+    default:     return { initial: { opacity: 0, scale: 0.94 }, animate: { opacity: 1, scale: 1 } }
   }
 }
 
@@ -66,6 +77,7 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
   onStepChange?: (idx: number) => void
 }) {
   const theme  = useTheme()
+  const isDark = theme.palette.mode === 'dark'
   const reduce = usePrefersReducedMotion()
   const scenes = content.scenes ?? []
   const total  = scenes.length
@@ -117,6 +129,8 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
 
   if (total === 0) return null
 
+  const gridColor = isDark ? 'rgba(245,241,234,0.05)' : 'rgba(20,18,14,0.05)'
+
   return (
     <Box>
       {/* ── Stage (16:9) ── */}
@@ -127,36 +141,59 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
           position: 'relative', width: '100%', aspectRatio: '16 / 9',
           borderRadius: 3, overflow: 'hidden',
           border: '1px solid', borderColor: 'divider',
-          background: theme.palette.mode === 'dark'
-            ? 'radial-gradient(120% 120% at 50% 0%, #1b1714 0%, #0f0d0b 100%)'
-            : 'radial-gradient(120% 120% at 50% 0%, #fbf7f0 0%, #f1ebe1 100%)',
+          boxShadow: isDark ? '0 24px 60px rgba(0,0,0,0.45)' : '0 18px 50px rgba(20,18,14,0.12)',
+          background: isDark
+            ? 'radial-gradient(130% 130% at 50% -5%, #221c17 0%, #14110e 48%, #0c0a08 100%)'
+            : 'radial-gradient(130% 130% at 50% -5%, #fdf9f3 0%, #f4eee3 55%, #ece4d6 100%)',
         }}
       >
+        {/* faint blueprint grid (depth) */}
+        <Box aria-hidden sx={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          backgroundImage: `linear-gradient(to right, ${gridColor} 1px, transparent 1px),
+                            linear-gradient(to bottom, ${gridColor} 1px, transparent 1px)`,
+          backgroundSize: '40px 40px',
+          maskImage: 'radial-gradient(ellipse at 50% 45%, #000 55%, transparent 88%)',
+          WebkitMaskImage: 'radial-gradient(ellipse at 50% 45%, #000 55%, transparent 88%)',
+        }} />
+        {/* vignette */}
+        <Box aria-hidden sx={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          boxShadow: `inset 0 0 120px ${isDark ? 'rgba(0,0,0,0.55)' : 'rgba(20,18,14,0.10)'}`,
+        }} />
+
         {/* SVG overlay for arrows + lines (measured px → no distortion) */}
         <svg
           width={size.w} height={size.h}
           style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
         >
           <defs>
-            <marker id="kx-arrow" markerWidth="10" markerHeight="10" refX="7" refY="3"
+            <marker id="kx-arrow" markerWidth="9" markerHeight="9" refX="6.5" refY="3"
               orient="auto" markerUnits="strokeWidth">
               <path d="M0,0 L7,3 L0,6 Z" fill={BRAND.copper} />
             </marker>
+            <filter id="kx-glow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.2" result="b" />
+              <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
           </defs>
           {lines.map((el, i) => {
-            const stroke = resolveColor(theme, el.color) || BRAND.copper
+            const isArrow = el.type === 'arrow'
+            const stroke = isArrow ? BRAND.copper : (resolveColor(theme, el.color) || BRAND.copper)
             const drawn = !reduce && el.enter === 'draw'
             return (
               <Motion.line
                 key={`${idx}-line-${i}`}
                 x1={px(el.x1 ?? 0)} y1={py(el.y1 ?? 0)}
                 x2={px(el.x2 ?? 0)} y2={py(el.y2 ?? 0)}
-                stroke={el.type === 'arrow' ? BRAND.copper : stroke}
-                strokeWidth={2}
-                markerEnd={el.type === 'arrow' ? 'url(#kx-arrow)' : undefined}
+                stroke={stroke}
+                strokeWidth={isArrow ? 2.6 : 2}
+                strokeLinecap="round"
+                filter={isArrow ? 'url(#kx-glow)' : undefined}
+                markerEnd={isArrow ? 'url(#kx-arrow)' : undefined}
                 initial={drawn ? { pathLength: 0, opacity: 0 } : { opacity: 0 }}
                 animate={drawn ? { pathLength: 1, opacity: 1 } : { opacity: 1 }}
-                transition={{ duration: reduce ? 0 : 0.6, delay: reduce ? 0 : 0.2 + i * 0.15 }}
+                transition={{ duration: reduce ? 0 : 0.7, delay: reduce ? 0 : 0.25 + i * 0.15, ease: EXPO }}
               />
             )
           })}
@@ -164,13 +201,13 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
 
         {/* HTML layer: text, nodes, circles (percent-positioned) */}
         {blocks.map((el, i) => (
-          <SceneBlock key={`${idx}-block-${i}`} el={el} index={i} reduce={reduce} theme={theme} />
+          <SceneBlock key={`${idx}-block-${i}`} el={el} index={i} reduce={reduce} theme={theme} isDark={isDark} />
         ))}
       </Box>
 
       {/* ── Narration subtitle ── */}
       <Box sx={{ mt: 1.5, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', px: 2 }}>
-        <Motion.div key={`narr-${idx}`} initial={{ opacity: 0, y: reduce ? 0 : 6 }} animate={{ opacity: 1, y: 0 }}>
+        <Motion.div key={`narr-${idx}`} initial={{ opacity: 0, y: reduce ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduce ? 0 : 0.5, ease: EXPO }}>
           <Typography sx={{ fontSize: 15, lineHeight: 1.55, textAlign: 'center', color: 'text.secondary', maxWidth: 720 }}>
             {scene?.narration}
           </Typography>
@@ -204,27 +241,51 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
   )
 }
 
-function SceneBlock({ el, index, reduce, theme }: {
+function SceneBlock({ el, index, reduce, theme, isDark }: {
   el: SceneElement
   index: number
   reduce: boolean
   theme: Theme
+  isDark: boolean
 }) {
   const { initial, animate } = htmlEnter(el.enter, reduce)
-  const transition = { duration: reduce ? 0 : 0.45, delay: reduce ? 0 : 0.15 + index * 0.22, ease: 'easeOut' as const }
+  const stagger = 0.15 + index * 0.2
+  const transition = reduce
+    ? { duration: 0 }
+    : el.enter === 'pop'
+      ? { type: 'spring' as const, stiffness: 300, damping: 17, delay: stagger }
+      : { duration: 0.6, delay: stagger, ease: EXPO }
   const color = resolveColor(theme, el.color)
+  const accent = isAccentColor(el.color)
   const common = {
     position: 'absolute' as const,
     left: `${el.x ?? 50}%`, top: `${el.y ?? 50}%`,
-    transform: 'translate(-50%, -50%)',
   }
+  // Framer drives `transform` for the enter animation, which would clobber a
+  // static translate(-50%,-50%) and leave elements top-left-anchored (off-centre).
+  // Compose the centring in front of Framer's generated transform instead.
+  const center = (_latest: object, generated: string) => `translate(-50%, -50%) ${generated}`
+
+  // Shared "material" for shapes: gradient fill + a soft shadow; the focal/accent
+  // element gets a glow so the eye goes there (staging).
+  const fill = `radial-gradient(circle at 35% 28%, ${alpha(color, isDark ? 0.34 : 0.22)}, ${alpha(color, isDark ? 0.10 : 0.06)})`
+  const shapeShadow = accent
+    ? `0 0 26px ${alpha(color, 0.42)}, 0 8px 22px ${alpha('#000', isDark ? 0.4 : 0.16)}`
+    : `0 8px 22px ${alpha('#000', isDark ? 0.34 : 0.12)}`
 
   if (el.type === 'text') {
     const fs = TEXT_SIZE[el.size ?? 'body'] ?? 15
+    const isTitle = el.size === 'title' || el.size === 'heading'
     return (
-      <Motion.div initial={initial} animate={animate} transition={transition}
-        style={{ ...common, textAlign: 'center', maxWidth: '80%' }}>
-        <Typography sx={{ fontSize: fs, fontWeight: (el.size === 'title' || el.size === 'heading') ? 700 : 500, color, lineHeight: 1.25 }}>
+      <Motion.div initial={initial} animate={animate} transition={transition} transformTemplate={center}
+        style={{ ...common, textAlign: 'center', maxWidth: '82%' }}>
+        <Typography sx={{
+          fontSize: fs,
+          fontWeight: isTitle ? 800 : 500,
+          letterSpacing: isTitle ? '-0.01em' : 0,
+          color, lineHeight: 1.22,
+          textShadow: accent && isTitle ? `0 0 22px ${alpha(color, 0.5)}` : 'none',
+        }}>
           {el.text}
         </Typography>
       </Motion.div>
@@ -234,9 +295,9 @@ function SceneBlock({ el, index, reduce, theme }: {
   if (el.type === 'circle') {
     const d = `${(el.r ?? 10) * 2}%`
     return (
-      <Motion.div initial={initial} animate={animate} transition={transition}
+      <Motion.div initial={initial} animate={animate} transition={transition} transformTemplate={center}
         style={{ ...common, width: d, aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          borderRadius: '50%', border: `1.5px solid ${color}`, background: alpha(color, 0.12) }}>
+          borderRadius: '50%', border: `1.5px solid ${alpha(color, 0.9)}`, background: fill, boxShadow: shapeShadow }}>
         <Typography sx={{ fontSize: 12.5, fontWeight: 600, color, textAlign: 'center', px: 1 }}>{el.label}</Typography>
       </Motion.div>
     )
@@ -244,10 +305,11 @@ function SceneBlock({ el, index, reduce, theme }: {
 
   // node (labelled box)
   return (
-    <Motion.div initial={initial} animate={animate} transition={transition}
+    <Motion.div initial={initial} animate={animate} transition={transition} transformTemplate={center}
       style={{ ...common, width: `${el.w ?? 24}%`, height: `${el.h ?? 14}%`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 10, border: `1.5px solid ${color}`, background: alpha(color, 0.12), padding: '0 8px' }}>
+        borderRadius: 12, border: `1.5px solid ${alpha(color, 0.9)}`, background: fill,
+        boxShadow: shapeShadow, padding: '0 8px' }}>
       <Typography sx={{ fontSize: 13.5, fontWeight: 600, color, textAlign: 'center', lineHeight: 1.2 }}>{el.label}</Typography>
     </Motion.div>
   )
