@@ -106,13 +106,31 @@ class DuckDuckGoAdapter(IWebSearchAdapter):
 # Serper — paid Google Search (api.serper.dev)
 # ---------------------------------------------------------------------------
 
+# A generic web search for "today's news" returns news-site HOMEPAGES (thin meta
+# snippets) and word-matched junk (e.g. a song titled "Give Me All Your Luvin'").
+# News-intent queries are routed to Serper's /news endpoint instead, which returns
+# actual recent ARTICLES with title, source and date. RCA 2026-06-08.
+_NEWS_HINTS = (
+    "news", "headline", "headlines", "breaking", "today", "tonight",
+    "latest", "current events", "what happened", "right now", "happening",
+    "this morning", "this week", "recent",
+)
+
+
+def is_news_query(query: str) -> bool:
+    """Heuristic: does the user want current news/headlines (vs. evergreen info)?"""
+    q = query.lower()
+    return any(hint in q for hint in _NEWS_HINTS)
+
+
 class SerperAdapter(IWebSearchAdapter):
     """
-    Calls api.serper.dev for Google Search results.
-    Requires an API key (set via Settings → Search).
+    Calls api.serper.dev for Google results. Requires an API key (Settings → Search).
+    Routes news-intent queries to the /news endpoint for real, dated articles.
     """
 
-    _DEFAULT_URL = "https://google.serper.dev/search"
+    _SEARCH_URL = "https://google.serper.dev/search"
+    _NEWS_URL = "https://google.serper.dev/news"
 
     async def search(
         self,
@@ -125,7 +143,8 @@ class SerperAdapter(IWebSearchAdapter):
             logger.warning("Serper search: no API key configured")
             return []
 
-        endpoint = base_url or self._DEFAULT_URL
+        news = is_news_query(query)
+        endpoint = base_url or (self._NEWS_URL if news else self._SEARCH_URL)
 
         try:
             import httpx  # only import site
@@ -143,12 +162,18 @@ class SerperAdapter(IWebSearchAdapter):
             logger.warning("Serper search failed: %s", exc)
             return []
 
+        # /news → "news"[]; /search → "organic"[].
+        hits = (data.get("news") if news else data.get("organic")) or []
         results: list[SearchResult] = []
-        for hit in data.get("organic", [])[:num_results]:
+        for hit in hits[:num_results]:
+            snippet = hit.get("snippet", "")
+            if news:
+                meta = ", ".join(x for x in (hit.get("source", ""), hit.get("date", "")) if x)
+                snippet = f"{snippet} ({meta})" if (snippet and meta) else (snippet or meta)
             results.append(SearchResult(
                 title=hit.get("title", ""),
                 url=hit.get("link", ""),
-                snippet=hit.get("snippet", ""),
+                snippet=snippet,
             ))
         return results
 

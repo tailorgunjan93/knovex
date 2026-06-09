@@ -11,6 +11,31 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.9] — 2026-06-09
+
+### Fixed
+
+- **Web search for news returned page "headers" / irrelevant results.** A news
+  query ("today's top news") went through generic web search, which returns
+  news-site *homepages* (thin meta snippets) and word-matched junk. Serper now
+  routes **news-intent queries to its `/news` endpoint** → real, recent ARTICLES
+  with source + date folded into the snippet. Tests: Serper `/news` routing +
+  `is_news_query` heuristic.
+- **Animated scenes rendered off-centre.** Framer Motion's animated `transform`
+  clobbered the static `translate(-50%,-50%)`, so an element at `x:50` anchored
+  top-left instead of centring. Fixed with `transformTemplate` (caught by a
+  render-and-review screenshot pass — it compiled and passed unit tests but looked
+  wrong on screen).
+
+### Changed
+
+- **Animated (SVG ScenePlayer) visual overhaul.** Material depth (radial-gradient
+  fills + soft shadows), a **glow on the focal/accent element** (staging), expo /
+  spring easing, and a faint blueprint grid + vignette for a "studio" feel.
+  Verified visually via the real-backend render. (The richer fake animated content
+  also makes the E2E gate more representative.)
+
+
 ## [0.12.8] — 2026-06-08
 
 ### Added
