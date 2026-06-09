@@ -9,6 +9,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chat ignored local messages until a session existed.** A fresh chat (no
+  `activeSessionId`) rendered the empty state and never showed messages held only
+  in local state — so a `/help` or `/summarize` guidance note appeared to do
+  nothing. The message list now renders when there's an active session **or** any
+  local message. Caught by the new real-backend E2E (`slash-commands.spec.ts`).
+
+### Tests
+
+- **Real-backend E2E for the new flows** (`e2e/real-backend/`): the slash menu,
+  `/help`, `/web`, the `/research` agentic brief end-to-end, `/summarize`, and the
+  Review empty state. Made deterministic offline by a new **`KNOVEX_FAKE_SEARCH`**
+  hook (the search-side counterpart to `KNOVEX_FAKE_LLM`) so web-search-backed
+  commands don't hit the network in CI. The Review *grading* flow stays covered by
+  `ReviewPage.test.tsx` + backend due-loop integration (a fresh E2E run has no
+  due card to grade).
+
 ### Added
 
 - **Slash commands in chat — discoverability layer.** Type `/` in the composer
