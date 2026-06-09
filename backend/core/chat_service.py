@@ -136,6 +136,7 @@ class ChatService:
         model: str,
         credentials: ProviderCredentials,
         use_web_search: bool = False,
+        force_news: bool = False,
         search_engine: str = "duckduckgo",
         search_api_key: str = "",
         search_engines: list[tuple[str, str]] | None = None,
@@ -179,15 +180,22 @@ class ChatService:
         web_sources: list[dict] = []
         web_context = ""
         if use_web_search:
+            # /news forces news intent: frame the SEARCH query (not the stored
+            # message) so the existing is_news_query routing hits the news
+            # endpoint even when the user's words aren't obviously news-y.
+            from backend.adapters.web_search import is_news_query
+            search_query = user_message
+            if force_news and not is_news_query(user_message):
+                search_query = f"{user_message} latest news"
             web_resp = (
                 await self._search_svc.search_blended(
-                    query=user_message,
+                    query=search_query,
                     engines=search_engines,
                     num_results=_MAX_WEB_RESULTS,
                 )
                 if search_engines
                 else await self._search_svc.search(
-                    query=user_message,
+                    query=search_query,
                     engine=search_engine,
                     api_key=search_api_key,
                     num_results=_MAX_WEB_RESULTS,

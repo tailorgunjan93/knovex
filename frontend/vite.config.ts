@@ -38,5 +38,11 @@ export default defineConfig({
     setupFiles: ['./src/setupTests.ts'],
     environment: 'jsdom',
     globals: true,
+    // Headroom for import-heavy MUI + jsdom render tests under parallel load.
+    // The default 5s is exceeded by scheduling/import overhead (not test logic)
+    // as the suite grows, which surfaces as flaky timeouts on otherwise-correct
+    // synchronous render tests.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 })

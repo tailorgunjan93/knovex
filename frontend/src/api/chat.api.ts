@@ -121,6 +121,7 @@ export const chatApi = {
     signal?: AbortSignal,
     kbIds?: string[],
     attachedContext?: string,
+    forceNews = false,
   ): Promise<void> {
     await streamSSE({
       url: `${API_BASE}/api/chat/sessions/${sessionId}/stream`,
@@ -130,6 +131,7 @@ export const chatApi = {
         body: JSON.stringify({
           message,
           use_web_search: useWebSearch,
+          force_news: forceNews,
           kb_ids: kbIds && kbIds.length > 0 ? kbIds : null,
           attached_context: attachedContext ?? null,
         }),

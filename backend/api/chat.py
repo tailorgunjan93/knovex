@@ -232,6 +232,7 @@ async def stream_chat(
             model=llm.model,
             credentials=credentials,
             use_web_search=body.use_web_search,
+            force_news=body.force_news,
             search_engine=search.engine,
             search_api_key=search.api_key,
             search_engines=await settings_svc.enabled_search_engines(),

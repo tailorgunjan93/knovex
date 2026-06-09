@@ -53,6 +53,9 @@ import KnovexMark from '@/components/brand/KnovexMark'
 import { initialsOf, resolveDisplayName } from '@/lib/displayName'
 import { useSettingsStore } from '@/store/settings.store'
 import { BRAND } from '@/theme/tokens'
+import {
+  matchSlashCommands, parseSlashInput, helpText, type SlashCommand,
+} from '@/lib/slashCommands'
 
 const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
 
@@ -110,6 +113,9 @@ export default function ChatPage() {
   const [copySnack,       setCopySnack]        = useState(false)
   const [attachedFiles,   setAttachedFiles]    = useState<AttachedFile[]>([])
   const [isAttaching,     setIsAttaching]      = useState(false)
+  // Slash-command autocomplete menu state.
+  const [slashIndex,      setSlashIndex]       = useState(0)
+  const [slashDismissed,  setSlashDismissed]   = useState(false)
 
   const abortRef      = useRef<AbortController | null>(null)
   const bottomRef     = useRef<HTMLDivElement>(null)
@@ -231,9 +237,15 @@ export default function ChatPage() {
   }
 
   // ── Streaming ──────────────────────────────────────────────────────────────
-  // Core stream function — accepts the question directly so suggestions can auto-send
-  const streamQuestion = useCallback(async (question: string) => {
+  // Core stream function — accepts the question directly so suggestions can auto-send.
+  // `opts` lets slash commands force web grounding / news intent for this turn.
+  const streamQuestion = useCallback(async (
+    question: string,
+    opts?: { forceWeb?: boolean; forceNews?: boolean },
+  ) => {
     if (!question || isStreaming) return
+    const useWeb = opts?.forceWeb || opts?.forceNews || webSearch
+    const forceNews = !!opts?.forceNews
 
     let sessionId = activeSessionId
     if (!sessionId) {
@@ -304,10 +316,11 @@ export default function ChatPage() {
             setError(event.error)
           }
         },
-        webSearch,
+        useWeb,
         abortRef.current?.signal,
         selectedKbIds.length > 0 ? selectedKbIds : undefined,
         attachedContext,
+        forceNews,
       )
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
@@ -329,10 +342,61 @@ export default function ChatPage() {
     }
   }, [activeSessionId, isStreaming, webSearch, selectedKbIds, attachedFiles]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSend    = () => streamQuestion(input.trim())
+  // ── Slash commands ─────────────────────────────────────────────────────────
+  const slashMatches  = slashDismissed ? [] : matchSlashCommands(input)
+  const showSlashMenu = slashMatches.length > 0 && !isStreaming
+  const slashSel      = Math.min(slashIndex, Math.max(0, slashMatches.length - 1))
+
+  const appendHelpMessage = () => {
+    setInput('')
+    setSlashDismissed(false)
+    setMessages(prev => [...prev, { role: 'assistant', content: helpText() }])
+  }
+
+  // Route a composer submission: known slash command → its action, else chat.
+  const dispatchInput = (raw: string) => {
+    const text = raw.trim()
+    if (!text || isStreaming) return
+    const parsed = parseSlashInput(text)
+    if (parsed?.command) {
+      const cmd = parsed.command
+      if (cmd.requiresArg && !parsed.args) return   // wait for an argument
+      setSlashDismissed(true)
+      switch (cmd.action) {
+        case 'help':    appendHelpMessage(); return
+        case 'chat-web':  streamQuestion(parsed.args, { forceWeb: true });  setInput(''); return
+        case 'chat-news': streamQuestion(parsed.args, { forceNews: true }); setInput(''); return
+      }
+    }
+    streamQuestion(text)
+  }
+
+  // Accept a command from the menu: no-arg commands run immediately; others
+  // pre-fill "/name " so the user can type the argument.
+  const acceptSlashCommand = (cmd: SlashCommand) => {
+    if (!cmd.requiresArg) { dispatchInput(`/${cmd.name}`); return }
+    setInput(`/${cmd.name} `)
+    setSlashDismissed(true)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  const handleSend    = () => dispatchInput(input)
   const handleStop    = () => abortRef.current?.abort()
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (showSlashMenu) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIndex(i => (i + 1) % slashMatches.length); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setSlashIndex(i => (i - 1 + slashMatches.length) % slashMatches.length); return }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acceptSlashCommand(slashMatches[slashSel]); return }
+      if (e.key === 'Escape')    { e.preventDefault(); setSlashDismissed(true); return }
+    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+  }
+
+  // Re-arm the menu and reset selection whenever the composer text changes.
+  const handleInputChange = (value: string) => {
+    setInput(value)
+    setSlashDismissed(false)
+    setSlashIndex(0)
   }
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -493,6 +557,17 @@ export default function ChatPage() {
             </Box>
           )}
 
+          {/* Slash-command autocomplete menu (appears above the composer) */}
+          {showSlashMenu && (
+            <SlashMenu
+              commands={slashMatches}
+              selected={slashSel}
+              accent={accent}
+              isDark={isDark}
+              onPick={acceptSlashCommand}
+            />
+          )}
+
           {/* Textarea box — soft elevated surface (lab style), no border */}
           <Box sx={{ mt: 1, borderRadius: 3, border: '1px solid transparent',
                      bgcolor: 'background.paper',
@@ -503,10 +578,10 @@ export default function ChatPage() {
               component="textarea"
               ref={inputRef}
               value={input}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isStreaming}
-              placeholder="Ask anything about your knowledge base…"
+              placeholder="Ask anything about your knowledge base… or type / for commands"
               rows={3}
               sx={{
                 width: '100%', display: 'block',
@@ -811,6 +886,46 @@ function ThreadSwitcher({ sessions, activeSessionId, open, setOpen, onSelect, on
           </Box>
         </Box>
       )}
+    </Box>
+  )
+}
+
+// ─── Slash-command autocomplete menu ───────────────────────────────────────────
+
+function SlashMenu({ commands, selected, accent, isDark, onPick }: {
+  commands: SlashCommand[]
+  selected: number
+  accent: string
+  isDark: boolean
+  onPick: (cmd: SlashCommand) => void
+}) {
+  return (
+    <Box
+      data-testid="slash-menu"
+      sx={{
+        mb: 0.75, borderRadius: 2.5, overflow: 'hidden',
+        border: '1px solid', borderColor: alpha(accent, 0.3),
+        bgcolor: 'background.paper',
+        boxShadow: '0 8px 30px -16px rgba(0,0,0,0.5)',
+      }}
+    >
+      {commands.map((cmd, i) => (
+        <Box
+          key={cmd.name}
+          data-testid={`slash-item-${cmd.name}`}
+          onMouseDown={(e: React.MouseEvent) => { e.preventDefault(); onPick(cmd) }}
+          sx={{
+            display: 'flex', alignItems: 'baseline', gap: 1, px: 1.5, py: 1, cursor: 'pointer',
+            bgcolor: i === selected ? alpha(accent, isDark ? 0.16 : 0.1) : 'transparent',
+            '&:hover': { bgcolor: alpha(accent, isDark ? 0.16 : 0.1) },
+          }}
+        >
+          <Typography sx={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 700, color: accent, minWidth: 116 }}>
+            {cmd.usage}
+          </Typography>
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{cmd.description}</Typography>
+        </Box>
+      ))}
     </Box>
   )
 }
