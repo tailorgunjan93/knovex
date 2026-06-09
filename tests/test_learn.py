@@ -25,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from backend.core.domain.learn import LearnSession, UserStats
+from backend.core.domain.srs import CardSchedule
 from backend.core.learn_service import (
     LearnService,
     _escape_inner_quotes,
@@ -45,6 +46,7 @@ class InMemoryLearnRepository(ILearnRepository):
         super().__init__(backend=None)  # type: ignore[arg-type]
         self._sessions: dict[str, LearnSession] = {}
         self._stats = UserStats()
+        self._schedules: dict[tuple[str, int], CardSchedule] = {}
 
     async def find_by_id(self, entity_id: str) -> LearnSession | None:
         return self._sessions.get(entity_id)
@@ -75,6 +77,20 @@ class InMemoryLearnRepository(ILearnRepository):
 
     async def save_user_stats(self, stats: UserStats) -> None:
         self._stats = stats
+
+    async def get_card_schedule(self, session_id: str, card_index: int) -> CardSchedule | None:
+        return self._schedules.get((session_id, card_index))
+
+    async def save_card_schedule(self, schedule: CardSchedule) -> None:
+        self._schedules[(schedule.session_id, schedule.card_index)] = schedule
+
+    async def find_due_schedules(self, now: datetime, limit: int = 50) -> list[CardSchedule]:
+        due = [s for s in self._schedules.values() if s.next_review_at and s.next_review_at <= now]
+        due.sort(key=lambda s: s.next_review_at)
+        return due[:limit]
+
+    async def count_due_schedules(self, now: datetime) -> int:
+        return sum(1 for s in self._schedules.values() if s.next_review_at and s.next_review_at <= now)
 
 
 # ---------------------------------------------------------------------------
@@ -801,10 +817,11 @@ class TestReviewFlashcard:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("ease,expected_days", [
+        # First-review (graduating) intervals — Anki-like SM-2, persisted now.
         ("again", 1),
-        ("hard",  2),
-        ("good",  4),
-        ("easy",  7),
+        ("hard",  1),
+        ("good",  1),
+        ("easy",  4),
     ])
     async def test_ease_rating_sets_next_review(self, svc_with_flashcards, ease, expected_days):
         result = await svc_with_flashcards.review_flashcard(
@@ -819,6 +836,26 @@ class TestReviewFlashcard:
         delta = next_review - datetime.utcnow()
         # Allow ±1 minute tolerance
         assert abs(delta.total_seconds() - expected_days * 86400) < 120
+
+    @pytest.mark.asyncio
+    async def test_review_persists_schedule_and_compounds(self, svc_with_flashcards):
+        """Two 'good' reviews must compound (1d → 6d) and be persisted."""
+        await svc_with_flashcards.review_flashcard(
+            session_id="fc-001", card_index=0, ease_rating="good"
+        )
+        second = await svc_with_flashcards.review_flashcard(
+            session_id="fc-001", card_index=0, ease_rating="good"
+        )
+        assert second["interval_days"] == 6
+        sched = await svc_with_flashcards._repo.get_card_schedule("fc-001", 0)
+        assert sched is not None and sched.repetitions == 2
+
+    @pytest.mark.asyncio
+    async def test_out_of_range_card_index_raises(self, svc_with_flashcards):
+        with pytest.raises(ValueError):
+            await svc_with_flashcards.review_flashcard(
+                session_id="fc-001", card_index=99, ease_rating="good"
+            )
 
     @pytest.mark.asyncio
     async def test_good_rating_awards_xp(self, svc_with_flashcards):

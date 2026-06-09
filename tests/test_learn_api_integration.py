@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import get_args
 from unittest.mock import AsyncMock, MagicMock
 
@@ -57,6 +57,7 @@ from httpx import ASGITransport, AsyncClient
 from backend.api.learn import router as learn_router
 from backend.core.dependencies import get_learn_service, get_settings_service
 from backend.core.domain.learn import VALID_FORMATS, LearnSession, UserStats
+from backend.core.domain.srs import CardSchedule
 from backend.core.learn_service import LearnService
 from backend.models.schemas import LearnSessionCreate
 from backend.storage.repositories.learn_repository import ILearnRepository
@@ -70,6 +71,7 @@ class InMemoryLearnRepo(ILearnRepository):
         super().__init__(backend=None)  # type: ignore[arg-type]
         self._sessions: dict[str, LearnSession] = {}
         self._stats = UserStats()
+        self._schedules: dict[tuple[str, int], CardSchedule] = {}
 
     async def find_by_id(self, entity_id: str) -> LearnSession | None:
         return self._sessions.get(entity_id)
@@ -95,6 +97,20 @@ class InMemoryLearnRepo(ILearnRepository):
 
     async def save_user_stats(self, stats: UserStats) -> None:
         self._stats = stats
+
+    async def get_card_schedule(self, session_id: str, card_index: int) -> CardSchedule | None:
+        return self._schedules.get((session_id, card_index))
+
+    async def save_card_schedule(self, schedule: CardSchedule) -> None:
+        self._schedules[(schedule.session_id, schedule.card_index)] = schedule
+
+    async def find_due_schedules(self, now: datetime, limit: int = 50) -> list[CardSchedule]:
+        due = [s for s in self._schedules.values() if s.next_review_at and s.next_review_at <= now]
+        due.sort(key=lambda s: s.next_review_at)
+        return due[:limit]
+
+    async def count_due_schedules(self, now: datetime) -> int:
+        return sum(1 for s in self._schedules.values() if s.next_review_at and s.next_review_at <= now)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -695,7 +711,8 @@ class TestFlashcardReviewEndpoint:
         # Should be ~1 day (86400s) ± 120s tolerance
         assert abs(delta_seconds - 86400) < 120
 
-    async def test_easy_rating_next_review_is_7_days(self):
+    async def test_easy_rating_graduates_to_4_days(self):
+        # SM-2 (Anki-like): a NEW card graded 'easy' graduates at 4 days.
         client, repo = await _make_client()
         s = _seed_flashcard_session(repo)
         async with client:
@@ -706,7 +723,7 @@ class TestFlashcardReviewEndpoint:
         body = r.json()
         next_review = datetime.fromisoformat(body["next_review_at"])
         delta_seconds = (next_review - datetime.utcnow()).total_seconds()
-        assert abs(delta_seconds - 7 * 86400) < 120
+        assert abs(delta_seconds - 4 * 86400) < 120
 
     async def test_good_rating_awards_xp(self):
         client, repo = await _make_client()
@@ -737,6 +754,77 @@ class TestFlashcardReviewEndpoint:
                 params={"card_index": 0, "ease_rating": "good"},
             )
         assert r.status_code == 404
+
+
+class TestReviewDueLoop:
+    """GET /learn/reviews/due + /count — the spaced-repetition return loop."""
+
+    def _seed_due_card(self, repo, session, card_index=0, days_overdue=1):
+        """Persist a schedule whose next_review_at is in the past (→ due now)."""
+        repo._schedules[(session.id, card_index)] = CardSchedule(
+            session_id=session.id, card_index=card_index,
+            ease_factor=2.5, interval_days=1, repetitions=1, lapses=0,
+            last_rating="good",
+            next_review_at=datetime.utcnow() - timedelta(days=days_overdue),
+            last_reviewed_at=datetime.utcnow() - timedelta(days=days_overdue + 1),
+        )
+
+    async def test_count_zero_when_nothing_scheduled(self):
+        client, _ = await _make_client()
+        async with client:
+            r = await client.get("/api/learn/reviews/count")
+        assert r.status_code == 200
+        assert r.json()["due"] == 0
+
+    async def test_due_returns_seeded_card_with_content(self):
+        client, repo = await _make_client()
+        s = _seed_flashcard_session(repo)   # SAMPLE_FLASHCARD: ATP card
+        self._seed_due_card(repo, s)
+        async with client:
+            r = await client.get("/api/learn/reviews/due")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["count"] == 1
+        card = body["cards"][0]
+        assert card["session_id"] == s.id
+        assert card["card_index"] == 0
+        assert card["front"] == "What is ATP?"
+        assert card["back"] == "Energy currency of the cell"
+        assert card["topic"] == "Bio"
+
+    async def test_count_reflects_due_schedule(self):
+        client, repo = await _make_client()
+        s = _seed_flashcard_session(repo)
+        self._seed_due_card(repo, s)
+        async with client:
+            r = await client.get("/api/learn/reviews/count")
+        assert r.json()["due"] == 1
+
+    async def test_card_not_due_until_its_time(self):
+        # A freshly-reviewed card schedules into the FUTURE → not due now.
+        client, repo = await _make_client()
+        s = _seed_flashcard_session(repo)
+        async with client:
+            await client.post(
+                f"/api/learn/sessions/{s.id}/flashcard/review",
+                params={"card_index": 0, "ease_rating": "good"},
+            )
+            r = await client.get("/api/learn/reviews/count")
+        assert r.json()["due"] == 0
+
+    async def test_due_skips_schedule_for_deleted_session(self):
+        # A stale schedule whose session no longer exists must self-heal, not 500.
+        client, repo = await _make_client()
+        repo._schedules[("ghost-session", 0)] = CardSchedule(
+            session_id="ghost-session", card_index=0,
+            next_review_at=datetime.utcnow() - timedelta(days=1),
+            last_reviewed_at=datetime.utcnow() - timedelta(days=2),
+            repetitions=1, interval_days=1,
+        )
+        async with client:
+            r = await client.get("/api/learn/reviews/due")
+        assert r.status_code == 200
+        assert r.json()["count"] == 0
 
 
 class TestUserStatsEndpoint:

@@ -35,6 +35,9 @@ from backend.core.dependencies import (
 from backend.core.domain.learn import VALID_DIFFICULTIES, VALID_FORMATS
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
+    DueReviewCard,
+    DueReviewCountResponse,
+    DueReviewsResponse,
     LearnSessionCreate,
     LearnSessionResponse,
     QuizAnswerRequest,
@@ -283,6 +286,43 @@ async def review_flashcard(
         raise _handle_not_found(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Spaced-repetition "review due" loop
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/learn/reviews/due",
+    response_model=DueReviewsResponse,
+    summary="Flashcards due for review (soonest first)",
+)
+async def get_due_reviews(
+    learn_svc: LearnServiceDep,
+    limit: int = 20,
+) -> DueReviewsResponse:
+    """
+    Return flashcards whose spaced-repetition schedule is due now, with their
+    content, so the Review screen can run the queue. `limit` caps the batch.
+    """
+    limit = max(1, min(limit, 100))
+    cards = await learn_svc.get_due_reviews(limit=limit)
+    return DueReviewsResponse(
+        count=len(cards),
+        cards=[DueReviewCard(**c) for c in cards],
+    )
+
+
+@router.get(
+    "/learn/reviews/count",
+    response_model=DueReviewCountResponse,
+    summary="Count of flashcards due now (sidebar badge)",
+)
+async def get_due_review_count(
+    learn_svc: LearnServiceDep,
+) -> DueReviewCountResponse:
+    """Lightweight due-count for the sidebar 'Review' badge (polled)."""
+    return DueReviewCountResponse(due=await learn_svc.count_due_reviews())
 
 
 # ---------------------------------------------------------------------------

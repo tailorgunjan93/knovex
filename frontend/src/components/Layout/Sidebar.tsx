@@ -23,18 +23,20 @@
 
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
-  Box, Tooltip, IconButton, useTheme, alpha,
+  Box, Tooltip, IconButton, Badge, useTheme, alpha,
 } from '@mui/material'
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline'
 import SettingsOutlinedIcon  from '@mui/icons-material/SettingsOutlined'
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined'
 import ContrastOutlinedIcon  from '@mui/icons-material/ContrastOutlined'
 import DarkModeOutlinedIcon  from '@mui/icons-material/DarkModeOutlined'
-import { useQueryClient, useMutation } from '@tanstack/react-query'
+import StyleOutlinedIcon     from '@mui/icons-material/StyleOutlined'
+import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query'
 import KnovexMark from '@/components/brand/KnovexMark'
 import { BRAND } from '@/theme/tokens'
 import { useSettingsStore, useThemeMode } from '@/store/settings.store'
 import { settingsApi } from '@/api/settings.api'
+import { learnApi } from '@/api/learn.api'
 import { resolveDisplayName, initialsOf } from '@/lib/displayName'
 import { useAppVersion } from '@/lib/useAppVersion'
 
@@ -91,6 +93,7 @@ const RAIL_ITEMS: RailItem[] = [
   { label: 'Ask Knovex', icon: <ChatBubbleOutlineIcon sx={{ fontSize: 19 }} />,  path: '/chat' },
   { label: 'Reader',     icon: <DocIcon />,                                      path: '/reader' },
   { label: 'Learn',      icon: <LessonIcon />,                                   path: '/learn' },
+  { label: 'Review',     icon: <StyleOutlinedIcon sx={{ fontSize: 19 }} />,      path: '/review' },
   { label: 'Progress',   icon: <ProgressIcon />,                                 path: '/progress' },
 ]
 
@@ -108,6 +111,16 @@ export default function Sidebar() {
 
   const displayName = settings?.display_name
   const isActive = (path: string) => location.pathname.startsWith(path)
+
+  // Spaced-repetition due count → the "Review" badge (the return hook). Polled
+  // so it stays current while the app is open; failures degrade to no badge.
+  const { data: dueCount = 0 } = useQuery({
+    queryKey: ['reviews', 'count'],
+    queryFn: () => learnApi.getDueReviewCount(),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  })
 
   const themeMutation = useMutation({
     mutationFn: (mode: string) => settingsApi.update({ theme: mode }),
@@ -154,13 +167,27 @@ export default function Sidebar() {
       </Tooltip>
 
       {/* Primary nav */}
-      {RAIL_ITEMS.map((it) => (
-        <Tooltip key={it.path} title={it.label} placement="right" arrow>
-          <IconButton aria-label={it.label} onClick={() => navigate(it.path)} sx={railBtn(isActive(it.path))}>
+      {RAIL_ITEMS.map((it) => {
+        const isReview = it.path === '/review'
+        const icon = isReview ? (
+          <Badge
+            badgeContent={dueCount}
+            max={99}
+            overlap="circular"
+            sx={{ '& .MuiBadge-badge': { fontSize: 9, height: 16, minWidth: 16, fontWeight: 700, bgcolor: BRAND.copper, color: '#fff' } }}
+          >
             {it.icon}
-          </IconButton>
-        </Tooltip>
-      ))}
+          </Badge>
+        ) : it.icon
+        const title = isReview && dueCount > 0 ? `${it.label} — ${dueCount} due` : it.label
+        return (
+          <Tooltip key={it.path} title={title} placement="right" arrow>
+            <IconButton aria-label={it.label} onClick={() => navigate(it.path)} sx={railBtn(isActive(it.path))}>
+              {icon}
+            </IconButton>
+          </Tooltip>
+        )
+      })}
 
       <Box sx={{ flex: 1 }} />
 

@@ -491,6 +491,31 @@ class UserStatsResponse(BaseModel):
     badges: list[str] = Field(default_factory=list)
 
 
+# ── Spaced-repetition "review due" loop ──────────────────────────────────────
+
+class DueReviewCard(BaseModel):
+    """One flashcard due for review, with its content and origin."""
+    session_id: str
+    card_index: int
+    topic: str
+    front: str
+    back: str
+    hint: str = ""
+    due_at: str | None = None
+    interval_days: int = 0
+    repetitions: int = 0
+
+
+class DueReviewsResponse(BaseModel):
+    count: int
+    cards: list[DueReviewCard] = Field(default_factory=list)
+
+
+class DueReviewCountResponse(BaseModel):
+    """Lightweight count for the sidebar badge (polled)."""
+    due: int = 0
+
+
 # ---------------------------------------------------------------------------
 # Tools registry schemas
 # ---------------------------------------------------------------------------

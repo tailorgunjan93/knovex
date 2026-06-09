@@ -181,6 +181,26 @@ export interface FlashcardReviewResult {
   card_index: number
   ease_rating: string
   next_review_at: string
+  interval_days?: number
+}
+
+// ─── Spaced-repetition "review due" loop ───────────────────────────────────────
+
+export interface DueReviewCard {
+  session_id: string
+  card_index: number
+  topic: string
+  front: string
+  back: string
+  hint: string
+  due_at: string | null
+  interval_days: number
+  repetitions: number
+}
+
+export interface DueReviewsResponse {
+  count: number
+  cards: DueReviewCard[]
 }
 
 // ─── API calls ───────────────────────────────────────────────────────────────
@@ -207,6 +227,18 @@ export const learnApi = {
   async getUserStats(): Promise<UserStats> {
     const res = await apiClient.get<UserStats>('/learn/stats')
     return res.data
+  },
+
+  /** Flashcards due for spaced-repetition review (soonest first). */
+  async getDueReviews(limit = 20): Promise<DueReviewsResponse> {
+    const res = await apiClient.get<DueReviewsResponse>('/learn/reviews/due', { params: { limit } })
+    return res.data
+  },
+
+  /** Count of flashcards due now (for the sidebar badge). */
+  async getDueReviewCount(): Promise<number> {
+    const res = await apiClient.get<{ due: number }>('/learn/reviews/count')
+    return res.data.due
   },
 
   /** Submit a quiz answer. Returns correctness, explanation, and XP earned. */
