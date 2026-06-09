@@ -385,6 +385,60 @@ async def test_stream_emits_web_sources_when_search_enabled():
     assert parsed["sources"][0]["url"] == "https://example.com/knovex"
 
 
+def _capturing_search_svc(captured: dict) -> SearchService:
+    """A SearchService whose adapter records the query it was asked to search."""
+    class _CapturingAdapter(StubWebSearchAdapter):
+        async def search(self, query, num_results=5, api_key="", base_url=""):
+            captured["query"] = query
+            return [SearchResult(title="H", url="https://h", snippet="s")]
+    return SearchService(adapter=_CapturingAdapter())
+
+
+async def _svc_with_search(search_svc: SearchService) -> tuple[ChatService, InMemoryChatRepository]:
+    chat_repo = InMemoryChatRepository()
+    llm_svc = MagicMock()
+
+    async def _gen(*a, **k):
+        yield "ok"
+
+    llm_svc.stream = _gen
+    svc = ChatService(
+        chat_repo=chat_repo, file_repo=MagicMock(), backend=_make_backend(None),
+        llm_svc=llm_svc, search_svc=search_svc,
+    )
+    return svc, chat_repo
+
+
+async def test_force_news_frames_search_query_as_news():
+    """
+    `/news` (force_news) must route to news: the SEARCH query is news-framed even
+    when the user's message has no news words — so the existing is_news_query
+    routing sends it to the news endpoint. The user's message itself is untouched.
+    """
+    captured: dict = {}
+    svc, _ = await _svc_with_search(_capturing_search_svc(captured))
+    session = await svc.create_session()
+    await _drain(svc.stream_message(
+        session_id=session.id, user_message="bitcoin", provider="openai",
+        model="gpt-4o-mini", credentials=_make_creds(),
+        use_web_search=True, search_engine="duckduckgo", force_news=True,
+    ))
+    assert "news" in captured["query"].lower()
+    assert "bitcoin" in captured["query"].lower()
+
+
+async def test_no_force_news_searches_the_raw_message():
+    captured: dict = {}
+    svc, _ = await _svc_with_search(_capturing_search_svc(captured))
+    session = await svc.create_session()
+    await _drain(svc.stream_message(
+        session_id=session.id, user_message="bitcoin", provider="openai",
+        model="gpt-4o-mini", credentials=_make_creds(),
+        use_web_search=True, search_engine="duckduckgo",
+    ))
+    assert captured["query"] == "bitcoin"
+
+
 async def test_stream_emits_error_event_on_llm_failure():
     """LLM error is caught and emitted as an error SSE event; stream doesn't crash."""
     svc, _ = _make_svc()

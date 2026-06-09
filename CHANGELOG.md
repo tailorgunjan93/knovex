@@ -11,6 +11,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Added
 
+- **Slash commands in chat (Phase 1) — discoverability layer.** Type `/` in the
+  composer to open an autocomplete menu (keyboard + click) over capabilities we
+  already shipped:
+  - `/web <query>` — answer this message grounded in a live web search.
+  - `/news <topic>` — force news intent so the search routes to news articles
+    (the backend gains a `force_news` flag that news-frames the *search* query
+    only; the user's message is untouched).
+  - `/help` — list commands locally (no network).
+  The command engine (`frontend/src/lib/slashCommands.ts`) is pure, deterministic
+  app logic with unit tests; the composer only renders the menu and dispatches.
+  Tests: `slashCommands.test.ts` (15) + backend `test_chat.py` force-news framing.
+  *(Phases 2–3 — `/summarize` and the `/research` agentic brief — to follow.)*
+
 - **Spaced-repetition "Review" loop (retention).** Flashcard ratings now persist a
   per-card schedule (lightweight **SM-2**: ease factor + interval + repetitions, in a
   new `srs_schedules` table) instead of being thrown away. Cards resurface when due:

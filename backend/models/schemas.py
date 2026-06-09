@@ -393,6 +393,7 @@ class ChatMessagesResponse(BaseModel):
 class ChatStreamRequest(BaseModel):
     message: str = Field(..., min_length=1)
     use_web_search: bool = False
+    force_news: bool = False                  # /news command — route the web search to news
     kb_ids: list[str] | None = None          # override session kb_id; search across multiple KBs
     attached_context: str | None = None      # extracted text from file(s) attached by the user
 
