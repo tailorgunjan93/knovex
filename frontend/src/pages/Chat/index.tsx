@@ -54,7 +54,7 @@ import { initialsOf, resolveDisplayName } from '@/lib/displayName'
 import { useSettingsStore } from '@/store/settings.store'
 import { BRAND } from '@/theme/tokens'
 import {
-  matchSlashCommands, parseSlashInput, helpText, type SlashCommand,
+  matchSlashCommands, parseSlashInput, helpText, looksLikeUrl, type SlashCommand,
 } from '@/lib/slashCommands'
 
 const MONO  = '"IBM Plex Mono", "Geist Mono", monospace'
@@ -241,11 +241,12 @@ export default function ChatPage() {
   // `opts` lets slash commands force web grounding / news intent for this turn.
   const streamQuestion = useCallback(async (
     question: string,
-    opts?: { forceWeb?: boolean; forceNews?: boolean },
+    opts?: { forceWeb?: boolean; forceNews?: boolean; fetchUrl?: string },
   ) => {
     if (!question || isStreaming) return
     const useWeb = opts?.forceWeb || opts?.forceNews || webSearch
     const forceNews = !!opts?.forceNews
+    const fetchUrl = opts?.fetchUrl
 
     let sessionId = activeSessionId
     if (!sessionId) {
@@ -321,6 +322,7 @@ export default function ChatPage() {
         selectedKbIds.length > 0 ? selectedKbIds : undefined,
         attachedContext,
         forceNews,
+        fetchUrl,
       )
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
@@ -347,10 +349,31 @@ export default function ChatPage() {
   const showSlashMenu = slashMatches.length > 0 && !isStreaming
   const slashSel      = Math.min(slashIndex, Math.max(0, slashMatches.length - 1))
 
-  const appendHelpMessage = () => {
+  const appendAssistantNote = (content: string) => {
     setInput('')
     setSlashDismissed(false)
-    setMessages(prev => [...prev, { role: 'assistant', content: helpText() }])
+    setMessages(prev => [...prev, { role: 'assistant', content }])
+  }
+
+  // Resolve what /summarize should act on (URL arg > attached file > selected KB).
+  // The app picks the source + builds the instruction; the LLM only narrates.
+  const dispatchSummarize = (args: string) => {
+    setInput('')
+    if (looksLikeUrl(args)) {
+      streamQuestion('Summarise the linked page clearly, with the key points.', { fetchUrl: args })
+      return
+    }
+    if (attachedFiles.some(f => !f.uploading)) {
+      streamQuestion('Summarise the attached document(s) clearly and concisely, highlighting the key points.')
+      return
+    }
+    if (selectedKbIds.length > 0) {
+      streamQuestion('Summarise the selected knowledge base: its main topics, key points, and takeaways.')
+      return
+    }
+    appendAssistantNote(
+      'To use **/summarize**, attach a file, select a knowledge base, or pass a URL — e.g. `/summarize https://example.com/article`.',
+    )
   }
 
   // Route a composer submission: known slash command → its action, else chat.
@@ -363,9 +386,10 @@ export default function ChatPage() {
       if (cmd.requiresArg && !parsed.args) return   // wait for an argument
       setSlashDismissed(true)
       switch (cmd.action) {
-        case 'help':    appendHelpMessage(); return
+        case 'help':      appendAssistantNote(helpText()); return
         case 'chat-web':  streamQuestion(parsed.args, { forceWeb: true });  setInput(''); return
         case 'chat-news': streamQuestion(parsed.args, { forceNews: true }); setInput(''); return
+        case 'summarize': dispatchSummarize(parsed.args); return
       }
     }
     streamQuestion(text)

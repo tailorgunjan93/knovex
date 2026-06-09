@@ -122,6 +122,7 @@ export const chatApi = {
     kbIds?: string[],
     attachedContext?: string,
     forceNews = false,
+    fetchUrl?: string,
   ): Promise<void> {
     await streamSSE({
       url: `${API_BASE}/api/chat/sessions/${sessionId}/stream`,
@@ -132,6 +133,7 @@ export const chatApi = {
           message,
           use_web_search: useWebSearch,
           force_news: forceNews,
+          fetch_url: fetchUrl ?? null,
           kb_ids: kbIds && kbIds.length > 0 ? kbIds : null,
           attached_context: attachedContext ?? null,
         }),

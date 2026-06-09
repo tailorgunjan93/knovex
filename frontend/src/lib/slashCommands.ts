@@ -12,7 +12,7 @@
  *   - 'help'      → render the command list locally (no network)
  */
 
-export type SlashAction = 'chat-web' | 'chat-news' | 'help'
+export type SlashAction = 'chat-web' | 'chat-news' | 'summarize' | 'help'
 
 export interface SlashCommand {
   name: string          // canonical command word, lowercase (no slash)
@@ -36,6 +36,13 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Search the latest news and summarise the headlines.',
     action: 'chat-news',
     requiresArg: true,
+  },
+  {
+    name: 'summarize',
+    usage: '/summarize [url]',
+    description: 'Summarise a URL, an attached file, or the selected knowledge base.',
+    action: 'summarize',
+    requiresArg: false,
   },
   {
     name: 'help',
@@ -84,6 +91,11 @@ export function matchSlashCommands(input: string): SlashCommand[] {
   if (!m) return []
   const prefix = m[1].toLowerCase()
   return SLASH_COMMANDS.filter(c => c.name.startsWith(prefix))
+}
+
+/** True if *text* is an http(s) URL (used to route /summarize to URL mode). */
+export function looksLikeUrl(text: string): boolean {
+  return /^https?:\/\/\S+$/i.test(text.trim())
 }
 
 /** A plain-text help block listing every command (rendered by /help). */

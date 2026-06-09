@@ -137,6 +137,7 @@ class ChatService:
         credentials: ProviderCredentials,
         use_web_search: bool = False,
         force_news: bool = False,
+        fetch_url: str | None = None,
         search_engine: str = "duckduckgo",
         search_api_key: str = "",
         search_engines: list[tuple[str, str]] | None = None,
@@ -175,6 +176,17 @@ class ChatService:
                 kb_ids=effective_kb_ids,
                 query=user_message,
             )
+
+        # ── 2b. /summarize <url> — fetch the page into context ─────────────
+        # The fetched text rides the same attached_context path that file
+        # attachments use, so _build_messages injects it unchanged. fetch_url_text
+        # never raises (returns "" on failure) so the stream can't drop here.
+        if fetch_url:
+            from backend.core import url_fetch
+            fetched = await url_fetch.fetch_url_text(fetch_url)
+            if fetched:
+                labeled = f"[Linked page: {fetch_url}]\n{fetched}"
+                attached_context = f"{labeled}\n\n{attached_context}" if attached_context else labeled
 
         # ── 3. Optional web search ─────────────────────────────────────────
         web_sources: list[dict] = []
