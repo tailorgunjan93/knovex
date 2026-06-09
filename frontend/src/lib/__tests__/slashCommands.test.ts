@@ -12,6 +12,7 @@ import {
   parseSlashInput,
   matchSlashCommands,
   isSlashQuery,
+  looksLikeUrl,
 } from '@/lib/slashCommands'
 
 describe('parseSlashInput', () => {
@@ -100,8 +101,23 @@ describe('registry contract', () => {
     }
   })
 
-  it('includes the Phase-1 commands', () => {
+  it('includes the Phase-1 + Phase-2 commands', () => {
     const names = SLASH_COMMANDS.map(c => c.name)
-    expect(names).toEqual(expect.arrayContaining(['web', 'news', 'help']))
+    expect(names).toEqual(expect.arrayContaining(['web', 'news', 'summarize', 'help']))
+  })
+})
+
+describe('looksLikeUrl', () => {
+  it('recognises http(s) URLs', () => {
+    expect(looksLikeUrl('https://example.com/page')).toBe(true)
+    expect(looksLikeUrl('http://a.b/c')).toBe(true)
+    expect(looksLikeUrl('  https://x.io  ')).toBe(true)   // trimmed
+  })
+
+  it('rejects plain text and bare words', () => {
+    expect(looksLikeUrl('summarize this')).toBe(false)
+    expect(looksLikeUrl('example.com')).toBe(false)        // no scheme → treat as text
+    expect(looksLikeUrl('')).toBe(false)
+    expect(looksLikeUrl('ftp://x')).toBe(false)            // only http(s)
   })
 })

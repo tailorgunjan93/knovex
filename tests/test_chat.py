@@ -439,6 +439,56 @@ async def test_no_force_news_searches_the_raw_message():
     assert captured["query"] == "bitcoin"
 
 
+async def test_fetch_url_adds_page_text_to_llm_context(monkeypatch):
+    """`/summarize <url>` (fetch_url) injects the fetched page text into the
+    prompt context so the LLM can summarise it. Fetch failures must not crash."""
+    from backend.core import url_fetch
+
+    async def _fake_fetch(url, max_chars=8000):
+        return "FETCHED_PAGE_BODY about quantum widgets"
+
+    monkeypatch.setattr(url_fetch, "fetch_url_text", _fake_fetch)
+
+    captured: dict = {}
+    chat_repo = InMemoryChatRepository()
+    llm_svc = MagicMock()
+
+    async def _gen(*a, **k):
+        captured["messages"] = k.get("messages")
+        yield "ok"
+
+    llm_svc.stream = _gen
+    svc = ChatService(
+        chat_repo=chat_repo, file_repo=MagicMock(), backend=_make_backend(None),
+        llm_svc=llm_svc, search_svc=SearchService(adapter=StubWebSearchAdapter()),
+    )
+    session = await svc.create_session()
+    await _drain(svc.stream_message(
+        session_id=session.id, user_message="Summarize the linked page.",
+        provider="openai", model="gpt-4o-mini", credentials=_make_creds(),
+        fetch_url="https://example.com/article",
+    ))
+    blob = json.dumps(captured["messages"])
+    assert "FETCHED_PAGE_BODY" in blob
+
+
+async def test_fetch_url_failure_does_not_crash_stream(monkeypatch):
+    from backend.core import url_fetch
+
+    async def _fail(url, max_chars=8000):
+        return ""   # helper swallows errors and returns ""
+
+    monkeypatch.setattr(url_fetch, "fetch_url_text", _fail)
+    svc, _ = _make_svc(tokens=["ok"])
+    session = await svc.create_session()
+    events = await _drain(svc.stream_message(
+        session_id=session.id, user_message="Summarize the linked page.",
+        provider="openai", model="gpt-4o-mini", credentials=_make_creds(),
+        fetch_url="https://broken.example",
+    ))
+    assert any('"type": "done"' in e for e in events)   # stream completes cleanly
+
+
 async def test_stream_emits_error_event_on_llm_failure():
     """LLM error is caught and emitted as an error SSE event; stream doesn't crash."""
     svc, _ = _make_svc()

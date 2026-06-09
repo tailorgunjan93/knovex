@@ -233,6 +233,7 @@ async def stream_chat(
             credentials=credentials,
             use_web_search=body.use_web_search,
             force_news=body.force_news,
+            fetch_url=body.fetch_url,
             search_engine=search.engine,
             search_api_key=search.api_key,
             search_engines=await settings_svc.enabled_search_engines(),
