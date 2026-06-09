@@ -11,6 +11,37 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.12.8] — 2026-06-08
+
+### Added
+
+- **Continue-learning loop (the rabbit hole).** Every Learn lesson now ends with
+  3–4 clickable suggestion chips — **Go deeper / Next / Related** — generated for
+  the topic just studied. Clicking one immediately generates that lesson (keeping
+  the current format), turning a one-shot "create" into a session that keeps
+  going. Emitted as a post-`done` SSE `suggestions` event (best-effort: a failure
+  never affects the lesson). Tests: `TestNextTopicSuggestions` (5).
+
+### Changed
+
+- **Animation quality overhaul.**
+  - **Cinematic (Manim):** the generation prompt was rewritten from "single scene,
+    ~15–25s" into a **multi-section storyboard** (title → intuition → build →
+    worked example → recap, ~45–90s) with deliberate pacing (`run_time`, `wait`
+    beats, `LaggedStart`), proper technique (`ReplacementTransform`, `Indicate`,
+    staging one focal element at a time), layout discipline (no overlap / arrange),
+    and an intentional colour hierarchy. Code-gen token budget raised 2000 → 4000
+    so richer scenes no longer truncate. (Grounded in motion-graphics / Manim best
+    practices research.)
+  - **Animated (SVG ScenePlayer):** the scene-script prompt now drives a continuous
+    **evolving build** (7–10 beats with a story arc + recap and staged focal
+    highlights) instead of disconnected slides.
+
+> Animation *content quality* is model-dependent — a stronger LLM produces a
+> better storyboard. The renderer-side visual polish for the SVG player is tracked
+> as the next step.
+
+
 ## [0.12.7] — 2026-06-08
 
 ### Fixed

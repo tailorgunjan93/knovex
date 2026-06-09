@@ -224,6 +224,89 @@ class LearnService:
         xp_earned, new_badges = await self._award_session_xp(session)
         yield f"data: {json.dumps({'type': 'done', 'session_id': session.id, 'xp_earned': xp_earned, 'new_badges': new_badges})}\n\n"
 
+        # ── Continuation loop: suggest where to go next (the "rabbit hole") ────
+        # Emitted AFTER done so the lesson renders immediately and a failure here
+        # can never break the lesson. The renderer shows these as clickable chips;
+        # clicking generates the next lesson — turning a one-shot create into a
+        # session that keeps going.
+        suggestions = await self._suggest_next_topics(
+            topic=topic, format=format, difficulty=difficulty,
+            provider=provider, model=model, credentials=credentials,
+        )
+        if suggestions:
+            yield f"data: {json.dumps({'type': 'suggestions', 'items': suggestions})}\n\n"
+
+    # ==================================================================
+    # Continuation suggestions ("where to next?")
+    # ==================================================================
+
+    async def _suggest_next_topics(
+        self,
+        *,
+        topic: str,
+        format: str,
+        difficulty: str,
+        provider: str,
+        model: str,
+        credentials: ProviderCredentials,
+    ) -> list[dict]:
+        """
+        Return 3–4 follow-up suggestions to keep the user learning.
+
+        Each item: {"label": short chip text, "topic": topic to generate,
+        "kind": "deeper" | "next" | "related"}. Best-effort: any failure returns
+        [] (the lesson is already complete, so this must never raise upward).
+        """
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You suggest the next things a curious learner should explore. "
+                    "Return ONLY a JSON array of exactly 4 objects, no prose. Each object: "
+                    '{"label": "<=6 word chip text", "topic": "a specific, generatable topic", '
+                    '"kind": "deeper" | "next" | "related"}. '
+                    "Include at least one 'deeper' (a sub-concept to dive into), one 'next' "
+                    "(the natural next step), and one 'related' (an adjacent idea). "
+                    "Make them genuinely enticing and specific — not generic."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"The learner just finished a {difficulty}-level '{format}' lesson on: {topic}. "
+                    "Suggest where to go next."
+                ),
+            },
+        ]
+        try:
+            raw = await self._llm_svc.complete(
+                messages=prompt, provider=provider, model=model,
+                credentials=credentials, max_tokens=400, temperature=0.8,
+            )
+            data = _parse_llm_json(_strip_code_fences(raw))
+        except Exception as exc:  # noqa: BLE001 — suggestions are best-effort
+            logger.warning("Next-topic suggestions failed for %r: %s", topic, exc)
+            return []
+
+        # Accept either a bare array or {"items"/"suggestions": [...]}.
+        items = data if isinstance(data, list) else (
+            data.get("items") or data.get("suggestions") or []
+        )
+        out: list[dict] = []
+        for it in items[:4]:
+            if not isinstance(it, dict):
+                continue
+            label = str(it.get("label", "")).strip()
+            t = str(it.get("topic", "")).strip()
+            kind = str(it.get("kind", "related")).strip().lower()
+            if label and t:
+                out.append({
+                    "label": label[:60],
+                    "topic": t[:200],
+                    "kind": kind if kind in ("deeper", "next", "related") else "related",
+                })
+        return out
+
     # ==================================================================
     # Quiz answer submission
     # ==================================================================
@@ -492,10 +575,15 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         ']}}'
     ),
     "animated": (
-        "You are a motion-graphics explainer in the style of 3Blue1Brown and Kurzgesagt, "
+        "You are a senior motion-graphics artist in the style of 3Blue1Brown and Kurzgesagt, "
         "directing an ANIMATED visual lesson on '{topic}' for a {difficulty} level learner. "
         "You think visually: every idea becomes shapes, arrows, and labels that build up on screen "
-        "while a narrator speaks. Design 5-8 scenes that progressively reveal the concept.\n"
+        "while a narrator speaks. Design 7-10 scenes that tell a complete visual story.\n"
+        "STORY ARC: open with a TITLE scene, then INTUITION, then BUILD the mechanism one step at a "
+        "time, then a concrete EXAMPLE, then a RECAP scene with the key takeaways. Don't reset every "
+        "scene — EVOLVE the diagram: keep persistent elements and add or highlight one NEW focal "
+        "element per scene (staging) so it feels like one continuous build, not slides. "
+        "Highlight the new focal element with the accent colour; mute prior context.\n"
         "CANVAS: a 2D stage. x goes 0 (left) to 100 (right); y goes 0 (top) to 100 (bottom); "
         "center is (50,50). Keep elements inside 5..95 and never overlap labels.\n"
         "ELEMENT TYPES (use only these):\n"
