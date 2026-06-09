@@ -12,7 +12,7 @@
  *   - 'help'      → render the command list locally (no network)
  */
 
-export type SlashAction = 'chat-web' | 'chat-news' | 'summarize' | 'help'
+export type SlashAction = 'chat-web' | 'chat-news' | 'summarize' | 'research' | 'help'
 
 export interface SlashCommand {
   name: string          // canonical command word, lowercase (no slash)
@@ -43,6 +43,20 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Summarise a URL, an attached file, or the selected knowledge base.',
     action: 'summarize',
     requiresArg: false,
+  },
+  {
+    name: 'research',
+    usage: '/research <topic>',
+    description: 'Multi-step research: search several angles, then a cited brief.',
+    action: 'research',
+    requiresArg: true,
+  },
+  {
+    name: 'brief',
+    usage: '/brief <topic>',
+    description: 'Alias for /research — a cited research brief on the topic.',
+    action: 'research',
+    requiresArg: true,
   },
   {
     name: 'help',

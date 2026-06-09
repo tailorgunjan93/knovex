@@ -22,12 +22,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
     knowledge base. The app resolves the source and builds the instruction; the
     LLM only narrates. URL mode adds a server-side fetch (`core/url_fetch.py`,
     never raises) threaded through the chat stream as `fetch_url`.
+  - `/research <topic>` (alias `/brief`) — **agentic mode**: an app-orchestrated
+    workflow that plans sub-questions, fans them out across web search in
+    parallel, dedups/caps the sources, then has the LLM write a **cited** brief.
+    Progress streams as status events; the brief persists as a chat turn with its
+    sources. Logic lives in the app (`core/research_service.py`); the LLM only
+    generates the sub-questions and the prose — no autonomous tool-calling.
   - `/help` — list commands locally (no network).
   The command engine (`frontend/src/lib/slashCommands.ts`) is pure, deterministic
   app logic with unit tests; the composer only renders the menu and dispatches.
-  Tests: `slashCommands.test.ts` (17), `test_url_fetch.py` (5), backend
-  `test_chat.py` (force-news framing + fetch_url-into-context).
-  *(Phase 3 — the `/research` agentic brief — to follow.)*
+  Tests: `slashCommands.test.ts` (19), `test_url_fetch.py` (5), `test_research.py`
+  (10 — plan/parallel-search/dedup/synthesis/resilience), backend `test_chat.py`
+  + `test_chat_api_integration.py` (force-news, fetch_url, research over real HTTP).
 
 - **Spaced-repetition "Review" loop (retention).** Flashcard ratings now persist a
   per-card schedule (lightweight **SM-2**: ease factor + interval + repetitions, in a

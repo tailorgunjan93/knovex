@@ -241,12 +241,13 @@ export default function ChatPage() {
   // `opts` lets slash commands force web grounding / news intent for this turn.
   const streamQuestion = useCallback(async (
     question: string,
-    opts?: { forceWeb?: boolean; forceNews?: boolean; fetchUrl?: string },
+    opts?: { forceWeb?: boolean; forceNews?: boolean; fetchUrl?: string; research?: boolean },
   ) => {
     if (!question || isStreaming) return
     const useWeb = opts?.forceWeb || opts?.forceNews || webSearch
     const forceNews = !!opts?.forceNews
     const fetchUrl = opts?.fetchUrl
+    const research = !!opts?.research
 
     let sessionId = activeSessionId
     if (!sessionId) {
@@ -302,6 +303,15 @@ export default function ChatPage() {
               u[u.length - 1] = { role: 'assistant', content: accumulated, isStreaming: true }
               return u
             })
+          } else if (event.type === 'status') {
+            // /research progress — show a transient line until the brief streams in.
+            if (!accumulated && event.detail) {
+              setMessages(prev => {
+                const u = [...prev]
+                u[u.length - 1] = { role: 'assistant', content: `*${event.detail}…*`, isStreaming: true }
+                return u
+              })
+            }
           } else if (event.type === 'sources') {
             sources = event.sources as StreamingMessage['sources']
           } else if (event.type === 'web_sources') {
@@ -323,6 +333,7 @@ export default function ChatPage() {
         attachedContext,
         forceNews,
         fetchUrl,
+        research,
       )
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
@@ -390,6 +401,7 @@ export default function ChatPage() {
         case 'chat-web':  streamQuestion(parsed.args, { forceWeb: true });  setInput(''); return
         case 'chat-news': streamQuestion(parsed.args, { forceNews: true }); setInput(''); return
         case 'summarize': dispatchSummarize(parsed.args); return
+        case 'research':  streamQuestion(parsed.args, { research: true });  setInput(''); return
       }
     }
     streamQuestion(text)

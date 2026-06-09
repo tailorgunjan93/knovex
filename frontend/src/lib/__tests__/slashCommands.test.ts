@@ -101,9 +101,15 @@ describe('registry contract', () => {
     }
   })
 
-  it('includes the Phase-1 + Phase-2 commands', () => {
+  it('includes the Phase 1-3 commands (incl. /research and its /brief alias)', () => {
     const names = SLASH_COMMANDS.map(c => c.name)
-    expect(names).toEqual(expect.arrayContaining(['web', 'news', 'summarize', 'help']))
+    expect(names).toEqual(expect.arrayContaining(['web', 'news', 'summarize', 'research', 'brief', 'help']))
+  })
+
+  it('maps both /research and /brief to the research action', () => {
+    for (const name of ['research', 'brief']) {
+      expect(parseSlashInput(`/${name} black holes`)!.command?.action).toBe('research')
+    }
   })
 })
 
