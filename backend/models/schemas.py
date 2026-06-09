@@ -155,6 +155,16 @@ class TestLLMResponse(BaseModel):
     error: str | None = None
 
 
+class TestSearchEngineResponse(BaseModel):
+    """Result of the Settings → 'Test' button for one search engine."""
+    success: bool
+    engine: str
+    result_count: int = 0
+    sample_title: str = ""
+    latency_ms: float | None = None
+    error: str | None = None
+
+
 class PackStatusResponse(BaseModel):
     """State of an on-demand pack (OCR / Cinematic) provisioned outside the bundle."""
     state: Literal["not_installed", "installing", "ready", "error", "unavailable"]

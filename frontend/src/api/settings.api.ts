@@ -86,6 +86,15 @@ export interface TestLLMResult {
   error: string | null
 }
 
+export interface TestSearchResult {
+  success: boolean
+  engine: string
+  result_count: number
+  sample_title: string
+  latency_ms: number | null
+  error: string | null
+}
+
 export interface OllamaDetectResult {
   detected: boolean
   url: string
@@ -153,6 +162,12 @@ export const settingsApi = {
   /** Enable/disable a search engine or set its key (multi-engine). */
   async setSearchEngine(engineId: string, patch: Partial<{ enabled: boolean; api_key: string }>): Promise<AppSettings> {
     const res = await apiClient.post<AppSettings>(`/settings/search/engines/${engineId}`, patch)
+    return res.data
+  },
+
+  /** Probe one search engine with its saved key; reports result count + sample. */
+  async testSearchEngine(engineId: string): Promise<TestSearchResult> {
+    const res = await apiClient.post<TestSearchResult>(`/settings/search/engines/${engineId}/test`)
     return res.data
   },
 

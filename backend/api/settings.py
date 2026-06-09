@@ -12,7 +12,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from backend.core.dependencies import LLMServiceDep, SettingsServiceDep
+from backend.core.dependencies import LLMServiceDep, SearchServiceDep, SettingsServiceDep
 from backend.core.providers.base import ProviderCredentials
 from backend.models.schemas import (
     ActivateProviderRequest,
@@ -24,11 +24,16 @@ from backend.models.schemas import (
     OllamaDetectResponse,
     SearchEngineUpdate,
     TestLLMResponse,
+    TestSearchEngineResponse,
 )
 
 logger = logging.getLogger("knovex.api.settings")
 
 router = APIRouter()
+
+# Neutral evergreen probe for the "Test" button — exercises each engine's
+# standard (non-news) path without depending on volatile current events.
+_ENGINE_TEST_QUERY = "open source software"
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +220,60 @@ async def set_search_engine(
     if not patch:
         raise HTTPException(status_code=400, detail="No fields provided to update")
     return await settings_svc.set_search_engine(engine_id, patch)
+
+
+@router.post(
+    "/settings/search/engines/{engine_id}/test",
+    response_model=TestSearchEngineResponse,
+    summary="Test a search engine (probe query with its saved key)",
+)
+async def test_search_engine(
+    engine_id: str,
+    settings_svc: SettingsServiceDep,
+    search_svc: SearchServiceDep,
+) -> TestSearchEngineResponse:
+    """
+    Probe one engine with a neutral query using its saved (decrypted) key and
+    report whether it actually returns results. This is the on-demand counterpart
+    to blended-search per-engine logging (lesson #17: a silently-failing engine in
+    a blend looks like the whole feature is broken). Never changes settings.
+    """
+    import time
+
+    current = await settings_svc.get()  # plaintext keys for internal use
+    cfg = current.search_engines.get(engine_id)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail=f"Search engine '{engine_id}' is not configured")
+
+    # `configured` is False only for a paid engine with no key — fail fast rather
+    # than hitting the network with an empty key.
+    if not cfg.configured:
+        return TestSearchEngineResponse(
+            success=False, engine=engine_id,
+            error="No API key configured. Add a key, then test again.",
+        )
+
+    start = time.perf_counter()
+    try:
+        resp = await search_svc.search(
+            query=_ENGINE_TEST_QUERY,
+            engine=engine_id,
+            api_key=cfg.api_key or "",
+            num_results=3,
+        )
+    except Exception as exc:  # noqa: BLE001 — surface any adapter error to the UI
+        logger.warning("Test search engine %s failed: %s", engine_id, exc)
+        return TestSearchEngineResponse(success=False, engine=engine_id, error=str(exc))
+
+    count = len(resp.results)
+    return TestSearchEngineResponse(
+        success=count > 0,
+        engine=engine_id,
+        result_count=count,
+        sample_title=resp.results[0].title if resp.results else "",
+        latency_ms=round((time.perf_counter() - start) * 1000, 1),
+        error=None if count > 0 else "Reachable, but returned no results — check the key or try again.",
+    )
 
 
 # ---------------------------------------------------------------------------

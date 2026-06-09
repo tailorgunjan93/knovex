@@ -3,7 +3,7 @@
  */
 
 import { type ReactElement } from 'react'
-import { render, screen, within, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ThemeProvider, createTheme } from '@mui/material'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -12,7 +12,13 @@ import type { AppSettings, SearchEngineConfig } from '@/api/settings.api'
 import SearchSettingsTab from '@/pages/Settings/SearchSettings'
 
 vi.mock('@/api/settings.api', () => ({
-  settingsApi: { setSearchEngine: vi.fn().mockResolvedValue({}) },
+  settingsApi: {
+    setSearchEngine: vi.fn().mockResolvedValue({}),
+    testSearchEngine: vi.fn().mockResolvedValue({
+      success: true, engine: 'duckduckgo', result_count: 3, sample_title: 'Open-source software',
+      latency_ms: 142.5, error: null,
+    }),
+  },
 }))
 import { settingsApi } from '@/api/settings.api'
 
@@ -72,5 +78,24 @@ describe('SearchSettings grid', () => {
     await userEvent.type(input, 'serp-123')
     fireEvent.blur(input)
     await waitFor(() => expect(settingsApi.setSearchEngine).toHaveBeenCalledWith('serper', { api_key: 'serp-123' }))
+  })
+
+  it('tests a free engine and shows the result count + sample', async () => {
+    renderTab(makeSettings({ duckduckgo: eng({ enabled: true, configured: true }) }))
+    // DuckDuckGo is the first card — its Test button is index 0.
+    const testBtns = screen.getAllByRole('button', { name: /test/i })
+    fireEvent.click(testBtns[0])
+    await waitFor(() => expect(settingsApi.testSearchEngine).toHaveBeenCalledWith('duckduckgo'))
+    expect(await screen.findByText(/3 results · 142\.5ms/)).toBeInTheDocument()
+    expect(screen.getByText(/Open-source software/)).toBeInTheDocument()
+  })
+
+  it('disables Test for a paid engine until a key is saved', () => {
+    renderTab(makeSettings({ serper: eng({ enabled: true, configured: false }) }))
+    // Card order is fixed: DuckDuckGo, Wikipedia, Serper, Brave → Serper is index 2.
+    // It has no saved key, so its Test button must be disabled.
+    const testBtns = screen.getAllByRole('button', { name: /test/i })
+    expect(testBtns[2]).toBeDisabled()
+    expect(testBtns[0]).not.toBeDisabled()   // DuckDuckGo (free) stays testable
   })
 })
