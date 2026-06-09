@@ -73,6 +73,7 @@ import {
   type AnimatedContent,
   type LearnFormat,
   type LearnSession,
+  type LearnSuggestion,
   type MindmapContent,
   type MindmapNode,
   type QuizContent,
@@ -155,6 +156,18 @@ const BADGE_LABELS: Record<string, string> = {
   '7_day_streak':  '🔥 7-Day Streak',
   level_5:         '⭐ Level 5',
   explorer:        '🧭 Explorer',
+}
+
+// Continuation-chip kinds — label + accent for the "Continue learning" loop.
+const NEXT_KIND_LABEL: Record<LearnSuggestion['kind'], string> = {
+  deeper:  'Go deeper',
+  next:    'Next',
+  related: 'Related',
+}
+const NEXT_KIND_COLOR: Record<LearnSuggestion['kind'], string> = {
+  deeper:  '#DDA76A',  // brand copper — the "dive in" action
+  next:    '#10b981',  // green — forward progress
+  related: '#60a5fa',  // blue — adjacent
 }
 
 // ─── Source mode ──────────────────────────────────────────────────────────────
@@ -1089,6 +1102,7 @@ export default function LearnPage() {
   const [streamError, setStreamError]             = useState<string | null>(null)
   const [lastXP, setLastXP]                       = useState<number | null>(null)
   const [newBadges, setNewBadges]                 = useState<string[]>([])
+  const [suggestions, setSuggestions]             = useState<LearnSuggestion[]>([])
   const [activeFormat, setActiveFormat]           = useState<UIFormat>('guided')
 
   // ── Hover state for sidebar delete ─────────────────────────────────────────
@@ -1193,18 +1207,22 @@ export default function LearnPage() {
   // `overrideFormat` lets the in-lesson format tabs re-generate the SAME topic /
   // source / difficulty / language in a different format, switching the stage in
   // place (Stage B.2) — without re-opening the setup screen.
-  const handleGenerate = async (overrideFormat?: UIFormat) => {
+  const handleGenerate = async (overrideFormat?: UIFormat, overrideTopic?: string) => {
     if (isStreaming) return
     const genUIFormat: UIFormat = overrideFormat ?? format
     if (overrideFormat && overrideFormat !== format) setFormat(overrideFormat)
 
     // ── Resolve effective topic + source params ───────────────────────────────
-    let effectiveTopic = topic.trim()
+    let effectiveTopic = (overrideTopic ?? topic).trim()
     let contextText    = ''
     let sourceType: SourceType = 'topic'
     let sourceRef: string | undefined
 
-    if (sourceMode === 'kb') {
+    // A continuation-chip click (overrideTopic) is always a plain topic generation,
+    // regardless of the current source mode.
+    if (overrideTopic) {
+      sourceType = 'topic'
+    } else if (sourceMode === 'kb') {
       if (!selectedKbId || !selectedFileId) return
       sourceType = 'kb_file'
       sourceRef  = selectedFileId
@@ -1257,6 +1275,7 @@ export default function LearnPage() {
     setStreamingContent(null)
     setLastXP(null)
     setNewBadges([])
+    setSuggestions([])
     setActiveSessionId(null)
     setActiveFormat(genUIFormat)
     setLessonStep(0)
@@ -1294,6 +1313,8 @@ export default function LearnPage() {
             }
             qc.invalidateQueries({ queryKey: ['learn-sessions'] })
             refetchStats()
+          } else if (event.type === 'suggestions') {
+            setSuggestions(event.items)
           } else if (event.type === 'error') {
             setStreamError(event.error)
           }
@@ -1312,6 +1333,16 @@ export default function LearnPage() {
       setIsStreaming(false)
       abortRef.current = null
     }
+  }
+
+  // Continuation chip click → generate the suggested topic (keeps the current
+  // format) as a plain topic lesson. This is the rabbit-hole/return loop.
+  const handleSuggestionClick = (s: LearnSuggestion) => {
+    if (isStreaming) return
+    setSourceMode('topic')
+    setTopic(s.topic)
+    setSuggestions([])
+    void handleGenerate(undefined, s.topic)
   }
 
   const handleLoadSession = (session: LearnSession) => {
@@ -2163,6 +2194,40 @@ export default function LearnPage() {
               <Typography sx={{ fontSize: 13.5 }}>
                 Building your {displayFormat}…
               </Typography>
+            </Box>
+          )}
+
+          {/* ── Continue learning (the rabbit-hole loop) ────────────────────── */}
+          {lessonActive && suggestions.length > 0 && (
+            <Box data-testid="next-up" sx={{ mt: 3, maxWidth: 860, mx: 'auto', width: '100%' }}>
+              <Typography sx={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                                letterSpacing: 0.6, color: 'text.disabled', mb: 1.25 }}>
+                Continue learning →
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {suggestions.map((s, i) => (
+                  <Box
+                    key={i}
+                    data-testid="next-up-chip"
+                    onClick={() => handleSuggestionClick(s)}
+                    sx={{
+                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 0.875,
+                      px: 1.5, py: 1, borderRadius: 2.5, border: '1px solid', borderColor: 'divider',
+                      bgcolor: 'background.paper', transition: 'all .15s',
+                      '&:hover': { borderColor: 'primary.main', transform: 'translateY(-1px)',
+                                   boxShadow: '0 4px 14px rgba(0,0,0,0.10)' },
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4,
+                                      textTransform: 'uppercase', color: NEXT_KIND_COLOR[s.kind] }}>
+                      {NEXT_KIND_LABEL[s.kind]}
+                    </Typography>
+                    <Typography sx={{ fontSize: 13, fontWeight: 500, color: 'text.primary' }}>
+                      {s.label}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
             </Box>
           )}
 

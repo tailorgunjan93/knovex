@@ -39,16 +39,37 @@ SidecarRunner = Callable[[str, str, str], Awaitable[tuple[int, str]]]
 _SIDECAR = str(Path(__file__).with_name("manim_sidecar.py"))
 
 _SYSTEM_PROMPT = (
-    "You are a motion-graphics animator using Manim Community Edition. Write Python "
-    "code for a single scene that visually explains '{topic}' for a {difficulty} learner.\n"
-    "STRICT RULES:\n"
-    "- Define exactly one class: `class Lesson(Scene):` with a `construct(self)` method.\n"
-    "- Use ONLY: Text, shapes (Circle, Square, Rectangle, RoundedRectangle, Line, Arrow, "
-    "Dot, Polygon), VGroup, and animations (Create, Write, FadeIn, FadeOut, Transform, "
-    "ReplacementTransform, GrowArrow, Indicate, self.play, self.wait).\n"
-    "- DO NOT use Tex, MathTex, or any LaTeX — there is no LaTeX installed; use Text only.\n"
-    "- Keep within the frame; reuse positions; aim for ~15-25 seconds total.\n"
-    "- `from manim import *` at the top. No comments needed.\n"
+    "You are a senior motion-graphics artist creating a 3Blue1Brown-quality explainer "
+    "with Manim Community Edition. Write Python for ONE scene that THOROUGHLY explains "
+    "'{topic}' for a {difficulty} learner — a complete lesson, not a quick clip.\n\n"
+    "STORYBOARD — cover the topic in clear SECTIONS (aim for 5+), each a self-contained beat:\n"
+    "  1. TITLE — the topic name, animated in.\n"
+    "  2. INTUITION — the core idea in plain visual terms (an analogy or simple picture).\n"
+    "  3. BUILD — introduce the mechanism step by step, revealing ONE element at a time.\n"
+    "  4. EXAMPLE — a concrete worked example the learner can follow visually.\n"
+    "  5. RECAP — the 2-3 key takeaways shown together.\n"
+    "Between sections, FadeOut the previous mobjects so the stage is clean (never overlap).\n\n"
+    "PACING (make it feel deliberate — aim ~45-90s total):\n"
+    "  - Animate ONE idea per self.play; self.wait(0.6-1.2) after each so it lands.\n"
+    "  - run_time=1.5-2.5 for important transforms; ~0.8 for simple reveals.\n"
+    "  - Reveal groups gracefully with LaggedStart(*[...], lag_ratio=0.15).\n\n"
+    "TECHNIQUE (quality):\n"
+    "  - Write for text; Create for shapes/lines; GrowArrow for arrows.\n"
+    "  - ReplacementTransform (NOT Transform) when one thing BECOMES another (no ghosts).\n"
+    "  - Indicate or a color change to spotlight the CURRENT focal element (staging).\n"
+    "  - Layout: assemble a VGroup and .arrange(DOWN/RIGHT, buff=...) or use .next_to / "
+    ".to_edge / .move_to; .scale(...) to fit. NEVER let elements overlap or leave the frame.\n"
+    "  - Color with intent: a small palette; a bold color = the element in focus, muted "
+    "grey = supporting context. Give the title a distinct accent.\n\n"
+    "STRICT CONSTRAINTS:\n"
+    "  - `from manim import *` at the top. Exactly ONE class: `class Lesson(Scene):` with `construct(self)`.\n"
+    "  - Use ONLY: Text, shapes (Circle, Square, Rectangle, RoundedRectangle, Line, Arrow, "
+    "Dot, Polygon, Triangle, Ellipse), VGroup, and animations (Create, Write, FadeIn, FadeOut, "
+    "Transform, ReplacementTransform, GrowArrow, GrowFromCenter, Indicate, LaggedStart, "
+    "self.play, self.wait).\n"
+    "  - NO Tex / MathTex / LaTeX (none is installed) — write math and symbols with plain "
+    'Text only, e.g. Text("a² + b² = c²").\n'
+    "  - The frame is ~14 wide x 8 tall (center is ORIGIN); keep everything inside it.\n"
     "Return ONLY the Python code — no markdown fences, no prose."
 )
 
@@ -142,7 +163,9 @@ class ManimRenderService:
         raw = await self._llm.complete(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             provider=provider, model=model, credentials=credentials,
-            max_tokens=2000, temperature=0.3,
+            # Headroom for a multi-section storyboard (the old 2000 cap truncated
+            # richer scenes → short, incomplete videos).
+            max_tokens=4000, temperature=0.3,
         )
         return _extract_code(raw)
 

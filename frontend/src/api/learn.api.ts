@@ -147,9 +147,16 @@ export interface AnimatedContent {
 
 // ─── SSE event types ──────────────────────────────────────────────────────────
 
+export interface LearnSuggestion {
+  label: string
+  topic: string
+  kind: 'deeper' | 'next' | 'related'
+}
+
 export type LearnSSEEvent =
   | { type: 'token'; content: string }
   | { type: 'done'; session_id: string; xp_earned: number; new_badges: string[] }
+  | { type: 'suggestions'; items: LearnSuggestion[] }
   | { type: 'error'; error: string }
 
 // ─── Gamification ─────────────────────────────────────────────────────────────

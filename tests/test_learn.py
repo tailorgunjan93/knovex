@@ -942,3 +942,78 @@ class TestUserStats:
             json.loads(e[len("data: "):]) for e in events if '"type": "done"' in e
         )
         assert "first_step" in done["new_badges"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Continuation suggestions ("where to next?") — the rabbit-hole loop
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestNextTopicSuggestions:
+    def _creds(self):
+        from backend.core.providers.base import ProviderCredentials
+        return ProviderCredentials(api_key="k")
+
+    @pytest.mark.asyncio
+    async def test_parses_and_cleans_a_suggestions_array(self):
+        svc, _ = _make_svc()
+        svc._llm_svc.complete = AsyncMock(return_value=json.dumps([
+            {"label": "Centripetal force", "topic": "Centripetal force in circular motion", "kind": "deeper"},
+            {"label": "Angular velocity", "topic": "Angular velocity and period", "kind": "next"},
+            {"label": "Orbits", "topic": "How orbits work", "kind": "related"},
+            {"label": "Banked turns", "topic": "Physics of banked road turns", "kind": "WeIrD"},
+        ]))
+        items = await svc._suggest_next_topics(
+            topic="Circular motion", format="guided", difficulty="beginner",
+            provider="openai", model="gpt-4o-mini", credentials=self._creds(),
+        )
+        assert len(items) == 4
+        assert items[0] == {"label": "Centripetal force", "topic": "Centripetal force in circular motion", "kind": "deeper"}
+        # Unknown kind is normalised to "related".
+        assert items[3]["kind"] == "related"
+
+    @pytest.mark.asyncio
+    async def test_accepts_object_wrapped_items(self):
+        svc, _ = _make_svc()
+        svc._llm_svc.complete = AsyncMock(return_value=json.dumps(
+            {"items": [{"label": "A", "topic": "Topic A", "kind": "next"}]}
+        ))
+        items = await svc._suggest_next_topics(
+            topic="X", format="quiz", difficulty="expert",
+            provider="openai", model="m", credentials=self._creds(),
+        )
+        assert items == [{"label": "A", "topic": "Topic A", "kind": "next"}]
+
+    @pytest.mark.asyncio
+    async def test_drops_items_missing_label_or_topic(self):
+        svc, _ = _make_svc()
+        svc._llm_svc.complete = AsyncMock(return_value=json.dumps([
+            {"label": "ok", "topic": "Good topic", "kind": "next"},
+            {"label": "", "topic": "no label"},
+            {"topic": "no label key"},
+            "not even a dict",
+        ]))
+        items = await svc._suggest_next_topics(
+            topic="X", format="story", difficulty="beginner",
+            provider="o", model="m", credentials=self._creds(),
+        )
+        assert items == [{"label": "ok", "topic": "Good topic", "kind": "next"}]
+
+    @pytest.mark.asyncio
+    async def test_llm_failure_returns_empty_never_raises(self):
+        svc, _ = _make_svc()
+        svc._llm_svc.complete = AsyncMock(side_effect=RuntimeError("LLM down"))
+        items = await svc._suggest_next_topics(
+            topic="X", format="guided", difficulty="beginner",
+            provider="o", model="m", credentials=self._creds(),
+        )
+        assert items == []
+
+    @pytest.mark.asyncio
+    async def test_unparseable_json_returns_empty(self):
+        svc, _ = _make_svc()
+        svc._llm_svc.complete = AsyncMock(return_value="here are some ideas: not json at all")
+        items = await svc._suggest_next_topics(
+            topic="X", format="eli5", difficulty="beginner",
+            provider="o", model="m", credentials=self._creds(),
+        )
+        assert items == []
