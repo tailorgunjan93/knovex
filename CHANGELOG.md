@@ -60,6 +60,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   commands don't hit the network in CI. The Review *grading* flow stays covered by
   `ReviewPage.test.tsx` + backend due-loop integration (a fresh E2E run has no
   due card to grade).
+- **Real-backend E2E now asserts the Animated `code` element.** The `Learn →
+  Animated` gate advances to the code scene and verifies real code renders
+  (`def process(x):` + the highlighted line) — pinning the manual render-review of
+  the code-in-lessons work as a permanent automated guard.
 
 ### Added
 
