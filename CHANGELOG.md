@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+---
+
+## [0.13.0] — 2026-06-10
+
 ### Changed
 
 - **Animated lessons now pick the right graphic for the topic — not boxes &
