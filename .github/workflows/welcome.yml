@@ -1,0 +1,40 @@
+name: Welcome First-Time Contributors
+
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post welcome message for first-time contributors
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const creator = context.payload.pull_request.user.login;
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner, repo: context.repo.repo, state: "closed",
+            });
+            const hasMergedBefore = prs.some(
+              pr => pr.user.login === creator && pr.merged_at !== null
+            );
+
+            if (!hasMergedBefore) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body:
+                  `Hey @${creator}, welcome to Knovex! 🎉 Thanks for your first contribution.\n\n` +
+                  "A few things to make review smooth:\n" +
+                  "- [ ] Backend tests pass — `pytest tests/ -v`\n" +
+                  "- [ ] Frontend builds + tests pass — `cd frontend && npm run build && npm test`\n" +
+                  "- [ ] If you added a feature or fixed a bug, there's a test for it\n" +
+                  "- [ ] If it's a packaged-app change, note how you verified it\n\n" +
+                  "No pressure — we'll review and give feedback. Thanks for taking the time! 🙏",
+              });
+            }

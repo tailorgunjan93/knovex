@@ -1,0 +1,57 @@
+name: PR Auto-Label
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tag the PR by its conventional-commit title + touched areas
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr    = context.payload.pull_request;
+            const title = (pr.title || "").toLowerCase();
+            const labels = new Set();
+
+            // ── type from the conventional-commit prefix ─────────────────────
+            const typeMap = [
+              { re: /^feat(\(|:|!)/,  label: "enhancement" },
+              { re: /^fix(\(|:|!)/,   label: "bug" },
+              { re: /^test(\(|:|!)/,  label: "tests" },
+              { re: /^docs(\(|:|!)/,  label: "documentation" },
+              { re: /^(refactor|perf|chore|ci|build)(\(|:|!)/, label: "maintenance" },
+            ];
+            for (const t of typeMap) if (t.re.test(title)) labels.add(t.label);
+
+            // ── area from the title scope / files touched ────────────────────
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: pr.number,
+            });
+            const paths = files.map(f => f.filename).join("\n");
+            const areaMap = [
+              { re: /backend\//,       label: "area:backend" },
+              { re: /frontend\//,      label: "area:frontend" },
+              { re: /desktop\//,       label: "area:desktop" },
+              { re: /(^|\/)e2e\//,     label: "tests" },
+              { re: /pages\/Chat\//,   label: "area:chat" },
+              { re: /pages\/Learn\//,  label: "area:learn" },
+              { re: /pages\/Reader\//, label: "area:reader" },
+            ];
+            for (const a of areaMap) if (a.re.test(paths)) labels.add(a.label);
+
+            if (labels.size > 0) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: pr.number, labels: [...labels],
+                });
+              } catch (e) {
+                console.log("Label error (label may not exist yet):", e.message);
+              }
+            }
