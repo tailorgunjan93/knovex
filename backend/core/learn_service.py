@@ -51,6 +51,23 @@ logger = logging.getLogger("knovex.learn")
 # ── Streaming text formats (free prose) ─────────────────────────────────────
 _TEXT_FORMATS = frozenset({"story", "eli5", "speedlearn", "brainstorm"})
 
+# Topics that should SHOW code, not just describe it. Heuristic (best-effort):
+# substrings are space-padded where ambiguous ("go", "c#") to avoid false hits.
+_CODING_HINTS = (
+    "python", "javascript", "typescript", " java", "kotlin", "swift", " rust", "golang",
+    " sql", "react", "html", " css", "algorithm", "recursion", " loop", "data structure",
+    "regex", "regular expression", "programming", "coding", " code", "compiler", "async",
+    "pointer", "linked list", "binary tree", "sorting", "hash map", "hashmap", "closure",
+    "promise", "decorator", "syntax", "bitwise", "function ", "api ", "rest api", "oop",
+    "object-oriented", "variable", "boolean", "iterator", "lambda", "stack ", "queue ",
+)
+
+
+def _is_coding_topic(topic: str) -> bool:
+    """Heuristic: is this topic about programming (→ must show real code)?"""
+    t = f" {topic.lower()} "
+    return any(h in t for h in _CODING_HINTS)
+
 # ── Badge definitions ────────────────────────────────────────────────────────
 _BADGE_FIRST_STEP    = "first_step"
 _BADGE_QUIZ_MASTER   = "quiz_master"
@@ -541,6 +558,23 @@ class LearnService:
                 "teach THAT."
             )
         user_parts = [f"Topic: {topic}"]
+        # Coding topics must SHOW code, not describe it in the abstract.
+        if _is_coding_topic(topic):
+            if format == "animated":
+                system += (
+                    "\n\nThis is a PROGRAMMING topic: you MUST use the `code` element to show the "
+                    "ACTUAL code on screen and step through it line by line (set `highlight` to the "
+                    "line you're explaining each scene). Show real, correct, runnable code — never "
+                    "explain code only in words or with empty boxes."
+                )
+            else:
+                system += (
+                    "\n\nThis is a PROGRAMMING topic: include REAL, correct code in fenced "
+                    "```<language>\\ncode\\n``` blocks and walk through it concretely — the input, "
+                    "what each line does, and the output. Don't give theory only; show actual code "
+                    "the learner can run."
+                )
+        user_parts = [f"Topic: {topic}"]
         if context_text:
             user_parts.append(f"\nSource material (teach the subject it covers):\n{context_text[:3000]}")
         return [
@@ -643,25 +677,40 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         ']}}'
     ),
     "animated": (
-        "You are a senior motion-graphics artist in the style of 3Blue1Brown and Kurzgesagt, "
-        "directing an ANIMATED visual lesson on '{topic}' for a {difficulty} level learner. "
-        "You think visually: every idea becomes shapes, arrows, and labels that build up on screen "
-        "while a narrator speaks. Design 7-10 scenes that tell a complete visual story.\n"
-        "STORY ARC: open with a TITLE scene, then INTUITION, then BUILD the mechanism one step at a "
-        "time, then a concrete EXAMPLE, then a RECAP scene with the key takeaways. Don't reset every "
-        "scene — EVOLVE the diagram: keep persistent elements and add or highlight one NEW focal "
-        "element per scene (staging) so it feels like one continuous build, not slides. "
-        "Highlight the new focal element with the accent colour; mute prior context.\n"
-        "CANVAS: a 2D stage. x goes 0 (left) to 100 (right); y goes 0 (top) to 100 (bottom); "
-        "center is (50,50). Keep elements inside 5..95 and never overlap labels.\n"
+        "You are a senior motion-graphics artist and educator in the style of 3Blue1Brown "
+        "and Kurzgesagt, directing an ANIMATED visual lesson on '{topic}' for a {difficulty} "
+        "learner. The VISUAL must carry the idea — it should explain MORE than the narration, "
+        "never just decorate it.\n\n"
+        "STEP 1 — CHOOSE THE RIGHT VISUAL FOR THIS TOPIC. Do NOT default to boxes and circles. "
+        "Decide what the topic actually IS, then commit to the matching layout for the whole lesson:\n"
+        "  • a PROCESS / steps / how it works  → FLOW: nodes left→right (or top→down) joined by arrows.\n"
+        "  • a repeating CYCLE                 → RING: 3-5 nodes/circles around the centre, arrows curving on to the next, the last back to the first.\n"
+        "  • a HIERARCHY / parts-of / taxonomy → TREE: one root node up top (y~20), children spread below (y~58), lines connecting parent→child.\n"
+        "  • a COMPARISON (A vs B)             → TWO COLUMNS: left group centred x~27, right group x~73, a divider line at x=50.\n"
+        "  • events over TIME / history        → TIMELINE: a horizontal line at y~55 with markers along it (label text above, dots on the line).\n"
+        "  • CODE / programming                → a `code` element with the REAL snippet, stepped line by line (set `highlight`).\n"
+        "  • an abstract CONCEPT / relations   → HUB: a central node with labelled satellites and connecting lines.\n"
+        "  • a QUANTITY / proportion / change  → BARS: nodes of differing width/height along a baseline, or a number that grows.\n"
+        "Name the structure to yourself first, then design every scene around it.\n\n"
+        "STORY ARC (7-10 scenes): TITLE → INTUITION (the core idea as one simple picture or analogy) → "
+        "BUILD the mechanism adding ONE new element at a time → a concrete EXAMPLE → RECAP of the key "
+        "takeaways. EVOLVE a single diagram across scenes: keep persistent elements, add or spotlight ONE "
+        "new focal element per scene in the ACCENT colour, and mute prior context to grey (muted). One idea "
+        "on screen at a time.\n\n"
+        "LAYOUT — PREVENT OVERLAP (this is critical; overlapping labels ruin the lesson):\n"
+        "  - x: 0 left … 100 right; y: 0 top … 100 bottom; centre (50,50). Keep everything inside 6..94.\n"
+        "  - Picture a 12-column × 8-row grid and give each element its OWN cell/region.\n"
+        "  - Keep at least 16 units between the CENTRES of any two text/box/circle elements. NEVER stack or overlap labels or shapes.\n"
+        "  - Reserve y 6..16 for the title row. Spread a flow across the FULL width (x 14..86) — don't cram everything at the centre.\n"
+        "  - At most 5 elements per scene so each can breathe. Let text dwell: duration 4-7 seconds per scene.\n\n"
         "ELEMENT TYPES (use only these):\n"
         "  text  — {{\"type\":\"text\",\"text\":\"...\",\"x\":50,\"y\":12,\"size\":\"title|heading|body|small\",\"color\":\"accent|primary|muted\",\"enter\":\"fade|rise|pop\"}}\n"
         "  node  — a labelled box: {{\"type\":\"node\",\"label\":\"...\",\"x\":30,\"y\":50,\"w\":26,\"h\":16,\"color\":\"accent|blue|green|amber|muted\",\"enter\":\"fade|rise|pop|draw\"}}\n"
         "  circle— {{\"type\":\"circle\",\"label\":\"...\",\"x\":50,\"y\":50,\"r\":12,\"color\":\"...\",\"enter\":\"draw|pop|fade\"}}\n"
         "  arrow — {{\"type\":\"arrow\",\"x1\":40,\"y1\":50,\"x2\":60,\"y2\":50,\"label\":\"optional\",\"enter\":\"draw\"}}\n"
         "  line  — {{\"type\":\"line\",\"x1\":..,\"y1\":..,\"x2\":..,\"y2\":..,\"color\":\"...\",\"enter\":\"draw\"}}\n"
-        "RULES: max 6 elements per scene; reuse positions across scenes so elements feel persistent; "
-        "each scene's narration is 1-2 spoken sentences; duration is seconds (3-7).\n"
+        "  code  — a code snippet (USE THIS for programming topics): {{\"type\":\"code\",\"code\":\"def f(x):\\n    return x*2\",\"lang\":\"python\",\"x\":50,\"y\":54,\"w\":62,\"highlight\":2,\"enter\":\"fade\"}} — `code` is real multi-line code (\\n between lines); `highlight` is the 1-based line being explained this scene.\n\n"
+        "COLOR: a small palette. accent = the element in focus; muted grey = supporting context; the title gets a distinct accent.\n"
         "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences.\n"
         "Format:\n"
         '{{"topic":"...","title":"short lesson title",'

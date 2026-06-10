@@ -233,6 +233,14 @@ _CANNED_BY_FORMAT: dict[str, dict] = {
                 ],
             },
             {
+                "narration": "In code, that's a single function.",
+                "duration": 5,
+                "elements": [
+                    {"type": "text", "text": "In code", "x": 50, "y": 14, "size": "heading", "color": "primary", "enter": "fade"},
+                    {"type": "code", "code": "def process(x):\n    core = transform(x)\n    return core", "lang": "python", "x": 50, "y": 56, "w": 60, "highlight": 2, "enter": "fade"},
+                ],
+            },
+            {
                 "narration": "Recap: the three key takeaways.",
                 "duration": 5,
                 "elements": [

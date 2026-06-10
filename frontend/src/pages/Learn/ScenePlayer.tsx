@@ -35,6 +35,15 @@ export function clampScene(idx: number, total: number): number {
   return Math.min(total - 1, Math.max(0, idx))
 }
 
+/**
+ * Clamp a 0–100 stage percentage into the visible 4..96 band so an element the
+ * model placed near (or past) an edge can't escape the frame. Pure (unit-tested).
+ */
+export function clampPct(v: number | undefined, fallback = 50): number {
+  const n = typeof v === 'number' && Number.isFinite(v) ? v : fallback
+  return Math.min(96, Math.max(4, n))
+}
+
 /** Scene dwell in ms, clamped to a sane 3–8s. Pure (unit-tested). */
 export function sceneDurationMs(duration: number | undefined): number {
   const s = typeof duration === 'number' && duration > 0 ? duration : 5
@@ -259,7 +268,7 @@ function SceneBlock({ el, index, reduce, theme, isDark }: {
   const accent = isAccentColor(el.color)
   const common = {
     position: 'absolute' as const,
-    left: `${el.x ?? 50}%`, top: `${el.y ?? 50}%`,
+    left: `${clampPct(el.x)}%`, top: `${clampPct(el.y)}%`,
   }
   // Framer drives `transform` for the enter animation, which would clobber a
   // static translate(-50%,-50%) and leave elements top-left-anchored (off-centre).
@@ -299,6 +308,37 @@ function SceneBlock({ el, index, reduce, theme, isDark }: {
         style={{ ...common, width: d, aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center',
           borderRadius: '50%', border: `1.5px solid ${alpha(color, 0.9)}`, background: fill, boxShadow: shapeShadow }}>
         <Typography sx={{ fontSize: 12.5, fontWeight: 600, color, textAlign: 'center', px: 1 }}>{el.label}</Typography>
+      </Motion.div>
+    )
+  }
+
+  if (el.type === 'code') {
+    const codeLines = (el.code ?? '').replace(/\r/g, '').split('\n')
+    const hi = el.highlight ?? -1
+    return (
+      <Motion.div data-testid="scene-code" initial={initial} animate={animate} transition={transition} transformTemplate={center}
+        style={{ ...common, width: `${el.w ?? 58}%`, maxWidth: '90%' }}>
+        <Box sx={{
+          fontFamily: MONO, fontSize: 12.5, lineHeight: 1.65, textAlign: 'left',
+          borderRadius: 2, overflow: 'hidden', border: `1px solid ${alpha(BRAND.copper, 0.3)}`,
+          bgcolor: isDark ? 'rgba(8,7,6,0.94)' : 'rgba(252,249,243,0.99)', boxShadow: shapeShadow,
+        }}>
+          <Box sx={{ px: 1.25, py: 0.4, fontSize: 10.5, color: 'text.disabled',
+            borderBottom: `1px solid ${theme.palette.divider}` }}>{el.lang || 'code'}</Box>
+          <Box sx={{ py: 0.75 }}>
+            {codeLines.map((ln, li) => {
+              const active = li + 1 === hi
+              return (
+                <Box key={li} sx={{ display: 'flex', whiteSpace: 'pre',
+                  bgcolor: active ? alpha(BRAND.copper, 0.18) : 'transparent',
+                  borderLeft: active ? `2px solid ${BRAND.copper}` : '2px solid transparent' }}>
+                  <Box component="span" sx={{ width: 26, color: 'text.disabled', userSelect: 'none', textAlign: 'right', pr: 1 }}>{li + 1}</Box>
+                  <Box component="span" sx={{ color: active ? 'text.primary' : 'text.secondary' }}>{ln || ' '}</Box>
+                </Box>
+              )
+            })}
+          </Box>
+        </Box>
       </Motion.div>
     )
   }
