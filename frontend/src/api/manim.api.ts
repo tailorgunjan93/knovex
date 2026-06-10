@@ -35,10 +35,10 @@ export const manimApi = {
   async uninstall(): Promise<PackStatus> {
     return (await apiClient.post<PackStatus>('/manim/uninstall')).data
   },
-  async render(topic: string, difficulty = 'intermediate'): Promise<RenderResult> {
+  async render(topic: string, difficulty = 'intermediate', language = 'English'): Promise<RenderResult> {
     // Renders take tens of seconds — override the default 30s client timeout.
     const res = await apiClient.post<RenderResult>(
-      '/manim/render', { topic, difficulty }, { timeout: 180_000 },
+      '/manim/render', { topic, difficulty, language }, { timeout: 180_000 },
     )
     return res.data
   },

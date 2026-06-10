@@ -528,9 +528,21 @@ class LearnService:
                 f"Keep all JSON keys/field names in English exactly as specified — "
                 f"translate only the values, never the keys."
             )
+        if context_text:
+            # Teach the SUBJECT, not the source. Without this, a URL lesson
+            # describes the web page/website (and a bare-hostname topic makes the
+            # model "explain example.com") instead of the concept the page covers.
+            system += (
+                "\n\nThe SOURCE MATERIAL below is reference content to teach FROM. "
+                "Teach the underlying subject/concept it covers — do NOT describe, "
+                "summarise, or review the web page, website, document, its author, "
+                "layout, or navigation. If the topic above is vague, a URL, or a "
+                "site name, infer the actual subject from the source material and "
+                "teach THAT."
+            )
         user_parts = [f"Topic: {topic}"]
         if context_text:
-            user_parts.append(f"\nContext from knowledge base:\n{context_text[:3000]}")
+            user_parts.append(f"\nSource material (teach the subject it covers):\n{context_text[:3000]}")
         return [
             {"role": "system", "content": system},
             {"role": "user",   "content": "\n".join(user_parts)},

@@ -11,6 +11,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- **Learn — switching sessions kept the previous animation/Cinematic video.**
+  `CinematicPanel` held the rendered MP4 in local state that never reset on a
+  topic/session change. `ScenePlayer` + `CinematicPanel` are now keyed on the
+  session so both fully reset when you switch lessons.
+- **Learn — the Cinematic (Manim) video was always in English** even with another
+  language selected. The Manim path never received `language`; `render()` +
+  `_SYSTEM_PROMPT` now translate the on-screen `Text(...)` (the Python/Manim API
+  stays English so it still renders). Threaded language end-to-end.
+- **Learn from a URL explained the *website*, not the topic.** Web mode used the
+  hostname as the topic and the prompt said "explain '{topic}'", so the lesson
+  described the page/site. `_build_prompt` now frames page/KB/upload content as
+  **source material to teach FROM** — teach the subject it covers, infer the real
+  subject when the topic is vague or a URL, and never describe the page itself.
 - **Chat ignored local messages until a session existed.** A fresh chat (no
   `activeSessionId`) rendered the empty state and never showed messages held only
   in local state — so a `/help` or `/summarize` guidance note appeared to do

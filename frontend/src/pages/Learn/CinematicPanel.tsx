@@ -19,9 +19,10 @@ import { BRAND } from '@/theme/tokens'
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
 const KEY = ['manim-status']
 
-export default function CinematicPanel({ topic, difficulty = 'intermediate' }: {
+export default function CinematicPanel({ topic, difficulty = 'intermediate', language = 'English' }: {
   topic: string
   difficulty?: string
+  language?: string
 }) {
   const theme = useTheme()
   const qc = useQueryClient()
@@ -40,7 +41,7 @@ export default function CinematicPanel({ topic, difficulty = 'intermediate' }: {
   })
 
   const render = useMutation({
-    mutationFn: () => manimApi.render(topic, difficulty),
+    mutationFn: () => manimApi.render(topic, difficulty, language),
     onSuccess: (r) => {
       if (r.ok && r.video_url) setVideoUrl(manimApi.absoluteVideoUrl(r.video_url))
     },

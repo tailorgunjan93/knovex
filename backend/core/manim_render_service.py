@@ -126,6 +126,7 @@ class ManimRenderService:
         provider: str,
         model: str,
         credentials: ProviderCredentials,
+        language: str = "English",
     ) -> RenderResult:
         if not self._provision.is_ready():
             return RenderResult(ok=False, error="The Cinematic (Manim) pack is not installed.")
@@ -138,7 +139,7 @@ class ManimRenderService:
         prev_err: str | None = None
 
         for attempt in range(1, self._max + 1):
-            code = await self._generate_code(topic, difficulty, provider, model, credentials, prev_code, prev_err)
+            code = await self._generate_code(topic, difficulty, provider, model, credentials, prev_code, prev_err, language)
             ok, payload = await self._render_once(python_exe, code, out_sub)
             if ok:
                 logger.info("Cinematic render succeeded for %r on attempt %d", topic, attempt)
@@ -153,12 +154,21 @@ class ManimRenderService:
 
     async def _generate_code(
         self, topic, difficulty, provider, model, credentials, prev_code, prev_err,
+        language="English",
     ) -> str:
         if prev_code and prev_err:
             user = _REPAIR_PROMPT.format(error=prev_err[-1500:], code=prev_code)
             system = "You fix Manim Community Edition code. Text/shapes only, no LaTeX."
         else:
             system = _SYSTEM_PROMPT.format(topic=topic, difficulty=difficulty)
+            # Multilingual: write the on-screen Text in the chosen language while
+            # keeping the Python/Manim API in English so the code still renders.
+            if language and language.strip().lower() != "english":
+                system += (
+                    f"\n\nIMPORTANT: Write ALL on-screen Text(...) content in {language}. "
+                    f"Keep the Python code, the class name, and the Manim API in English — "
+                    f"translate only the strings the viewer reads."
+                )
             user = f"Animate: {topic}"
         raw = await self._llm.complete(
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
