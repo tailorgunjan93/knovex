@@ -1,0 +1,103 @@
+name: Issue Labeler & Auto-Response
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  label-and-respond:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label issue and post first response
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.issue.title.toLowerCase();
+            const body  = (context.payload.issue.body || "").toLowerCase();
+            const text  = title + " " + body;
+            const issue = context.payload.issue.number;
+
+            // ── keyword → label map (Knovex desktop app domain) ──────────────
+            const rules = [
+              { label: "bug",           words: ["error", "crash", "broken", "fails", "exception",
+                                                "traceback", "not working", "network error", "blank screen",
+                                                "black screen", "won't start", "wont start", "doesn't open",
+                                                "did not start", "freeze", "frozen", "hangs"] },
+              { label: "enhancement",   words: ["feature", "add support", "improve", "enhancement",
+                                                "request", "would be nice", "wish", "suggestion"] },
+              { label: "question",      words: ["how to", "how do", "why does", "what is", "can i",
+                                                "help", "confused", "not sure", "wondering"] },
+              { label: "documentation", words: ["docs", "documentation", "readme", "example",
+                                                "tutorial", "guide", "unclear", "typo"] },
+              { label: "area:chat",     words: ["chat", "message", "conversation", "web search",
+                                                "/news", "/research", "/summarize", "slash command", "sources"] },
+              { label: "area:learn",    words: ["learn", "lesson", "quiz", "flashcard", "animated",
+                                                "animation", "scene", "review", "spaced repetition",
+                                                "manim", "cinematic", "guided"] },
+              { label: "area:reader",   words: ["reader", "pdf", "ocr", "highlight", "document view"] },
+              { label: "area:desktop",  words: ["installer", "install", "update", "auto-update",
+                                                "electron", "tray", "uninstall", "nsis", "setup.exe"] },
+              { label: "area:backend",  words: ["backend", "api", "llm", "provider", "model", "api key",
+                                                "ollama", "openai", "groq", "gemini", "cerebras",
+                                                "embedding", "retrieval", "sqlite", "knowledge base", "kb"] },
+              { label: "performance",   words: ["slow", "memory", "ram", "oom", "out of memory",
+                                                "speed", "performance", "timeout", "lag", "large"] },
+            ];
+
+            const toAdd = [];
+            for (const rule of rules) {
+              if (rule.words.some(w => text.includes(w))) toAdd.push(rule.label);
+            }
+            toAdd.push("needs-triage");   // nothing slips through
+
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue, labels: toAdd,
+              });
+            } catch (e) {
+              console.log("Label error (label may not exist yet):", e.message);
+            }
+
+            // ── friendly first response ──────────────────────────────────────
+            const isBug      = toAdd.includes("bug");
+            const isQuestion = toAdd.includes("question");
+            const isFeature  = toAdd.includes("enhancement");
+
+            let response;
+            if (isBug) {
+              response =
+                "Thanks for the bug report! 🐛\n\n" +
+                "To help us reproduce and fix this quickly, could you share:\n" +
+                "- Knovex version (the rail footer, or Settings → About)\n" +
+                "- Your OS (Windows / macOS / Linux) and version\n" +
+                "- Exact steps to reproduce\n" +
+                "- Whether it happens in the **installed app** or only sometimes\n" +
+                "- Any logs (Windows: `%APPDATA%\\Knovex\\logs`)\n\n" +
+                "We'll take a look soon.";
+            } else if (isQuestion) {
+              response =
+                "Good question! 👋\n\n" +
+                "While we look into this, you might find an answer in:\n" +
+                "- The [README](https://github.com/tailorgunjan93/knovex#readme)\n" +
+                "- [Discussions](https://github.com/tailorgunjan93/knovex/discussions) — great for how-to/usage questions\n" +
+                "- Existing [closed issues](https://github.com/tailorgunjan93/knovex/issues?q=is%3Aissue+is%3Aclosed)\n\n" +
+                "If none of those help, we'll reply here directly.";
+            } else if (isFeature) {
+              response =
+                "Thanks for the suggestion! 💡\n\n" +
+                "Feature requests are tracked here. Add more context about your use case — it helps a lot when prioritising.";
+            } else {
+              response =
+                "Thanks for opening this issue! 👋\n\n" +
+                "We've tagged it automatically — someone will follow up soon. " +
+                "If you have more context or a reproduction case, feel free to add it.";
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: issue, body: response,
+            });

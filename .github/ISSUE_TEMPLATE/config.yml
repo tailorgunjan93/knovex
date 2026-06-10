@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & ideas (Discussions)
+    url: https://github.com/tailorgunjan93/knovex/discussions
+    about: Ask how-to/usage questions or float an idea here — keep the issue tracker for bugs and concrete feature requests.
