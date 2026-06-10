@@ -495,7 +495,7 @@ export default function ChatPage() {
         {/* Messages area — centered reading column (lab document style) */}
         <Box flex={1} overflow="auto" sx={{ px: 4, py: 1 }}>
           <Box sx={{ maxWidth: 760, mx: 'auto' }}>
-          {activeSessionId ? (
+          {(activeSessionId || messages.length > 0) ? (
             msgsLoading ? (
               <Box display="flex" justifyContent="center" pt={6}>
                 <CircularProgress size={24} />

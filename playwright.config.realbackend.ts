@@ -53,6 +53,7 @@ export default defineConfig({
       stderr: 'pipe',
       env: {
         KNOVEX_FAKE_LLM: '1',
+        KNOVEX_FAKE_SEARCH: '1',
         KNOVEX_BACKEND_PORT: String(BACKEND_PORT),
         KNOVEX_DATA_DIR: path.join(ROOT, '.e2e-tmp', 'data'),
         KNOVEX_CONFIG_DIR: path.join(ROOT, '.e2e-tmp', 'config'),

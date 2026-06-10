@@ -15,6 +15,7 @@ Pattern: Adapter (GoF) + Strategy (DIP)
 from __future__ import annotations
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -390,9 +391,19 @@ _ADAPTERS: dict[str, IWebSearchAdapter] = {
     "brave":      BraveAdapter(),
 }
 
+# Deterministic offline adapter for real-backend E2E (KNOVEX_FAKE_SEARCH=1), the
+# search-side counterpart to KNOVEX_FAKE_LLM. Returns the same canned results for
+# any query/engine so /web, /news, /research run without network flakiness.
+_E2E_FAKE_ADAPTER = StubWebSearchAdapter(results=[
+    SearchResult("Knovex E2E Source A", "https://e2e.example/a", "Deterministic snippet A."),
+    SearchResult("Knovex E2E Source B", "https://e2e.example/b", "Deterministic snippet B."),
+])
+
 
 def get_search_adapter(engine: str) -> IWebSearchAdapter:
     """Return the adapter for *engine* (case-insensitive). Falls back to DuckDuckGo."""
+    if os.environ.get("KNOVEX_FAKE_SEARCH"):
+        return _E2E_FAKE_ADAPTER
     adapter = _ADAPTERS.get(engine.lower())
     if adapter is None:
         logger.warning("Unknown search engine '%s', falling back to DuckDuckGo", engine)

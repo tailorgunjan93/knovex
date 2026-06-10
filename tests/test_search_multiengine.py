@@ -304,6 +304,30 @@ def _install_fake_ddgs(monkeypatch):
     monkeypatch.setitem(sys.modules, "ddgs", mod)
 
 
+class TestFakeSearchHook:
+    """KNOVEX_FAKE_SEARCH=1 → deterministic offline adapter (mirrors KNOVEX_FAKE_LLM).
+
+    Lets real-backend E2E exercise /web, /news, /research without hitting the
+    network (no flakiness, no DuckDuckGo rate-limits). Off by default → production
+    is unaffected.
+    """
+
+    @pytest.mark.asyncio
+    async def test_env_set_returns_deterministic_results_for_any_engine(self, monkeypatch):
+        from backend.adapters import web_search as ws
+        monkeypatch.setenv("KNOVEX_FAKE_SEARCH", "1")
+        adapter = ws.get_search_adapter("serper")          # any engine id
+        assert not isinstance(adapter, ws.SerperAdapter)   # NOT the real one
+        results = await adapter.search("anything at all", num_results=5)
+        assert len(results) >= 1
+        assert results[0].url.startswith("http")
+
+    def test_env_unset_returns_real_adapter(self, monkeypatch):
+        from backend.adapters import web_search as ws
+        monkeypatch.delenv("KNOVEX_FAKE_SEARCH", raising=False)
+        assert isinstance(ws.get_search_adapter("serper"), ws.SerperAdapter)
+
+
 class TestDuckDuckGoNewsRouting:
     @pytest.mark.asyncio
     async def test_news_query_uses_news_method_and_enriches_snippet(self, monkeypatch):
