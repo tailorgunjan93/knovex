@@ -9,6 +9,27 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Changed
+
+- **Animated lessons now pick the right graphic for the topic — not boxes &
+  circles every time.** Rewrote the animated prompt (research-informed: 3Blue1Brown
+  principles, visual hierarchy, diagram-by-purpose): it first classifies the topic's
+  structure and commits to the matching layout — **flow** (process), **ring** (cycle),
+  **tree** (hierarchy), **two columns** (comparison), **timeline** (events), **hub**
+  (concept), or **code** (programming). Added explicit anti-overlap layout discipline
+  (12×8 grid, ≥16-unit spacing, one focal element per scene, longer dwell) to stop the
+  overlapping/cluttered scenes. The renderer also clamps every element into the visible
+  frame (`clampPct`) so nothing escapes the stage.
+
+### Added
+
+- **Code in lessons (coding stops being theory-only).** A new `code` scene element
+  renders real, multi-line code with line numbers and a spotlighted line
+  (Python-Tutor-style step-through), verified by render-review. A coding-topic
+  detector (`_is_coding_topic`) forces real code into every format — the `code`
+  element in Animated, fenced ```code``` blocks in Guided/text — so programming
+  lessons show and walk through actual code instead of describing it abstractly.
+
 ### Fixed
 
 - **Learn — switching sessions kept the previous animation/Cinematic video.**

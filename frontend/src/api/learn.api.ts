@@ -114,7 +114,7 @@ export interface GuidedContent {
 export type SceneEnter = 'fade' | 'rise' | 'pop' | 'draw'
 
 export interface SceneElement {
-  type:  'text' | 'node' | 'circle' | 'arrow' | 'line'
+  type:  'text' | 'node' | 'circle' | 'arrow' | 'line' | 'code'
   // text / node / circle
   text?:  string
   label?: string
@@ -130,6 +130,10 @@ export interface SceneElement {
   y1?: number
   x2?: number
   y2?: number
+  // code (programming lessons): real multi-line code + the 1-based line to spotlight
+  code?:      string
+  lang?:      string
+  highlight?: number
   enter?: SceneEnter
 }
 

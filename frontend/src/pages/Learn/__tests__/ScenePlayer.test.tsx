@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ThemeProvider, createTheme } from '@mui/material'
-import ScenePlayer, { clampScene, sceneDurationMs } from '@/pages/Learn/ScenePlayer'
+import ScenePlayer, { clampScene, clampPct, sceneDurationMs } from '@/pages/Learn/ScenePlayer'
 import type { AnimatedContent } from '@/api/learn.api'
 
 // jsdom has no ResizeObserver — the stage measurement relies on it.
@@ -58,6 +58,20 @@ describe('ScenePlayer render', () => {
     const { container } = renderPlayer({ topic: 't', title: 't', scenes: [] })
     expect(container.querySelector('[data-testid="scene-stage"]')).toBeNull()
   })
+
+  it('renders a code element with its lines (coding lessons)', () => {
+    const content: AnimatedContent = {
+      topic: 'Python', title: 'Doubling', scenes: [{
+        narration: 'A tiny function.', duration: 5,
+        elements: [{ type: 'code', code: 'def f(x):\n    return x * 2', lang: 'python', x: 50, y: 55, w: 60, highlight: 2 }],
+      }],
+    }
+    renderPlayer(content)
+    expect(screen.getByTestId('scene-code')).toBeInTheDocument()
+    expect(screen.getByText('def f(x):')).toBeInTheDocument()
+    expect(screen.getByText(/return x \* 2/)).toBeInTheDocument()
+    expect(screen.getByText('python')).toBeInTheDocument()   // language label
+  })
 })
 
 describe('ScenePlayer helpers', () => {
@@ -69,6 +83,19 @@ describe('ScenePlayer helpers', () => {
     })
     it('returns 0 for empty', () => {
       expect(clampScene(2, 0)).toBe(0)
+    })
+  })
+
+  describe('clampPct', () => {
+    it('keeps elements inside the 4..96 frame band', () => {
+      expect(clampPct(-10)).toBe(4)
+      expect(clampPct(120)).toBe(96)
+      expect(clampPct(50)).toBe(50)
+    })
+    it('falls back for missing/invalid values', () => {
+      expect(clampPct(undefined)).toBe(50)
+      expect(clampPct(NaN)).toBe(50)
+      expect(clampPct(undefined, 12)).toBe(12)
     })
   })
 

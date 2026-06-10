@@ -27,8 +27,10 @@ import pytest
 from backend.core.domain.learn import LearnSession, UserStats
 from backend.core.domain.srs import CardSchedule
 from backend.core.learn_service import (
+    _SYSTEM_PROMPTS,
     LearnService,
     _escape_inner_quotes,
+    _is_coding_topic,
     _parse_llm_json,
     _repair_truncated_json,
 )
@@ -796,6 +798,51 @@ class TestSubmitQuizAnswer:
 # ---------------------------------------------------------------------------
 # review_flashcard
 # ---------------------------------------------------------------------------
+
+class TestAnimatedPromptTopicAware:
+    """The animated prompt must pick graphics by topic structure (not always
+    boxes+circles), enforce anti-overlap layout, and offer a code element."""
+
+    def test_prompt_offers_diagram_types_and_code_element(self):
+        p = _SYSTEM_PROMPTS["animated"].lower()
+        # diagram-by-structure selection (research: choose the graphic by purpose)
+        for kind in ["flow", "ring", "tree", "two columns", "timeline", "hub"]:
+            assert kind in p, kind
+        assert "code" in p and "highlight" in p          # code element for programming
+        assert "do not default to boxes" in p            # explicit anti-default
+        assert "overlap" in p and "grid" in p            # anti-overlap layout discipline
+
+
+class TestCodingTopicDetection:
+    @pytest.mark.parametrize("topic", [
+        "Python decorators", "JavaScript closures", "recursion", "binary tree traversal",
+        "how a for loop works", "SQL joins", "REST API design",
+    ])
+    def test_detects_coding_topics(self, topic):
+        assert _is_coding_topic(topic)
+
+    @pytest.mark.parametrize("topic", [
+        "Photosynthesis", "The French Revolution", "How rainbows form", "Supply and demand",
+    ])
+    def test_ignores_non_coding_topics(self, topic):
+        assert not _is_coding_topic(topic)
+
+    def test_animated_coding_topic_demands_code_element(self):
+        svc, _ = _make_svc()
+        sys = svc._build_prompt("animated", "Python decorators", "intermediate", "", "English")[0]["content"]
+        assert "`code` element" in sys and "step through it line by line" in sys.lower()
+
+    def test_text_coding_topic_demands_fenced_code(self):
+        svc, _ = _make_svc()
+        sys = svc._build_prompt("guided", "Recursion in Python", "beginner", "", "English")[0]["content"]
+        assert "fenced" in sys.lower() and "code the learner can run" in sys.lower()
+
+    def test_non_coding_topic_adds_no_code_directive(self):
+        svc, _ = _make_svc()
+        sys = svc._build_prompt("guided", "Photosynthesis", "beginner", "", "English")[0]["content"]
+        assert "fenced" not in sys.lower()
+        assert "programming topic" not in sys.lower()
+
 
 class TestBuildPromptSourceFraming:
     """When source material is present (URL/KB/upload), the lesson must teach the
