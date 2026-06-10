@@ -36,6 +36,12 @@ test.describe('Real-backend streaming gate', () => {
 
     // Positive signal: the deterministic scene text rendered by ScenePlayer.
     await expect(page.getByText('E2E animated scene')).toBeVisible({ timeout: 45_000 })
+
+    // The lesson auto-advances; assert the `code` scene element renders (PR #27):
+    // real code with line numbers + a highlighted line, for coding lessons.
+    await expect(page.getByTestId('scene-code')).toBeVisible({ timeout: 25_000 })
+    await expect(page.getByText('def process(x):')).toBeVisible()
+
     // Negative signal: no streaming-error toast appeared at any point.
     await expect(page.getByText(ERROR_TOAST)).toHaveCount(0)
   })
