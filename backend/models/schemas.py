@@ -181,6 +181,7 @@ class ManimRenderRequest(BaseModel):
     """Render a Cinematic (Manim) animation for a topic."""
     topic: str = Field(..., min_length=1)
     difficulty: Literal["beginner", "intermediate", "expert"] = "intermediate"
+    language: str = "English"   # on-screen text language (code stays English)
 
 
 class ManimRenderResponse(BaseModel):

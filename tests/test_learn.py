@@ -797,6 +797,31 @@ class TestSubmitQuizAnswer:
 # review_flashcard
 # ---------------------------------------------------------------------------
 
+class TestBuildPromptSourceFraming:
+    """When source material is present (URL/KB/upload), the lesson must teach the
+    SUBJECT, not describe the page/website (the '/learn from URL explains the site'
+    bug)."""
+
+    def test_context_reframes_to_teach_subject_not_document(self):
+        svc, _ = _make_svc()
+        messages = svc._build_prompt(
+            "guided", "en.wikipedia.org", "intermediate",
+            "Photosynthesis converts light to chemical energy in chloroplasts.",
+            "English",
+        )
+        system = messages[0]["content"].lower()
+        user = messages[1]["content"]
+        assert "do not describe" in system
+        assert "infer the actual subject" in system
+        assert "source material" in user.lower()
+        assert "knowledge base" not in user.lower()   # old mislabel removed
+
+    def test_no_context_adds_no_source_framing(self):
+        svc, _ = _make_svc()
+        messages = svc._build_prompt("guided", "Photosynthesis", "intermediate", "", "English")
+        assert "do not describe" not in messages[0]["content"].lower()
+
+
 class TestReviewFlashcard:
 
     @pytest.fixture

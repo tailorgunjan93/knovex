@@ -83,6 +83,7 @@ async def manim_render(
         provider=llm.provider,
         model=llm.model,
         credentials=creds,
+        language=body.language,
     )
     if result.ok:
         return ManimRenderResponse(

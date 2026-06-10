@@ -2171,11 +2171,15 @@ export default function LearnPage() {
               {displayFormat === 'animated' && (
                 (displayContent as AnimatedContent)?.scenes
                   ? <>
-                      <ScenePlayer content={displayContent as AnimatedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
+                      {/* key on the session/topic so switching lessons fully resets
+                          the player + the rendered video (no stale animation). */}
+                      <ScenePlayer key={`scene-${activeSessionId ?? topic}`} content={displayContent as AnimatedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
                       {!isStreaming && (
                         <CinematicPanel
+                          key={`cine-${activeSessionId ?? topic}`}
                           topic={(displayContent as AnimatedContent).topic || topic}
                           difficulty={difficulty}
+                          language={language}
                         />
                       )}
                     </>
