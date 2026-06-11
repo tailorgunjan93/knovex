@@ -33,7 +33,7 @@ export interface LearnSession {
   source_type: SourceType
   difficulty: Difficulty
   status: 'pending' | 'generating' | 'ready' | 'error'
-  content: QuizContent | FlashcardContent | MindmapContent | TimelineContent | TextContent | GuidedContent | AnimatedContent | null
+  content: QuizContent | FlashcardContent | MindmapContent | TimelineContent | TextContent | GuidedContent | AnimatedContent | SemanticAnimatedContent | null
   created_at: string
   completed_at: string | null
 }
@@ -147,6 +147,48 @@ export interface AnimatedContent {
   topic:  string
   title:  string
   scenes: AnimatedScene[]
+}
+
+// ─── Semantic animated (Mermaid-style: LLM declares structure, the app's layout
+//     engine computes every coordinate — see lib/sceneLayout.ts) ───────────────
+
+export type DiagramType = 'flow' | 'cycle' | 'tree' | 'compare' | 'timeline' | 'hub' | 'reaction' | 'code'
+
+export interface SemanticItem {
+  id:     string
+  label:  string
+  detail?: string
+  group?:  'left' | 'right' | string          // compare: which column
+  parent?: string                              // tree: parent item id
+  role?:  'input' | 'process' | 'output'       // reaction: inputs fan in → process → outputs fan out
+}
+
+export interface SemanticEdge {
+  from:  string
+  to:    string
+  label?: string
+}
+
+export interface SemanticStep {
+  narration: string
+  /** Item ids that become visible at this step (accumulates — progressive disclosure). */
+  reveal:    string[]
+  /** The item the narration is about (signaling: accent; others muted). */
+  focus?:    string
+  caption?:  string
+  /** 1-based code line to spotlight; with content.code → this step shows the code. */
+  highlight?: number
+  duration?: number
+}
+
+export interface SemanticAnimatedContent {
+  topic:   string
+  title:   string
+  diagram: DiagramType
+  items:   SemanticItem[]
+  edges?:  SemanticEdge[]
+  code?:   { lang?: string; code: string }
+  steps:   SemanticStep[]
 }
 
 // ─── SSE event types ──────────────────────────────────────────────────────────

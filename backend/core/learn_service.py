@@ -562,10 +562,10 @@ class LearnService:
         if _is_coding_topic(topic):
             if format == "animated":
                 system += (
-                    "\n\nThis is a PROGRAMMING topic: you MUST use the `code` element to show the "
-                    "ACTUAL code on screen and step through it line by line (set `highlight` to the "
-                    "line you're explaining each scene). Show real, correct, runnable code — never "
-                    "explain code only in words or with empty boxes."
+                    "\n\nThis is a PROGRAMMING topic: you MUST include the ACTUAL runnable snippet "
+                    "in the top-level `code` field and add steps with `highlight` (1-based line "
+                    "number) that walk the code line by line. Never explain code only in words or "
+                    "with empty boxes."
                 )
             else:
                 system += (
@@ -677,48 +677,47 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         ']}}'
     ),
     "animated": (
-        "You are a senior motion-graphics artist and educator in the style of 3Blue1Brown "
-        "and Kurzgesagt, directing an ANIMATED visual lesson on '{topic}' for a {difficulty} "
-        "learner. The VISUAL must carry the idea — it should explain MORE than the narration, "
-        "never just decorate it.\n\n"
-        "STEP 1 — CHOOSE THE RIGHT VISUAL FOR THIS TOPIC. Do NOT default to boxes and circles. "
-        "Decide what the topic actually IS, then commit to the matching layout for the whole lesson:\n"
-        "  • a PROCESS / steps / how it works  → FLOW: nodes left→right (or top→down) joined by arrows.\n"
-        "  • a repeating CYCLE                 → RING: 3-5 nodes/circles around the centre, arrows curving on to the next, the last back to the first.\n"
-        "  • a HIERARCHY / parts-of / taxonomy → TREE: one root node up top (y~20), children spread below (y~58), lines connecting parent→child.\n"
-        "  • a COMPARISON (A vs B)             → TWO COLUMNS: left group centred x~27, right group x~73, a divider line at x=50.\n"
-        "  • events over TIME / history        → TIMELINE: a horizontal line at y~55 with markers along it (label text above, dots on the line).\n"
-        "  • CODE / programming                → a `code` element with the REAL snippet, stepped line by line (set `highlight`).\n"
-        "  • an abstract CONCEPT / relations   → HUB: a central node with labelled satellites and connecting lines.\n"
-        "  • a QUANTITY / proportion / change  → BARS: nodes of differing width/height along a baseline, or a number that grows.\n"
-        "Name the structure to yourself first, then design every scene around it.\n\n"
-        "STORY ARC (7-10 scenes): TITLE → INTUITION (the core idea as one simple picture or analogy) → "
-        "BUILD the mechanism adding ONE new element at a time → a concrete EXAMPLE → RECAP of the key "
-        "takeaways. EVOLVE a single diagram across scenes: keep persistent elements, add or spotlight ONE "
-        "new focal element per scene in the ACCENT colour, and mute prior context to grey (muted). One idea "
-        "on screen at a time.\n\n"
-        "LAYOUT — PREVENT OVERLAP (this is critical; overlapping labels ruin the lesson):\n"
-        "  - x: 0 left … 100 right; y: 0 top … 100 bottom; centre (50,50). Keep everything inside 6..94.\n"
-        "  - Picture a 12-column × 8-row grid and give each element its OWN cell/region.\n"
-        "  - Keep at least 16 units between the CENTRES of any two text/box/circle elements. NEVER stack or overlap labels or shapes.\n"
-        "  - Reserve y 6..16 for the title row. Spread a flow across the FULL width (x 14..86) — don't cram everything at the centre.\n"
-        "  - At most 5 elements per scene so each can breathe. Let text dwell: duration 4-7 seconds per scene.\n\n"
-        "ELEMENT TYPES (use only these):\n"
-        "  text  — {{\"type\":\"text\",\"text\":\"...\",\"x\":50,\"y\":12,\"size\":\"title|heading|body|small\",\"color\":\"accent|primary|muted\",\"enter\":\"fade|rise|pop\"}}\n"
-        "  node  — a labelled box: {{\"type\":\"node\",\"label\":\"...\",\"x\":30,\"y\":50,\"w\":26,\"h\":16,\"color\":\"accent|blue|green|amber|muted\",\"enter\":\"fade|rise|pop|draw\"}}\n"
-        "  circle— {{\"type\":\"circle\",\"label\":\"...\",\"x\":50,\"y\":50,\"r\":12,\"color\":\"...\",\"enter\":\"draw|pop|fade\"}}\n"
-        "  arrow — {{\"type\":\"arrow\",\"x1\":40,\"y1\":50,\"x2\":60,\"y2\":50,\"label\":\"optional\",\"enter\":\"draw\"}}\n"
-        "  line  — {{\"type\":\"line\",\"x1\":..,\"y1\":..,\"x2\":..,\"y2\":..,\"color\":\"...\",\"enter\":\"draw\"}}\n"
-        "  code  — a code snippet (USE THIS for programming topics): {{\"type\":\"code\",\"code\":\"def f(x):\\n    return x*2\",\"lang\":\"python\",\"x\":50,\"y\":54,\"w\":62,\"highlight\":2,\"enter\":\"fade\"}} — `code` is real multi-line code (\\n between lines); `highlight` is the 1-based line being explained this scene.\n\n"
-        "COLOR: a small palette. accent = the element in focus; muted grey = supporting context; the title gets a distinct accent.\n"
+        "You are an expert educator scripting an ANIMATED visual lesson on '{topic}' for a "
+        "{difficulty} learner, in the spirit of 3Blue1Brown / Khan Academy. You do NOT place "
+        "anything on screen — a layout engine draws the diagram. You only declare the STRUCTURE "
+        "and narrate. Do not default to boxes; pick what the topic actually IS.\n\n"
+        "1) CHOOSE the diagram that matches the topic's structure:\n"
+        "   reaction — a TRANSFORMATION where inputs combine/convert into outputs "
+        "(X + Y → Z): e.g. photosynthesis, respiration, chemical reactions, "
+        "supply→process→product. Set each item's `role` to \"input\", \"process\", or "
+        "\"output\". Inputs fan IN to the process, the process fans OUT to outputs — "
+        "directions are drawn correctly for you, so DON'T use this as a plain hub.\n"
+        "   flow     — a sequence / pipeline / how-it-works (items in order)\n"
+        "   cycle    — a repeating loop (items around a ring)\n"
+        "   tree     — hierarchy / parts-of / taxonomy (set each child's `parent`)\n"
+        "   compare  — A vs B (set each item's `group` to \"left\" or \"right\")\n"
+        "   timeline — events over time (items in chronological order)\n"
+        "   hub      — one central concept with related (non-directional) satellites\n"
+        "   code     — a programming topic (put the REAL runnable snippet in `code`)\n"
+        "   Prefer `reaction` over `hub` whenever something is CONVERTED into something "
+        "else — `hub` cannot show input-vs-output direction and will mislead the learner.\n\n"
+        "2) DECLARE 3-7 items: short labels (1-3 words), unique short ids.\n"
+        "   `edges` only when the connection isn't implied by the diagram type.\n\n"
+        "3) SCRIPT 5-9 steps that TEACH (this is where the explaining happens):\n"
+        "   - `narration`: 1-2 conversational sentences — the actual teaching. Build intuition "
+        "first, name the mechanism, give a concrete example, end with a recap step.\n"
+        "   - `reveal`: the item ids that APPEAR at this step. Reveal 1 (max 2) new items per "
+        "step so the diagram grows one idea at a time and the learner is never overwhelmed.\n"
+        "   - `focus`: the id the narration is about — it gets spotlighted while the rest dim. "
+        "ALWAYS point the focus at what you're talking about.\n"
+        "   - `caption`: optional short on-screen heading for the step.\n"
+        "   - For programming topics: include the real code in `code` and add step(s) with "
+        "`highlight` (1-based line number) walking the code line by line.\n"
+        "   - The final step should reveal nothing new: recap over the finished diagram.\n\n"
         "IMPORTANT: Return ONLY valid JSON — no markdown, no code fences.\n"
         "Format:\n"
         '{{"topic":"...","title":"short lesson title",'
-        '"scenes":[{{'
-        '"narration":"what the narrator says for this scene",'
-        '"duration":5,'
-        '"elements":[{{"type":"text","text":"...","x":50,"y":12,"size":"title","color":"accent","enter":"rise"}}]'
-        '}}]}}'
+        '"diagram":"reaction|flow|cycle|tree|compare|timeline|hub|code",'
+        '"items":[{{"id":"a","label":"Sunlight","role":"input (reaction only: input|process|output)"}},{{"id":"b","label":"Chloroplast","parent":"a (tree only)","group":"left (compare only)"}}],'
+        '"edges":[{{"from":"a","to":"b"}}],'
+        '"code":{{"lang":"python","code":"def f(x):\\n    return x*2"}},'
+        '"steps":[{{"narration":"teaching sentence(s)","reveal":["a"],"focus":"a","caption":"optional heading","highlight":2,"duration":5}}]}}\n'
+        "Omit `edges` and `code` when not needed."
     ),
 }
 

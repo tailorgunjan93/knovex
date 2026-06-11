@@ -54,6 +54,20 @@ describe('ScenePlayer render', () => {
     expect(screen.getByText('1/2')).toBeInTheDocument()
   })
 
+  // Regression guard for the invisible-arrow bug: arrows carry a glow `filter`.
+  // With the default objectBoundingBox filter region, a perfectly horizontal or
+  // vertical arrow has a zero-area geometric bounding box, so the region collapses
+  // and clips the arrow to nothing — horizontal flow/reaction edges and vertical
+  // tree/hub edges rendered invisibly. The filter MUST use userSpaceOnUse so its
+  // region is independent of each arrow's bbox. jsdom can't rasterise the filter,
+  // so we assert the config that prevents the clip.
+  it('uses a userSpaceOnUse glow filter so axis-aligned arrows are not clipped', () => {
+    const { container } = renderPlayer()
+    const filter = container.querySelector('#kx-glow')
+    expect(filter).not.toBeNull()
+    expect(filter?.getAttribute('filterUnits')).toBe('userSpaceOnUse')
+  })
+
   it('renders nothing when there are no scenes', () => {
     const { container } = renderPlayer({ topic: 't', title: 't', scenes: [] })
     expect(container.querySelector('[data-testid="scene-stage"]')).toBeNull()

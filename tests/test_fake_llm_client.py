@@ -25,7 +25,7 @@ def _prompt_for(format_keys: str) -> list[dict[str, str]]:
 @pytest.mark.parametrize(
     "marker, expected",
     [
-        ("Return JSON with scenes[].narration and elements", "animated"),
+        ("Return JSON declaring a diagram with steps[].narration and reveal", "animated"),
         ("Return steps[] each with key_insight", "guided"),
         ("Return questions[] with options and correct", "quiz"),
         ("Return cards[] with front/back", "flashcard"),
@@ -39,11 +39,14 @@ def test_detect_format(marker, expected):
 
 async def test_complete_returns_valid_animated_json():
     out = await FakeLLMClient().complete(
-        _prompt_for("scenes narration elements"), max_tokens=100, temperature=0.0
+        _prompt_for("diagram narration reveal"), max_tokens=100, temperature=0.0
     )
-    data = json.loads(out)  # must be valid JSON
-    assert "scenes" in data and isinstance(data["scenes"], list)
-    assert data["scenes"][0]["elements"]
+    data = json.loads(out)  # must be valid JSON — SEMANTIC format (Mermaid model)
+    assert data["diagram"] in ("flow", "cycle", "tree", "compare", "timeline", "hub", "code")
+    assert data["items"] and data["items"][0]["id"]
+    assert data["steps"] and data["steps"][0]["narration"]
+    # progressive disclosure: at least one step reveals something
+    assert any(s.get("reveal") for s in data["steps"])
 
 
 async def test_complete_returns_valid_guided_json():
