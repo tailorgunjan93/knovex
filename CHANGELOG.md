@@ -11,6 +11,44 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.14.0] — 2026-06-11
+
+### Changed
+
+- **Animated lessons rebuilt on a structure-first ("Mermaid") engine.** The LLM no
+  longer places pixels — it declares a **diagram type, items, edges, and per-step
+  narration/reveal/focus**, and a new pure layout engine
+  (`frontend/src/lib/sceneLayout.ts`) computes every coordinate. This honours the
+  project principle *"logic in the app, the LLM is the narrator"*, makes label overlap
+  mathematically impossible, and bakes in the tutorial pedagogy from the research:
+  **progressive disclosure** (the diagram grows one item at a time) and **signaling**
+  (the focused item glows, the rest dim). Narration is now a readable caption beside
+  each beat, not a faint subtitle.
+- **Seven diagram types**: flow, cycle, tree, compare, timeline, hub, and a new
+  directional **reaction** (inputs fan IN to a process → process fans OUT to outputs)
+  so transformations like photosynthesis read correctly instead of a hub drawing every
+  arrow backwards.
+
+### Fixed
+
+- **Animated arrows rendered invisibly when perfectly horizontal or vertical** — flow
+  edges, a reaction's middle in/out arrows, a cycle's flat edge, and tree/hub
+  axis-aligned edges all vanished, so diagrams looked like disconnected boxes. The arrow
+  glow SVG filter used the default `objectBoundingBox` region, which collapses to zero
+  area for an axis-aligned line and clips it to nothing. Switched `#kx-glow` to
+  `filterUnits="userSpaceOnUse"` with a stage-sized region so every arrow renders.
+  (Known Issue #18.)
+
+### Tests
+
+- `sceneLayout.test.ts` (18) — layout, edges, progressive disclosure and signaling for
+  every diagram type; overlap-free placement; reaction directionality.
+- `ScenePlayer.test.tsx` — regression guard that the glow filter uses `userSpaceOnUse`.
+- `test_learn.py`, `test_fake_llm_client.py` — the animated prompt is semantic
+  (declares diagram/items/reveal/focus, never x/y).
+
+---
+
 ## [0.13.0] — 2026-06-10
 
 ### Changed

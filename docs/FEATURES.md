@@ -161,7 +161,16 @@ The interactive learning engine. Feed any PDF, web URL, or typed topic — Knove
 | ELI5 Mode | Adjustable difficulty — Age 5 / Age 10 / High School / Expert | 1 |
 | Speed Learn | Timed session — 5 min / 10 min / 30 min structured flow | 1 |
 | Brainstorm Board | Web search + AI expand any concept as visual graph | 1 |
-| Animated Explainer | CSS/SVG/Lottie animations for concepts (no GIF files) | 1 |
+| Animated Explainer | Structure-first motion-graphics lesson — the LLM declares a diagram + narration, a layout engine draws it (see below) | 1 |
+
+### Animated lessons — the semantic engine *(v0.14.0)*
+
+Animated lessons follow a **Mermaid-style** model that honours the project principle *"logic in the app, the LLM is just the narrator"*:
+
+1. **The LLM declares structure, not pixels** — it returns a `diagram` type, a list of `items` (with optional `role`/`parent`/`group`), optional `edges`, and `steps` (each with `narration`, the `reveal` set, and a `focus`). It never emits coordinates.
+2. **A pure layout engine** (`frontend/src/lib/sceneLayout.ts`) computes every position, so label overlap is mathematically impossible.
+3. **Diagram types** — `flow` (process), `cycle` (loop), `tree` (hierarchy), `compare` (A vs B), `timeline` (events), `hub` (concept + satellites), `reaction` (inputs → process → outputs, directional), and `code` (line-by-line walk).
+4. **Pedagogy baked in** — *progressive disclosure* (`reveal` accumulates, one idea per step) and *signaling* (`focus` glows, the rest dim), with the narration captioned beside the stage.
 
 ### Interactivity
 

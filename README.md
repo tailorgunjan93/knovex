@@ -7,7 +7,7 @@
 *Secure · Fast · Reliable · Cost-Effective*
 
 [![Download](https://img.shields.io/badge/⬇_Download-Windows_·_macOS_·_Linux-DDA76A.svg)](https://tailorgunjan93.github.io/knovex/)
-[![Version](https://img.shields.io/badge/version-0.13.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.14.0-blue.svg)](CHANGELOG.md)
 [![CI](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml/badge.svg)](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](#)
@@ -27,6 +27,61 @@ Get the latest installer for **Windows · macOS · Linux** from the download pag
 (Already installed? The app auto-updates — or grab any version from [Releases](https://github.com/tailorgunjan93/knovex/releases).)
 
 </div>
+
+---
+
+## 🎬 See it in action
+
+Type any topic and Knovex builds an **animated lesson** that explains itself one idea at a time. The model declares the *structure* (a diagram type, the items, the connections); Knovex's layout engine draws every box, arrow and label — no overlap, correct direction — and narrates each beat in a caption beside the stage.
+
+<div align="center">
+
+![Animated lesson — the water cycle, built step by step](docs/media/animated-lesson.gif)
+
+<sub>An animated lesson on the water cycle — *progressive disclosure* (one idea at a time) + *signaling* (the focus glows, the rest dim), the way good explainers teach.</sub>
+
+</div>
+
+The engine picks the **right diagram for the topic** — a transformation, a hierarchy, a step-by-step process, a cycle, a comparison or a timeline:
+
+| Reaction — transformations | Tree — hierarchies | Flow — processes |
+|:--:|:--:|:--:|
+| ![Photosynthesis as a reaction](docs/media/diagram-reaction.png) | ![Branches of government as a tree](docs/media/diagram-tree.png) | ![How email is delivered as a flow](docs/media/diagram-flow.png) |
+
+<div align="center">
+
+![The Knovex Learn workspace with an animated lesson](docs/media/app-learn.png)
+
+<sub>The Learn workspace — an animated lesson with its step outline and the concepts it pulled in.</sub>
+
+![Start a lesson — pick a source, format and difficulty](docs/media/app-home.png)
+
+<sub>Start any lesson: type a topic (or pull from your library, the web, or Wikipedia), then pick a format and difficulty.</sub>
+
+</div>
+
+---
+
+## ⌨️ Commands
+
+Everything you need, from a clone to a packaged installer:
+
+| Task | Command |
+|------|---------|
+| **Run backend** (dev) | `uvicorn backend.main:app --host 127.0.0.1 --port 8765 --reload` |
+| **Run frontend** (dev) | `cd frontend && npm run dev` |
+| **Backend tests** | `pytest tests/ -v` |
+| **Backend tests + coverage** | `pytest tests/ --cov=backend --cov-report=term-missing` |
+| **Frontend unit tests** | `cd frontend && npm test` |
+| **Frontend typecheck** | `cd frontend && npx tsc --noEmit` |
+| **Lint (Python)** | `ruff check backend/ tests/` |
+| **E2E (mocked API)** | `npx playwright test` |
+| **E2E (real backend, SSE)** | `KNOVEX_PYTHON=.venv/Scripts/python.exe npx playwright test --config playwright.config.realbackend.ts` |
+| **Build installer — Windows** | `.\scripts\build.ps1` *(add `-SkipTests` to skip pytest)* |
+| **Build installer — macOS/Linux** | `./scripts/build.sh` *(add `--skip-tests`)* |
+| **Cut a release** | bump version files → update `CHANGELOG.md` → `git tag vX.Y.Z && git push origin vX.Y.Z` |
+
+> API docs (Swagger UI): **http://localhost:8765/api/docs** once the backend is running.
 
 ---
 
@@ -80,8 +135,9 @@ Knovex runs completely **offline and local** — your files never leave your mac
 - Summariser: brief (~150 words) or detailed (~600 words) of a file or entire KB
 - Blinking cursor animation, AbortController stop mid-stream
 
-### ✨ Learn Mode *(v0.6.0 – v0.8.0)*
-- **9 formats**: Quiz (interactive MCQ), Flashcards (spaced repetition), Mind Map (collapsible tree), Timeline (chronological events), Story (narrative markdown), ELI5, Speed Learn (bullet summary), Brainstorm (creative connections), **Guided** (step-by-step walkthrough via GuidedViewer)
+### ✨ Learn Mode *(v0.6.0 – v0.14.0)*
+- **Multiple formats**: Quiz (interactive MCQ), Flashcards (spaced repetition), Mind Map (collapsible tree), Timeline (chronological events), Story (narrative markdown), ELI5, Speed Learn (bullet summary), Brainstorm (creative connections), **Guided** (step-by-step walkthrough via GuidedViewer)
+- **Animated lessons** *(v0.14.0)* — a structure-first *"Mermaid"* engine: the LLM declares a diagram (**flow · cycle · tree · compare · timeline · hub** or a directional **reaction**) plus per-step narration, and a pure layout engine (`frontend/src/lib/sceneLayout.ts`) computes every coordinate. The diagram builds one idea at a time (*progressive disclosure*), the active piece glows while the rest dim (*signaling*), and code topics step through the real snippet line by line. See [See it in action](#-see-it-in-action).
 - **Gamification**: XP points, level progression (10 tiers), daily streaks, 10 achievement badges
 - All formats stream via SSE — JSON formats via LLM + parse + re-stream, text formats real-time
 - Per-question XP rewards in quiz mode; spaced-repetition interval scheduling for flashcards
