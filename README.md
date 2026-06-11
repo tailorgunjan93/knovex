@@ -30,7 +30,44 @@ Get the latest installer for **Windows · macOS · Linux** from the download pag
 
 ---
 
-## 🎬 See it in action
+## What is Knovex?
+
+Knovex is a **local-first desktop app** that turns your documents — and any topic you're curious about — into something you can *question, search, and actually learn from*. Everything runs on your machine; your files never leave it unless you explicitly turn on web search.
+
+Think of it as three tools in one:
+
+- 🗂️ **A knowledge base** — drop in PDFs, Word docs, Markdown or CSVs. Knovex indexes them, lets you read them inline, and answers questions grounded in *your* content — with citations.
+- 💬 **An AI chat & summariser** — converse with your library, get cited answers, summarise a file or a whole collection, and optionally pull in live web results.
+- 🎓 **A learning engine** — turn any topic into quizzes, flashcards, guided walkthroughs, or **animated lessons** that build a concept up one idea at a time.
+
+**Who it's for:** students, researchers, and knowledge workers who want a private, offline place to keep what they know and genuinely learn it — without shipping their documents to someone else's cloud. Bring your own LLM key (OpenAI, Claude, Groq, Gemini, Cerebras, AWS Bedrock) or run fully offline with Ollama.
+
+> Built on [docnest-ai](https://pypi.org/project/docnest-ai/) — a hybrid retrieval (RAG) engine that combines keyword search, semantic vectors, and a document section-graph.
+
+---
+
+## 🎬 A tour of the app
+
+<div align="center">
+
+| Knowledge Base | Reader |
+|:--:|:--:|
+| ![Knowledge Base](docs/media/app-kb.png) | ![Reader](docs/media/app-reader.png) |
+| <sub>Collections of indexed documents, ready to search.</sub> | <sub>Read any file inline, with focus modes & highlights.</sub> |
+
+| Chat — grounded in your docs | Progress |
+|:--:|:--:|
+| ![Chat](docs/media/app-chat.png) | ![Progress](docs/media/app-progress.png) |
+| <sub>Cited answers — every claim links back to a source.</sub> | <sub>Streaks, XP and an activity heatmap as you learn.</sub> |
+
+| Learn — pick a format | Settings |
+|:--:|:--:|
+| ![Learn](docs/media/app-home.png) | ![Settings](docs/media/app-settings.png) |
+| <sub>Any topic &rarr; quiz, flashcards, guided or animated.</sub> | <sub>Bring your own LLM key, or run offline with Ollama.</sub> |
+
+</div>
+
+### ✨ Animated lessons — the standout
 
 Type any topic and Knovex builds an **animated lesson** that explains itself one idea at a time. The model declares the *structure* (a diagram type, the items, the connections); Knovex's layout engine draws every box, arrow and label — no overlap, correct direction — and narrates each beat in a caption beside the stage.
 
@@ -38,79 +75,23 @@ Type any topic and Knovex builds an **animated lesson** that explains itself one
 
 ![Animated lesson — the water cycle, built step by step](docs/media/animated-lesson.gif)
 
-<sub>An animated lesson on the water cycle — *progressive disclosure* (one idea at a time) + *signaling* (the focus glows, the rest dim), the way good explainers teach.</sub>
+<sub>Progressive disclosure (one idea at a time) + signaling (the focus glows, the rest dim) — the way good explainers teach.</sub>
 
 </div>
 
-The engine picks the **right diagram for the topic** — a transformation, a hierarchy, a step-by-step process, a cycle, a comparison or a timeline:
+<div align="center">
+
+![The full Learn workspace](docs/media/app-learn.png)
+
+<sub>The full Learn workspace — the animated lesson alongside its step outline and the concepts it pulled in.</sub>
+
+</div>
+
+The engine picks the **right diagram for the topic** — a transformation, a hierarchy, or a step-by-step process:
 
 | Reaction — transformations | Tree — hierarchies | Flow — processes |
 |:--:|:--:|:--:|
 | ![Photosynthesis as a reaction](docs/media/diagram-reaction.png) | ![Branches of government as a tree](docs/media/diagram-tree.png) | ![How email is delivered as a flow](docs/media/diagram-flow.png) |
-
-<div align="center">
-
-![The Knovex Learn workspace with an animated lesson](docs/media/app-learn.png)
-
-<sub>The Learn workspace — an animated lesson with its step outline and the concepts it pulled in.</sub>
-
-![Start a lesson — pick a source, format and difficulty](docs/media/app-home.png)
-
-<sub>Start any lesson: type a topic (or pull from your library, the web, or Wikipedia), then pick a format and difficulty.</sub>
-
-</div>
-
----
-
-## ⌨️ Commands
-
-Everything you need, from a clone to a packaged installer:
-
-| Task | Command |
-|------|---------|
-| **Run backend** (dev) | `uvicorn backend.main:app --host 127.0.0.1 --port 8765 --reload` |
-| **Run frontend** (dev) | `cd frontend && npm run dev` |
-| **Backend tests** | `pytest tests/ -v` |
-| **Backend tests + coverage** | `pytest tests/ --cov=backend --cov-report=term-missing` |
-| **Frontend unit tests** | `cd frontend && npm test` |
-| **Frontend typecheck** | `cd frontend && npx tsc --noEmit` |
-| **Lint (Python)** | `ruff check backend/ tests/` |
-| **E2E (mocked API)** | `npx playwright test` |
-| **E2E (real backend, SSE)** | `KNOVEX_PYTHON=.venv/Scripts/python.exe npx playwright test --config playwright.config.realbackend.ts` |
-| **Build installer — Windows** | `.\scripts\build.ps1` *(add `-SkipTests` to skip pytest)* |
-| **Build installer — macOS/Linux** | `./scripts/build.sh` *(add `--skip-tests`)* |
-| **Cut a release** | bump version files → update `CHANGELOG.md` → `git tag vX.Y.Z && git push origin vX.Y.Z` |
-
-> API docs (Swagger UI): **http://localhost:8765/api/docs** once the backend is running.
-
----
-
-## Implemented Sprints
-
-| Sprint | Feature | Status |
-|--------|---------|--------|
-| 1 | Foundation — FastAPI + React + Electron shell | ✅ v0.1.0 |
-| 2 | Knowledge Base + File Ingestion + Adapter layer | ✅ v0.2.0 |
-| 3 | File Reader + Inline Q&A | ✅ v0.3.0 |
-| 4 | Chat + Summariser + Web Search | ✅ v0.4.0 |
-| 5 | Settings UI + Desktop Packaging | ✅ v0.5.0 |
-| 6 | Learn Mode + Encryption Verification | ✅ v0.6.0 |
-| 7 | Semantic Search (ONNX/OpenAI embeddings) + Copper Theme + Auto-updater | ✅ v0.6.6 |
-| 8 | Progress Page + GuidedViewer + KB Browser Upload + E2E Test Suite (61 tests) | ✅ v0.8.0 |
-
----
-
-## What is Knovex?
-
-Knovex runs completely **offline and local** — your files never leave your machine unless you explicitly enable web search or cloud sync.
-
-- **Knowledge Base** — create named KBs, add files, read them inline, ask questions
-- **Chat** — conversational QA over your KB with streaming responses and citations
-- **Summariser** — summarise a file or an entire KB in one click
-- **Web Search** — optionally extend answers with live web results (DuckDuckGo, Serper, Brave)
-- **Learn Mode** — turn any PDF or web topic into quizzes, flashcards, mind maps, timelines and animated explainers
-- **Multi-LLM** — bring your own API key for OpenAI, Claude, Groq, Gemini, Cerebras, AWS Bedrock, or run fully offline with Ollama
-- **3 deployment modes** — Personal (own keys), Organisation (admin-managed keys), Self-hosted (enterprise Docker)
 
 ---
 
@@ -137,7 +118,7 @@ Knovex runs completely **offline and local** — your files never leave your mac
 
 ### ✨ Learn Mode *(v0.6.0 – v0.14.0)*
 - **Multiple formats**: Quiz (interactive MCQ), Flashcards (spaced repetition), Mind Map (collapsible tree), Timeline (chronological events), Story (narrative markdown), ELI5, Speed Learn (bullet summary), Brainstorm (creative connections), **Guided** (step-by-step walkthrough via GuidedViewer)
-- **Animated lessons** *(v0.14.0)* — a structure-first *"Mermaid"* engine: the LLM declares a diagram (**flow · cycle · tree · compare · timeline · hub** or a directional **reaction**) plus per-step narration, and a pure layout engine (`frontend/src/lib/sceneLayout.ts`) computes every coordinate. The diagram builds one idea at a time (*progressive disclosure*), the active piece glows while the rest dim (*signaling*), and code topics step through the real snippet line by line. See [See it in action](#-see-it-in-action).
+- **Animated lessons** *(v0.14.0)* — a structure-first *"Mermaid"* engine: the LLM declares a diagram (**flow · cycle · tree · compare · timeline · hub** or a directional **reaction**) plus per-step narration, and a pure layout engine (`frontend/src/lib/sceneLayout.ts`) computes every coordinate. The diagram builds one idea at a time (*progressive disclosure*), the active piece glows while the rest dim (*signaling*), and code topics step through the real snippet line by line. See [the tour above](#-a-tour-of-the-app).
 - **Gamification**: XP points, level progression (10 tiers), daily streaks, 10 achievement badges
 - All formats stream via SSE — JSON formats via LLM + parse + re-stream, text formats real-time
 - Per-question XP rewards in quiz mode; spaced-repetition interval scheduling for flashcards
@@ -252,7 +233,7 @@ Knovex uses a **fully decoupled** frontend/backend architecture with SOLID compl
 | Web Search | duckduckgo-search / Serper / Brave | Live web results |
 | Encryption | cryptography (Fernet) | API key encryption at rest |
 | Packaging | PyInstaller + electron-builder | Distributable app |
-| E2E Testing | Playwright | Browser-driven end-to-end tests (61 tests) |
+| E2E Testing | Playwright | Browser-driven end-to-end tests (mocked + real-backend SSE) |
 
 ---
 
@@ -355,7 +336,7 @@ knovex/
 │       └── pages/
 │           ├── KnowledgeBase/          KB list + detail + file viewer + inline Q&A
 │           ├── Chat/                   Session sidebar + streaming message thread
-│           ├── Learn/                  9 formats + GuidedViewer + session history
+│           ├── Learn/                  multiple formats + animated engine + session history
 │           ├── Progress/               Stats cards + heatmap + velocity chart
 │           └── Settings/              LLM + Search + App + Embedding tabs
 │
@@ -371,6 +352,29 @@ knovex/
     ├── test_reader.py                  ReaderService unit tests
     └── test_chat.py                    ChatService + SearchService unit tests
 ```
+
+---
+
+## ⌨️ Commands
+
+Quick reference, from a clone to a packaged installer:
+
+| Task | Command |
+|------|---------|
+| **Run backend** (dev) | `uvicorn backend.main:app --host 127.0.0.1 --port 8765 --reload` |
+| **Run frontend** (dev) | `cd frontend && npm run dev` |
+| **Backend tests** | `pytest tests/ -v` |
+| **Backend tests + coverage** | `pytest tests/ --cov=backend --cov-report=term-missing` |
+| **Frontend unit tests** | `cd frontend && npm test` |
+| **Frontend typecheck** | `cd frontend && npx tsc --noEmit` |
+| **Lint (Python)** | `ruff check backend/ tests/` |
+| **E2E (mocked API)** | `npx playwright test` |
+| **E2E (real backend, SSE)** | `KNOVEX_PYTHON=.venv/Scripts/python.exe npx playwright test --config playwright.config.realbackend.ts` |
+| **Build installer — Windows** | `.\scripts\build.ps1` *(add `-SkipTests`)* |
+| **Build installer — macOS/Linux** | `./scripts/build.sh` *(add `--skip-tests`)* |
+| **Cut a release** | bump version files → update `CHANGELOG.md` → `git tag vX.Y.Z && git push origin vX.Y.Z` |
+
+> API docs (Swagger UI): **http://localhost:8765/api/docs** once the backend is running.
 
 ---
 
