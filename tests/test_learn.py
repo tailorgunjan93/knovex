@@ -800,17 +800,27 @@ class TestSubmitQuizAnswer:
 # ---------------------------------------------------------------------------
 
 class TestAnimatedPromptTopicAware:
-    """The animated prompt must pick graphics by topic structure (not always
-    boxes+circles), enforce anti-overlap layout, and offer a code element."""
+    """The animated prompt is SEMANTIC (Mermaid model): the LLM declares the
+    diagram type + items + per-step reveal/focus and narrates; the app's layout
+    engine computes every coordinate. The prompt must never ask for x/y."""
 
-    def test_prompt_offers_diagram_types_and_code_element(self):
+    def test_prompt_offers_diagram_types_and_code(self):
         p = _SYSTEM_PROMPTS["animated"].lower()
         # diagram-by-structure selection (research: choose the graphic by purpose)
-        for kind in ["flow", "ring", "tree", "two columns", "timeline", "hub"]:
+        for kind in ["reaction", "flow", "cycle", "tree", "compare", "timeline", "hub", "code"]:
             assert kind in p, kind
-        assert "code" in p and "highlight" in p          # code element for programming
+        assert "input" in p and "process" in p and "output" in p   # reaction roles
+        assert "highlight" in p                          # line-by-line code walk
         assert "do not default to boxes" in p            # explicit anti-default
-        assert "overlap" in p and "grid" in p            # anti-overlap layout discipline
+
+    def test_prompt_is_semantic_not_coordinates(self):
+        p = _SYSTEM_PROMPTS["animated"].lower()
+        # The pedagogy the research demands, enforced by schema:
+        assert '"reveal"' in p and '"focus"' in p        # progressive disclosure + signaling
+        assert '"items"' in p and '"diagram"' in p
+        # The LLM must NOT place coordinates — the layout engine does.
+        assert '"x":50' not in p and '"y":12' not in p
+        assert "layout engine" in p
 
 
 class TestCodingTopicDetection:
@@ -827,10 +837,10 @@ class TestCodingTopicDetection:
     def test_ignores_non_coding_topics(self, topic):
         assert not _is_coding_topic(topic)
 
-    def test_animated_coding_topic_demands_code_element(self):
+    def test_animated_coding_topic_demands_code_walkthrough(self):
         svc, _ = _make_svc()
         sys = svc._build_prompt("animated", "Python decorators", "intermediate", "", "English")[0]["content"]
-        assert "`code` element" in sys and "step through it line by line" in sys.lower()
+        assert "`code` field" in sys and "walk the code line by line" in sys.lower()
 
     def test_text_coding_topic_demands_fenced_code(self):
         svc, _ = _make_svc()

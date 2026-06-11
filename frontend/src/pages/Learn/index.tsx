@@ -89,6 +89,7 @@ import GuidedViewer from './GuidedViewer'
 import AnimatedView from './AnimatedView'
 import ScenePlayer from './ScenePlayer'
 import CinematicPanel from './CinematicPanel'
+import { isSemanticAnimated } from '@/lib/sceneLayout'
 import { lessonOutline, lessonConcepts, type OutlineItem } from './lessonStructure'
 import { BRAND } from '@/theme/tokens'
 
@@ -2169,7 +2170,7 @@ export default function LearnPage() {
                 <GuidedViewer content={displayContent as GuidedContent} activeStep={lessonStep} onStepChange={setLessonStep} />
               )}
               {displayFormat === 'animated' && (
-                (displayContent as AnimatedContent)?.scenes
+                ((displayContent as AnimatedContent)?.scenes || isSemanticAnimated(displayContent))
                   ? <>
                       {/* key on the session/topic so switching lessons fully resets
                           the player + the rendered video (no stale animation). */}

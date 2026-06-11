@@ -53,8 +53,9 @@ export function lessonOutline(format: string, content: unknown): OutlineItem[] {
   switch (format) {
     case 'guided':
     case 'animated': {
-      const steps = (c.steps as GuidedContent['steps']) ?? []
-      return steps.map((s, i) => ({ index: i, label: labelOr(s?.title, `Step ${i + 1}`) }))
+      // Guided steps have `title`; semantic animated steps have `caption`.
+      const steps = (c.steps as Array<{ title?: string; caption?: string }>) ?? []
+      return steps.map((s, i) => ({ index: i, label: labelOr(s?.title ?? s?.caption, `Step ${i + 1}`) }))
     }
     case 'quiz': {
       const qs = (c.questions as QuizContent['questions']) ?? []
@@ -95,9 +96,13 @@ export function lessonText(format: string, content: unknown): string {
     case 'animated': {
       const g = c as unknown as GuidedContent
       parts.push(g.intro)
-      for (const s of g.steps ?? []) {
-        parts.push(s?.title, s?.explanation, s?.example, s?.analogy, s?.key_insight)
+      for (const s of (g.steps ?? []) as unknown as Array<Record<string, unknown>>) {
+        for (const k of ['title', 'explanation', 'example', 'analogy', 'key_insight', 'caption', 'narration']) {
+          if (typeof s?.[k] === 'string') parts.push(s[k] as string)
+        }
       }
+      // semantic animated: item labels are concepts too
+      for (const it of (c.items as Array<{ label?: string }>) ?? []) parts.push(it?.label)
       break
     }
     case 'quiz': {

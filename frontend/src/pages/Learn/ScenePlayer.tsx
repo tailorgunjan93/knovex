@@ -20,9 +20,10 @@ import PauseRoundedIcon from '@mui/icons-material/PauseRounded'
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded'
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
 import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded'
-import type { AnimatedContent, SceneElement } from '@/api/learn.api'
+import type { AnimatedContent, SceneElement, SemanticAnimatedContent } from '@/api/learn.api'
 import { BRAND } from '@/theme/tokens'
 import { Motion, usePrefersReducedMotion } from '@/lib/motion'
+import { compileSemanticScenes, isSemanticAnimated } from '@/lib/sceneLayout'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
 
@@ -81,14 +82,21 @@ function htmlEnter(enter: string | undefined, reduce: boolean) {
 }
 
 export default function ScenePlayer({ content, activeStep, onStepChange }: {
-  content: AnimatedContent
+  content: AnimatedContent | SemanticAnimatedContent
   activeStep?: number
   onStepChange?: (idx: number) => void
 }) {
   const theme  = useTheme()
   const isDark = theme.palette.mode === 'dark'
   const reduce = usePrefersReducedMotion()
-  const scenes = content.scenes ?? []
+  // Semantic format (diagram/items/steps): the app's layout engine computes all
+  // positions (Mermaid model). Legacy scenes render as-is.
+  const scenes = useMemo(
+    () => (isSemanticAnimated(content)
+      ? compileSemanticScenes(content)
+      : (content as AnimatedContent).scenes ?? []),
+    [content],
+  )
   const total  = scenes.length
 
   const [internalIdx, setInternalIdx] = useState(0)
@@ -141,7 +149,7 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
   const gridColor = isDark ? 'rgba(245,241,234,0.05)' : 'rgba(20,18,14,0.05)'
 
   return (
-    <Box>
+    <Box data-testid="scene-player">
       {/* ── Stage (16:9) ── */}
       <Box
         ref={stageRef}
@@ -181,7 +189,14 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
               orient="auto" markerUnits="strokeWidth">
               <path d="M0,0 L7,3 L0,6 Z" fill={BRAND.copper} />
             </marker>
-            <filter id="kx-glow" x="-50%" y="-50%" width="200%" height="200%">
+            {/* userSpaceOnUse region tied to the stage: the default
+                objectBoundingBox filter region collapses to zero area for
+                axis-aligned (perfectly horizontal/vertical) arrows — a line's
+                geometric bbox has zero height/width — which clips those arrows to
+                nothing. A user-space region keeps every arrow visible, including
+                horizontal flow edges and vertical tree edges. */}
+            <filter id="kx-glow" filterUnits="userSpaceOnUse"
+              x={0} y={0} width={size.w || 1} height={size.h || 1}>
               <feGaussianBlur stdDeviation="2.2" result="b" />
               <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
@@ -214,12 +229,25 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
         ))}
       </Box>
 
-      {/* ── Narration subtitle ── */}
-      <Box sx={{ mt: 1.5, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', px: 2 }}>
-        <Motion.div key={`narr-${idx}`} initial={{ opacity: 0, y: reduce ? 0 : 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduce ? 0 : 0.5, ease: EXPO }}>
-          <Typography sx={{ fontSize: 15, lineHeight: 1.55, textAlign: 'center', color: 'text.secondary', maxWidth: 720 }}>
-            {scene?.narration}
-          </Typography>
+      {/* ── Narration caption — the teacher's explanation for this beat ── */}
+      <Box sx={{ mt: 1.75, minHeight: 64, display: 'flex', justifyContent: 'center', px: 2 }}>
+        <Motion.div
+          key={`narr-${idx}`}
+          initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: reduce ? 0 : 0.5, ease: EXPO }}
+          style={{ width: '100%', maxWidth: 760 }}
+        >
+          <Box sx={{
+            display: 'flex', gap: 1.25, alignItems: 'flex-start',
+            px: 2, py: 1.5, borderRadius: 2.5,
+            borderLeft: `3px solid ${BRAND.copper}`,
+            bgcolor: isDark ? alpha(BRAND.copper, 0.07) : alpha(BRAND.copper, 0.05),
+          }}>
+            <Typography sx={{ fontSize: 16, lineHeight: 1.6, color: 'text.primary' }}>
+              {scene?.narration}
+            </Typography>
+          </Box>
         </Motion.div>
       </Box>
 
@@ -229,12 +257,12 @@ export default function ScenePlayer({ content, activeStep, onStepChange }: {
         {atEnd
           ? <Tooltip title="Replay"><IconButton size="small" onClick={() => { setIdx(0); setPlaying(true) }}><ReplayRoundedIcon /></IconButton></Tooltip>
           : <Tooltip title={playing ? 'Pause' : 'Play'}><IconButton size="small" onClick={() => setPlaying(p => !p)} sx={{ color: BRAND.copper }}>{playing ? <PauseRoundedIcon /> : <PlayArrowRoundedIcon />}</IconButton></Tooltip>}
-        <Tooltip title="Next"><span><IconButton size="small" disabled={atEnd} onClick={() => { setPlaying(false); setIdx(idx + 1) }}><ChevronRightRoundedIcon /></IconButton></span></Tooltip>
+        <Tooltip title="Next"><span><IconButton data-testid="scene-next" size="small" disabled={atEnd} onClick={() => { setPlaying(false); setIdx(idx + 1) }}><ChevronRightRoundedIcon /></IconButton></span></Tooltip>
 
         {/* scene dots */}
         <Box sx={{ display: 'flex', gap: 0.6, ml: 1.5 }}>
           {scenes.map((_, i) => (
-            <Box key={i} onClick={() => { setPlaying(false); setIdx(i) }}
+            <Box key={i} data-testid={`scene-dot-${i}`} onClick={() => { setPlaying(false); setIdx(i) }}
               sx={{
                 width: i === idx ? 18 : 7, height: 7, borderRadius: 4, cursor: 'pointer',
                 bgcolor: i === idx ? BRAND.copper : alpha(theme.palette.text.disabled, 0.4),

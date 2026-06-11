@@ -207,49 +207,24 @@ class StubLLMClient(ILLMClient):
 # the format detected in the prompt, so the real /learn streaming path produces
 # parseable content end-to-end without any LLM key.
 _CANNED_BY_FORMAT: dict[str, dict] = {
+    # SEMANTIC animated format (Mermaid model): structure + narration only — the
+    # frontend layout engine (lib/sceneLayout.ts) computes every coordinate.
     "animated": {
         "topic": "Test topic",
-        "title": "Test Animation",
-        "scenes": [
-            {
-                "narration": "A deterministic scene for end-to-end testing.",
-                "duration": 5,
-                "elements": [
-                    {"type": "text", "text": "E2E animated scene", "x": 50, "y": 18, "size": "title", "color": "accent", "enter": "rise"},
-                    {"type": "circle", "label": "core", "x": 50, "y": 56, "r": 16, "color": "accent", "enter": "pop"},
-                    {"type": "arrow", "x1": 72, "y1": 56, "x2": 60, "y2": 56, "enter": "draw"},
-                ],
-            },
-            {
-                "narration": "The mechanism, built one piece at a time.",
-                "duration": 5,
-                "elements": [
-                    {"type": "text", "text": "How it connects", "x": 50, "y": 16, "size": "heading", "color": "primary", "enter": "fade"},
-                    {"type": "node", "label": "Input", "x": 24, "y": 52, "w": 22, "h": 14, "color": "blue", "enter": "rise"},
-                    {"type": "node", "label": "Process", "x": 50, "y": 52, "w": 22, "h": 14, "color": "accent", "enter": "pop"},
-                    {"type": "node", "label": "Output", "x": 76, "y": 52, "w": 22, "h": 14, "color": "green", "enter": "rise"},
-                    {"type": "arrow", "x1": 35, "y1": 52, "x2": 39, "y2": 52, "enter": "draw"},
-                    {"type": "arrow", "x1": 61, "y1": 52, "x2": 65, "y2": 52, "enter": "draw"},
-                ],
-            },
-            {
-                "narration": "In code, that's a single function.",
-                "duration": 5,
-                "elements": [
-                    {"type": "text", "text": "In code", "x": 50, "y": 14, "size": "heading", "color": "primary", "enter": "fade"},
-                    {"type": "code", "code": "def process(x):\n    core = transform(x)\n    return core", "lang": "python", "x": 50, "y": 56, "w": 60, "highlight": 2, "enter": "fade"},
-                ],
-            },
-            {
-                "narration": "Recap: the three key takeaways.",
-                "duration": 5,
-                "elements": [
-                    {"type": "text", "text": "Recap", "x": 50, "y": 18, "size": "title", "color": "accent", "enter": "pop"},
-                    {"type": "text", "text": "1 · input feeds the core", "x": 50, "y": 42, "size": "body", "color": "muted", "enter": "rise"},
-                    {"type": "text", "text": "2 · the core transforms it", "x": 50, "y": 56, "size": "body", "color": "muted", "enter": "rise"},
-                    {"type": "text", "text": "3 · output is the result", "x": 50, "y": 70, "size": "body", "color": "muted", "enter": "rise"},
-                ],
-            },
+        "title": "E2E animated scene",
+        "diagram": "flow",
+        "items": [
+            {"id": "in", "label": "Input"},
+            {"id": "core", "label": "Process"},
+            {"id": "out", "label": "Output"},
+        ],
+        "code": {"lang": "python", "code": "def process(x):\n    core = transform(x)\n    return core"},
+        "steps": [
+            {"narration": "A deterministic lesson for end-to-end testing.", "reveal": ["in"], "focus": "in", "duration": 5},
+            {"narration": "The mechanism, built one piece at a time.", "reveal": ["core"], "focus": "core", "caption": "How it connects", "duration": 5},
+            {"narration": "And what comes out the other side.", "reveal": ["out"], "focus": "out", "duration": 5},
+            {"narration": "In code, that's a single function.", "reveal": [], "caption": "In code", "highlight": 2, "duration": 5},
+            {"narration": "Recap: input feeds the core, the core transforms it, output is the result.", "reveal": [], "caption": "Recap", "duration": 5},
         ],
     },
     "guided": {
@@ -300,7 +275,8 @@ class FakeLLMClient(ILLMClient):
     @staticmethod
     def _detect_format(text: str) -> str:
         t = text.lower()
-        if "scenes" in t and "narration" in t:
+        # Semantic animated prompt declares a diagram + reveal/focus steps.
+        if ("diagram" in t or "scenes" in t) and "narration" in t:
             return "animated"
         if "key_insight" in t and "steps" in t:
             return "guided"
