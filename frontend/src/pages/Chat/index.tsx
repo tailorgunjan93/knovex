@@ -248,7 +248,9 @@ export default function ChatPage() {
     opts?: { forceWeb?: boolean; forceNews?: boolean; fetchUrl?: string; research?: boolean },
   ) => {
     if (!question || isStreaming) return
-    if (!llmConfigured(settings)) return   // no AI configured — the ConnectAICard guides setup
+    // Read live store state (not the memoised closure `settings`, which can be
+    // stale before settings finish loading) so a configured key isn't missed.
+    if (!llmConfigured(useSettingsStore.getState().settings)) return
     const useWeb = opts?.forceWeb || opts?.forceNews || webSearch
     const forceNews = !!opts?.forceNews
     const fetchUrl = opts?.fetchUrl
