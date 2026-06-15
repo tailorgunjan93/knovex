@@ -26,13 +26,55 @@ import json
 import traceback
 from pathlib import Path
 
+# Complex-script languages → fonts that cover them, in preference order (mixing
+# Windows / macOS / Linux + Noto names; the first one actually installed wins).
+# Manim's Text() default font does NOT fall back per-glyph, so without setting a
+# covering font as the default, non-Latin text renders as .notdef tofu boxes.
+# Latin/Cyrillic/Greek languages are omitted — the default font already covers
+# them. Keys are the native names the app sends, plus lowercase English aliases.
+_DEVANAGARI = ["Nirmala UI", "Noto Sans Devanagari", "Mangal", "Kohinoor Devanagari", "Nirmala Text"]
+_JAPANESE   = ["Yu Gothic", "Meiryo", "MS Gothic", "Noto Sans CJK JP", "Hiragino Sans", "Microsoft YaHei"]
+_CHINESE    = ["Microsoft YaHei", "SimSun", "Noto Sans CJK SC", "PingFang SC", "Source Han Sans SC"]
+_KOREAN     = ["Malgun Gothic", "Noto Sans CJK KR", "Apple SD Gothic Neo", "Microsoft YaHei"]
+_ARABIC     = ["Tahoma", "Segoe UI", "Arial", "Noto Sans Arabic", "Geeza Pro"]
 
-def render(code_file: str, out_dir: str, quality: str = "medium_quality") -> str:
+_FONT_CANDIDATES: dict[str, list[str]] = {
+    "हिन्दी": _DEVANAGARI, "hindi": _DEVANAGARI,
+    "日本語": _JAPANESE,   "japanese": _JAPANESE,
+    "中文":   _CHINESE,    "chinese": _CHINESE,
+    "한국어": _KOREAN,     "korean": _KOREAN,
+    "العربية": _ARABIC,    "arabic": _ARABIC,
+}
+
+
+def _pick_font(language: str | None, available: list[str]) -> str | None:
+    """First installed font that covers *language*'s script, or None (use default).
+
+    Pure + side-effect free so it can be unit-tested without Manim installed.
+    """
+    cands = _FONT_CANDIDATES.get((language or "").strip()) \
+        or _FONT_CANDIDATES.get((language or "").strip().lower())
+    if not cands:
+        return None
+    have = set(available)
+    return next((c for c in cands if c in have), None)
+
+
+def render(code_file: str, out_dir: str, quality: str = "medium_quality",
+           language: str = "English") -> str:
     """Execute the generated code, render Lesson(), return the MP4 path."""
     import imageio_ffmpeg
-    from manim import Scene, config, tempconfig
+    import manimpango
+    from manim import Scene, Text, config, tempconfig
 
     config.ffmpeg_executable = imageio_ffmpeg.get_ffmpeg_exe()
+
+    # The generated code writes Text("…") in the lesson's language WITHOUT a font,
+    # and Manim's default font won't fall back to a script-covering one. Set a
+    # covering font as the Text default so non-Latin lessons render real glyphs.
+    font = _pick_font(language, manimpango.list_fonts())
+    if font:
+        Text.set_default(font=font)
 
     code = Path(code_file).read_text(encoding="utf-8")
     namespace: dict = {}
@@ -66,9 +108,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("code_file")
     ap.add_argument("out_dir")
     ap.add_argument("--quality", default="medium_quality")
+    ap.add_argument("--lang", default="English")
     args = ap.parse_args(argv)
     try:
-        video = render(args.code_file, args.out_dir, args.quality)
+        video = render(args.code_file, args.out_dir, args.quality, args.lang)
         print(json.dumps({"ok": True, "video": video}))
         return 0
     except Exception:  # noqa: BLE001 — report any render failure to the parent

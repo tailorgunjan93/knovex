@@ -47,11 +47,13 @@ import ChevronRightIcon  from '@mui/icons-material/ChevronRight'
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
 import AutoAwesomeIcon   from '@mui/icons-material/AutoAwesome'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { chatApi, type AttachResult, type ChatMessage, type ChatSession, type SSEEvent, type SourceCitation } from '../../api/chat.api'
+import { chatApi, type AttachResult, type ChatMessage, type ChatSession, type FollowUp, type SSEEvent, type SourceCitation } from '../../api/chat.api'
 import { kbApi, type KB } from '../../api/kb.api'
 import KnovexMark from '@/components/brand/KnovexMark'
 import { initialsOf, resolveDisplayName } from '@/lib/displayName'
 import { useSettingsStore } from '@/store/settings.store'
+import { llmConfigured } from '@/lib/llm'
+import ConnectAICard from '@/components/ConnectAICard'
 import { BRAND } from '@/theme/tokens'
 import {
   matchSlashCommands, parseSlashInput, helpText, looksLikeUrl, type SlashCommand,
@@ -85,6 +87,7 @@ interface StreamingMessage {
   web_sources?: Array<{ title: string; url: string; snippet: string }>
   isStreaming?: boolean
   attachments?: Array<{ name: string; charCount: number; truncated: boolean }>
+  suggestions?: FollowUp[]
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -97,6 +100,7 @@ export default function ChatPage() {
   const isDark      = theme.palette.mode === 'dark'
   const accent      = theme.palette.primary.main
   const { settings } = useSettingsStore()
+  const configured   = llmConfigured(settings)   // false → guide setup instead of erroring
   const userInitials = initialsOf(settings?.display_name)
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -244,6 +248,7 @@ export default function ChatPage() {
     opts?: { forceWeb?: boolean; forceNews?: boolean; fetchUrl?: string; research?: boolean },
   ) => {
     if (!question || isStreaming) return
+    if (!llmConfigured(settings)) return   // no AI configured — the ConnectAICard guides setup
     const useWeb = opts?.forceWeb || opts?.forceNews || webSearch
     const forceNews = !!opts?.forceNews
     const fetchUrl = opts?.fetchUrl
@@ -323,6 +328,17 @@ export default function ChatPage() {
               return u
             })
             if (sources && sources.length > 0) setSourcesOpen(true)
+          } else if (event.type === 'suggestions') {
+            // Arrives after `done`; attach to the last assistant message as
+            // clickable follow-up chips (the "what next?" hook).
+            const items = event.items
+            setMessages(prev => {
+              const u = [...prev]
+              for (let k = u.length - 1; k >= 0; k--) {
+                if (u[k].role === 'assistant') { u[k] = { ...u[k], suggestions: items }; break }
+              }
+              return u
+            })
           } else if (event.type === 'error') {
             setError(event.error)
           }
@@ -495,7 +511,9 @@ export default function ChatPage() {
         {/* Messages area — centered reading column (lab document style) */}
         <Box flex={1} overflow="auto" sx={{ px: 4, py: 1 }}>
           <Box sx={{ maxWidth: 760, mx: 'auto' }}>
-          {(activeSessionId || messages.length > 0) ? (
+          {!configured ? (
+            <ConnectAICard />
+          ) : (activeSessionId || messages.length > 0) ? (
             msgsLoading ? (
               <Box display="flex" justifyContent="center" pt={6}>
                 <CircularProgress size={24} />
@@ -512,6 +530,7 @@ export default function ChatPage() {
                   onCopy={() => setCopySnack(true)}
                   onPinSources={(s) => { setPinnedSources(s); setSourcesOpen(true) }}
                   onRefresh={(q) => { setMessages(prev => prev.slice(0, -1)); streamQuestion(q) }}
+                  onFollowUp={(q) => streamQuestion(q)}
                 />
               )))
           ) : (
@@ -1215,11 +1234,12 @@ function SessionItem({ session, active, onClick, onDelete }: {
 
 // ─── Per-row wrapper — extracts logic from JSX to avoid TSX parser issues ────
 
-function MsgRow({ msg, i, messages, onCopy, onPinSources, onRefresh }: {
+function MsgRow({ msg, i, messages, onCopy, onPinSources, onRefresh, onFollowUp }: {
   msg: StreamingMessage; i: number; messages: StreamingMessage[]
   onCopy: () => void
   onPinSources: (s: SourceCitation[]) => void
   onRefresh: (q: string) => void
+  onFollowUp: (q: string) => void
 }) {
   const prevUserMsg = msg.role === 'assistant'
     ? [...messages].slice(0, i).reverse().find(m => m.role === 'user')
@@ -1239,17 +1259,19 @@ function MsgRow({ msg, i, messages, onCopy, onPinSources, onRefresh }: {
       onRefresh={isLastAi && prevUserMsg
         ? () => onRefresh(prevUserMsg.content)
         : undefined}
+      onFollowUp={onFollowUp}
     />
   )
 }
 
 // ─── Message bubble ────────────────────────────────────────────────────────────
 
-function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
+function MessageBubble({ message, onCopy, onCitations, onRefresh, onFollowUp }: {
   message: StreamingMessage
   onCopy: () => void
   onCitations?: () => void
   onRefresh?: () => void
+  onFollowUp?: (q: string) => void
 }) {
   const theme    = useTheme()
   const accent   = theme.palette.primary.main
@@ -1515,6 +1537,39 @@ function MessageBubble({ message, onCopy, onCitations, onRefresh }: {
             {onRefresh && (
               <MsgAction icon={<RefreshIcon sx={{ fontSize: 11 }} />} onClick={onRefresh} />
             )}
+          </Box>
+        )}
+
+        {/* Follow-up chips — the "what next?" hook: keep the conversation going */}
+        {!isUser && !message.isStreaming && message.suggestions && message.suggestions.length > 0 && onFollowUp && (
+          <Box sx={{ mt: 1.25 }}>
+            <Typography sx={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.08em',
+                              textTransform: 'uppercase', color: 'text.disabled', mb: 0.6 }}>
+              Keep exploring
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
+              {message.suggestions.map((s, si) => (
+                <Box
+                  key={si}
+                  onClick={() => onFollowUp(s.question)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFollowUp(s.question) } }}
+                  sx={{
+                    display: 'inline-flex', alignItems: 'center', gap: 0.5,
+                    px: 1.25, py: 0.6, borderRadius: 10, cursor: 'pointer',
+                    bgcolor: alpha(accent, isDark ? 0.10 : 0.06),
+                    border: `1px solid ${alpha(accent, 0.28)}`,
+                    transition: 'all 0.15s ease',
+                    '&:hover': { bgcolor: alpha(accent, isDark ? 0.18 : 0.11),
+                                 borderColor: alpha(accent, 0.5), transform: 'translateY(-1px)' },
+                  }}
+                >
+                  <AddIcon sx={{ fontSize: 12, color: accent }} />
+                  <Typography sx={{ fontSize: 12.5, color: accent, fontWeight: 500 }}>{s.label}</Typography>
+                </Box>
+              ))}
+            </Box>
           </Box>
         )}
 

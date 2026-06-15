@@ -31,6 +31,8 @@ import { chatApi } from '@/api/chat.api'
 import { kbApi } from '@/api/kb.api'
 import type { ChatSession } from '@/api/chat.api'
 import type { KB } from '@/api/kb.api'
+import { useSettingsStore } from '@/store/settings.store'
+import type { AppSettings } from '@/api/settings.api'
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -81,6 +83,11 @@ beforeEach(() => {
   ;(chatApi.listSessions as Mock).mockResolvedValue([])
   ;(chatApi.getMessages as Mock).mockResolvedValue([])
   ;(kbApi.list as Mock).mockResolvedValue([])
+  // A configured LLM so Chat shows its normal UI (without a key, the app now
+  // correctly shows a "Connect your AI" card instead of the chat composer).
+  useSettingsStore.setState({
+    settings: { llm: { provider: 'openai', api_key: 'test-key', model: 'gpt-4o-mini' } } as unknown as AppSettings,
+  })
 })
 
 // ───────────────────────────────────────────────────────────────────────────────

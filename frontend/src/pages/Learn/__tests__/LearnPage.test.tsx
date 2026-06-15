@@ -50,6 +50,8 @@ import type { ReactNode } from 'react'
 import LearnPage, { wikipediaUrlFor } from '../index'
 import { learnApi } from '@/api/learn.api'
 import type { LearnSession, UserStats, QuizContent, FlashcardContent, GuidedContent } from '@/api/learn.api'
+import { useSettingsStore } from '@/store/settings.store'
+import type { AppSettings } from '@/api/settings.api'
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -148,6 +150,11 @@ beforeEach(() => {
   ;(learnApi.listSessions as Mock).mockResolvedValue([])
   ;(learnApi.getUserStats as Mock).mockResolvedValue(EMPTY_STATS)
   ;(learnApi.streamSession as Mock).mockResolvedValue(undefined)
+  // A configured LLM so the page shows its normal UI (without a key, the app now
+  // correctly shows a "Connect your AI" card instead of the format picker).
+  useSettingsStore.setState({
+    settings: { llm: { provider: 'openai', api_key: 'test-key', model: 'gpt-4o-mini' } } as unknown as AppSettings,
+  })
 })
 
 // ─── Empty state ──────────────────────────────────────────────────────────────

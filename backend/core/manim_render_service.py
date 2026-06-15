@@ -33,8 +33,10 @@ from backend.core.providers.base import ProviderCredentials
 
 logger = logging.getLogger("knovex.cinematic")
 
-# (returncode, stdout) from running the sidecar under the manim env's python.
-SidecarRunner = Callable[[str, str, str], Awaitable[tuple[int, str]]]
+# (python_exe, code_file, out_dir, language) → (returncode, stdout) from running
+# the sidecar under the manim env's python. `language` lets the sidecar pick a
+# font that covers the on-screen script (non-Latin text is tofu otherwise).
+SidecarRunner = Callable[[str, str, str, str], Awaitable[tuple[int, str]]]
 
 _SIDECAR = str(Path(__file__).with_name("manim_sidecar.py"))
 
@@ -140,7 +142,7 @@ class ManimRenderService:
 
         for attempt in range(1, self._max + 1):
             code = await self._generate_code(topic, difficulty, provider, model, credentials, prev_code, prev_err, language)
-            ok, payload = await self._render_once(python_exe, code, out_sub)
+            ok, payload = await self._render_once(python_exe, code, out_sub, language)
             if ok:
                 logger.info("Cinematic render succeeded for %r on attempt %d", topic, attempt)
                 self._videos[render_id] = payload
@@ -179,13 +181,14 @@ class ManimRenderService:
         )
         return _extract_code(raw)
 
-    async def _render_once(self, python_exe: str, code: str, out_sub: str) -> tuple[bool, str]:
+    async def _render_once(self, python_exe: str, code: str, out_sub: str,
+                           language: str = "English") -> tuple[bool, str]:
         """Write code to a temp file, run the sidecar, return (ok, video_path|error)."""
         fd, code_file = tempfile.mkstemp(suffix=".py", prefix="knovex_manim_")
         os.close(fd)
         Path(code_file).write_text(code, encoding="utf-8")
         try:
-            rc, stdout = await self._runner(python_exe, code_file, out_sub)
+            rc, stdout = await self._runner(python_exe, code_file, out_sub, language)
         except Exception as exc:  # noqa: BLE001
             return False, f"sidecar launch failed: {exc}"
         finally:
@@ -197,9 +200,10 @@ class ManimRenderService:
             return True, data["video"]
         return False, data.get("error") or stdout[-1500:] or f"render exited {rc}"
 
-    async def _default_runner(self, python_exe: str, code_file: str, out_dir: str) -> tuple[int, str]:
+    async def _default_runner(self, python_exe: str, code_file: str, out_dir: str,
+                              language: str = "English") -> tuple[int, str]:
         proc = await asyncio.create_subprocess_exec(
-            python_exe, _SIDECAR, code_file, out_dir,
+            python_exe, _SIDECAR, code_file, out_dir, "--lang", language,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
         )
         out, _ = await proc.communicate()

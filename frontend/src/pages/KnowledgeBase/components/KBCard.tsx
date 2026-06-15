@@ -6,8 +6,7 @@
  *   cc-head:  [glyph 32x32, left]  [⋯ more, right]
  *   title h3 (15px, 500)
  *   description p (12px, 2-line clamp) — uses created_at if no desc
- *   progress bar + percentage
- *   cc-meta:  {docs} DOCS · {chunks} CHUNKS · {updated}
+ *   cc-meta:  {docs} DOCS · {chunks} CARDS · {updated}  (honest, real stats only)
  */
 
 import { Box, Typography, useTheme, alpha } from '@mui/material'
@@ -33,15 +32,6 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
-/** Deterministic progress 10–89% based on KB id hash */
-function kbProgress(id: string): number {
-  let h = 0
-  for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) & 0x7fffffff
-  }
-  return 10 + (h % 80)
-}
-
 interface Props {
   kb: KB
   onClick: (id: string) => void
@@ -49,13 +39,8 @@ interface Props {
 
 export default function KBCard({ kb, onClick }: Props) {
   const theme       = useTheme()
-  const isDark      = theme.palette.mode === 'dark'
   const isEmoji     = /\p{Emoji}/u.test(kb.icon)
   const accentColor = kb.color || theme.palette.primary.main
-  const progress    = kbProgress(kb.id)
-
-  // Progress bar track
-  const trackBg = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'
 
   return (
     <Box
@@ -177,45 +162,6 @@ export default function KBCard({ kb, onClick }: Props) {
             ? `${kb.stats.file_count} document${kb.stats.file_count !== 1 ? 's' : ''} · ${formatBytes(kb.stats.total_size_bytes)} indexed`
             : `Created ${new Date(kb.created_at).toLocaleDateString()} · empty collection`
           }
-        </Typography>
-      </Box>
-
-      {/* Progress bar row */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        {/* Track */}
-        <Box
-          sx={{
-            flex:         1,
-            height:       3,
-            bgcolor:      trackBg,
-            borderRadius: 2,
-            overflow:     'hidden',
-          }}
-        >
-          {/* Fill */}
-          <Box
-            sx={{
-              width:        `${progress}%`,
-              height:       '100%',
-              bgcolor:      accentColor,
-              borderRadius: 2,
-              transition:   'width 0.6s ease',
-            }}
-          />
-        </Box>
-        {/* Percentage */}
-        <Typography
-          sx={{
-            fontFamily:  MONO,
-            fontSize:    10,
-            color:       'text.disabled',
-            flexShrink:  0,
-            lineHeight:  1,
-            minWidth:    28,
-            textAlign:   'right',
-          }}
-        >
-          {progress}%
         </Typography>
       </Box>
 

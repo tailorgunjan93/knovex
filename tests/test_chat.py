@@ -305,6 +305,84 @@ async def test_stream_ends_with_done_event():
     assert "message_id" in parsed
 
 
+# ---------------------------------------------------------------------------
+# Follow-up suggestions — the "what next?" chips emitted after an answer
+# ---------------------------------------------------------------------------
+
+class TestLooseJson:
+    def test_bare_array(self):
+        from backend.core.chat_service import _loose_json
+        assert _loose_json('[{"label": "a", "question": "q?"}]') == [{"label": "a", "question": "q?"}]
+
+    def test_strips_json_fence(self):
+        from backend.core.chat_service import _loose_json
+        assert _loose_json('```json\n[1, 2, 3]\n```') == [1, 2, 3]
+
+    def test_extracts_array_from_surrounding_prose(self):
+        from backend.core.chat_service import _loose_json
+        assert _loose_json('Sure!\n[{"x": 1}]\nHope that helps') == [{"x": 1}]
+
+
+_FOLLOWUP_JSON = (
+    '[{"label": "Go deeper", "question": "How does gradient descent pick the step size?"},'
+    ' {"label": "Broaden", "question": "What other optimisers exist?"},'
+    ' {"label": "Adjacent", "question": "How does this relate to backpropagation?"},'
+    ' {"label": "Too many", "question": "should be dropped"}]'
+)
+
+
+async def test_suggest_followups_parses_caps_and_tags():
+    svc, _ = _make_svc()
+    svc._llm_svc.complete = AsyncMock(return_value=_FOLLOWUP_JSON)
+    out = await svc._suggest_followups(
+        user_message="What is gradient descent?", answer="A real answer.",
+        has_kb=False, provider="openai", model="m", credentials=_make_creds(),
+    )
+    assert len(out) == 3                       # capped at exactly 3
+    assert out[0] == {
+        "label": "Go deeper",
+        "question": "How does gradient descent pick the step size?",
+        "kind": "followup",
+    }
+
+
+async def test_suggest_followups_empty_answer_skips_llm():
+    svc, _ = _make_svc()
+    svc._llm_svc.complete = AsyncMock(return_value=_FOLLOWUP_JSON)
+    out = await svc._suggest_followups(
+        user_message="q", answer="   ", has_kb=True,
+        provider="openai", model="m", credentials=_make_creds(),
+    )
+    assert out == []
+    svc._llm_svc.complete.assert_not_called()   # no wasted LLM call
+
+
+async def test_suggest_followups_bad_json_returns_empty():
+    svc, _ = _make_svc()
+    svc._llm_svc.complete = AsyncMock(return_value="I cannot do that.")
+    out = await svc._suggest_followups(
+        user_message="q", answer="answer", has_kb=False,
+        provider="openai", model="m", credentials=_make_creds(),
+    )
+    assert out == []
+
+
+async def test_stream_emits_suggestions_after_done():
+    svc, _ = _make_svc(tokens=["The ", "answer."])
+    svc._llm_svc.complete = AsyncMock(return_value=_FOLLOWUP_JSON)
+    session = await svc.create_session()
+    events = await _drain(svc.stream_message(
+        session_id=session.id, user_message="Explain X",
+        provider="openai", model="gpt-4o-mini", credentials=_make_creds(),
+    ))
+    types = [json.loads(e[len("data: "):])["type"] for e in events]
+    assert "done" in types and "suggestions" in types
+    assert types.index("suggestions") > types.index("done")    # never before the answer is done
+    sugg = json.loads(events[-1][len("data: "):])
+    assert sugg["type"] == "suggestions" and len(sugg["items"]) == 3
+    assert sugg["items"][0]["kind"] == "followup"
+
+
 async def test_stream_persists_user_and_assistant_messages():
     svc, repo = _make_svc(tokens=["Reply text"])
     session = await svc.create_session()

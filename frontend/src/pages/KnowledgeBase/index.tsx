@@ -23,6 +23,7 @@ import CloseIcon        from '@mui/icons-material/Close'
 import RefreshIcon      from '@mui/icons-material/Refresh'
 import { useMutation, useQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 import { kbApi } from '../../api/kb.api'
+import { learnApi } from '../../api/learn.api'
 import CreateKBDialog from './components/CreateKBDialog'
 import KBCard         from './components/KBCard'
 import KBDetail       from './components/KBDetail'
@@ -43,7 +44,7 @@ const SPARKS = [
   { q: 'Tell me and I forget. Teach me and I remember. Involve me and I learn.', a: 'Benjamin Franklin' },
 ]
 
-function DailySpark({ onDismiss }: { onDismiss: () => void }) {
+function DailySpark({ onDismiss, streak }: { onDismiss: () => void; streak: number }) {
   const theme   = useTheme()
   const isDark  = theme.palette.mode === 'dark'
   const spark   = SPARKS[new Date().getDay() % SPARKS.length]
@@ -110,7 +111,7 @@ function DailySpark({ onDismiss }: { onDismiss: () => void }) {
           {spark.q}
         </Typography>
         <Typography sx={{ fontSize: 11.5, color: 'text.disabled' }}>
-          — {spark.a} · Day {new Date().getDay() + 1} of your streak 🔥
+          — {spark.a}{streak > 0 ? ` · ${streak}-day streak 🔥` : ''}
         </Typography>
       </Box>
 
@@ -394,7 +395,7 @@ export default function KnowledgeBasePage() {
   const [selectedKBId, setSelectedKBId]     = useState<string | null>(null)
   const [deepFileId,   setDeepFileId]       = useState<string | null>(null)
   const [createOpen, setCreateOpen]         = useState(false)
-  const [filter, setFilter]                 = useState<'all' | 'mastered' | 'review' | 'new'>('all')
+  const [filter, setFilter]                 = useState<'all' | 'active' | 'new'>('all')
   const [sparkDismissed, setSparkDismissed] = useState(false)
   const [noticeDismissed, setNoticeDismissed] = useState(false)
 
@@ -417,6 +418,14 @@ export default function KnowledgeBasePage() {
     refetchInterval: 5000,
   })
 
+  // Real gamification streak (the Daily Spark used to fake "Day N" from the
+  // weekday, which read as a lie on a fresh install). 0 → no streak shown.
+  const { data: userStats } = useQuery({
+    queryKey: ['user-stats'],
+    queryFn:  learnApi.getUserStats,
+    staleTime: 60_000,
+  })
+
   const createMutation = useMutation({
     mutationFn: kbApi.create,
     onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['kbs'] }),
@@ -432,26 +441,18 @@ export default function KnowledgeBasePage() {
     )
   }
 
-  // Deterministic progress per KB id (mirrors KBCard.tsx)
-  const kbProg = (id: string) => {
-    let h = 0
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0x7fffffff
-    return 10 + (h % 80)
-  }
-
-  const masteredKBs = kbs.filter(kb => kb.stats.file_count > 0 && kbProg(kb.id) >= 65)
-  const reviewKBs   = kbs.filter(kb => kb.stats.file_count > 0 && kbProg(kb.id) < 65)
-  const newKBs      = kbs.filter(kb => kb.stats.file_count === 0)
-  const filtered    =
-    filter === 'mastered' ? masteredKBs :
-    filter === 'review'   ? reviewKBs   :
-    filter === 'new'      ? newKBs      : kbs
+  // Honest, real categories only (the old "Mastered/Review" split was a fake
+  // mastery % derived from a hash of the KB id — removed).
+  const activeKBs = kbs.filter(kb => kb.stats.file_count > 0)   // has indexed docs
+  const newKBs    = kbs.filter(kb => kb.stats.file_count === 0) // empty collection
+  const filtered  =
+    filter === 'active' ? activeKBs :
+    filter === 'new'    ? newKBs    : kbs
 
   const filterPills = [
-    { key: 'all',      label: 'All',      count: kbs.length },
-    { key: 'mastered', label: 'Mastered', count: masteredKBs.length },
-    { key: 'review',   label: 'Review',   count: reviewKBs.length },
-    { key: 'new',      label: 'New',      count: newKBs.length },
+    { key: 'all',    label: 'All',     count: kbs.length },
+    { key: 'active', label: 'Indexed', count: activeKBs.length },
+    { key: 'new',    label: 'Empty',   count: newKBs.length },
   ] as const
 
   return (
@@ -488,13 +489,14 @@ export default function KnowledgeBasePage() {
       <Box flex={1} overflow="auto" sx={{ px: 3.5 }}>
 
         {/* Daily Spark */}
-        {!sparkDismissed && <DailySpark onDismiss={() => setSparkDismissed(true)} />}
+        {!sparkDismissed && <DailySpark onDismiss={() => setSparkDismissed(true)} streak={userStats?.streak ?? 0} />}
 
-        {/* Knovex Noticed */}
-        {!noticeDismissed && (
+        {/* Knovex Noticed — only once there's an indexed KB (don't claim the
+            knowledge base is "growing" on an empty install). */}
+        {!noticeDismissed && kbs.some(kb => kb.stats.file_count > 0) && (
           <KnovexNoticed
             onDismiss={() => setNoticeDismissed(true)}
-            onQueueReview={() => navigate('/learn')}
+            onQueueReview={() => navigate('/review')}
           />
         )}
 

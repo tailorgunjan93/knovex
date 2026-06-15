@@ -7,7 +7,7 @@
 *Secure · Fast · Reliable · Cost-Effective*
 
 [![Download](https://img.shields.io/badge/⬇_Download-Windows_·_macOS_·_Linux-DDA76A.svg)](https://tailorgunjan93.github.io/knovex/)
-[![Version](https://img.shields.io/badge/version-0.14.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.15.0-blue.svg)](CHANGELOG.md)
 [![CI](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml/badge.svg)](https://github.com/tailorgunjan93/knovex/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](#)
@@ -116,9 +116,9 @@ The engine picks the **right diagram for the topic** — a transformation, a hie
 - Summariser: brief (~150 words) or detailed (~600 words) of a file or entire KB
 - Blinking cursor animation, AbortController stop mid-stream
 
-### ✨ Learn Mode *(v0.6.0 – v0.14.0)*
+### ✨ Learn Mode *(v0.6.0 – v0.15.0)*
 - **Multiple formats**: Quiz (interactive MCQ), Flashcards (spaced repetition), Mind Map (collapsible tree), Timeline (chronological events), Story (narrative markdown), ELI5, Speed Learn (bullet summary), Brainstorm (creative connections), **Guided** (step-by-step walkthrough via GuidedViewer)
-- **Animated lessons** *(v0.14.0)* — a structure-first *"Mermaid"* engine: the LLM declares a diagram (**flow · cycle · tree · compare · timeline · hub** or a directional **reaction**) plus per-step narration, and a pure layout engine (`frontend/src/lib/sceneLayout.ts`) computes every coordinate. The diagram builds one idea at a time (*progressive disclosure*), the active piece glows while the rest dim (*signaling*), and code topics step through the real snippet line by line. See [the tour above](#-a-tour-of-the-app).
+- **Animated lessons** *(v0.15.0)* — a structure-first *"Mermaid"* engine: the LLM declares a diagram (**flow · cycle · tree · compare · timeline · hub** or a directional **reaction**) plus per-step narration, and a pure layout engine (`frontend/src/lib/sceneLayout.ts`) computes every coordinate. The diagram builds one idea at a time (*progressive disclosure*), the active piece glows while the rest dim (*signaling*), and code topics step through the real snippet line by line. See [the tour above](#-a-tour-of-the-app).
 - **Gamification**: XP points, level progression (10 tiers), daily streaks, 10 achievement badges
 - All formats stream via SSE — JSON formats via LLM + parse + re-stream, text formats real-time
 - Per-question XP rewards in quiz mode; spaced-repetition interval scheduling for flashcards

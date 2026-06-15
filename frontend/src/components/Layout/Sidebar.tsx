@@ -1,24 +1,35 @@
 /**
- * Knovex Sidebar — slim icon-only rail (redesign Phase 2).
+ * Knovex Sidebar — refined icon rail (visual redesign, "studio" pass).
  *
  *   ┌────┐
- *   │ ◆  │  ← K-graph brand mark
- *   │ ▦  │  Library
+ *   │ ◆  │  ← K-graph brand mark (gradient-ring tile)
+ *   │▌▦  │  Library      ← gliding copper edge-indicator marks the active page
  *   │ ◌  │  Ask Knovex
  *   │ ▢  │  Reader
  *   │ ▤  │  Learn
+ *   │ ▧  │  Review (due badge)
  *   │ ▥  │  Progress
  *   │    │
- *   │ ☼  │  theme cycle (dark → mid → light)
+ *   │ ── │  hairline divider
+ *   │ ☼  │  theme cycle (dark → mid → light, icon rotates in)
  *   │ ⚙  │  Settings
- *   │ YN │  avatar (initials from display_name; "Y" when unset)
+ *   │ ◉  │  avatar — copper-ring circle, initials from display_name
  *   └────┘
  *
- * 64px, icon-only, tooltips on hover. Replaces the old 220/56px expanding
- * sidebar. The avatar reads display_name from settings (fallback "You") — no
- * hardcoded personal name (fixes the "fresh install is called Gunjan" bug).
+ * Design notes (vs the previous flat rail):
+ *   • The rail is its own surface (`background.paper` + hairline right border
+ *     + faint copper wash at the top) instead of blending into the canvas.
+ *   • Active page = a copper gradient edge-bar that GLIDES between items
+ *     (framer-motion `layoutId`, spring physics from MOTION tokens) + a soft
+ *     tinted tile behind the icon. Honors prefers-reduced-motion (opt-in gate).
+ *   • Hover = quick copper tint + 1px icon lift, `MOTION.duration.quick` with
+ *     the design-lab ease-out curve. Keyboard focus gets a copper ring.
+ *   • Bottom cluster sits under a fading hairline: theme toggle (icon rotates
+ *     on change), settings, then a circular gradient-ring avatar.
  *
- * Keeps the default export name `Sidebar` so AppShell needs no change.
+ * All aria-labels, tooltips, routes and the default export are unchanged so
+ * existing tests/E2E keep passing. Avatar still derives from display_name
+ * (fallback "You") — never a hardcoded personal name.
  */
 
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -34,6 +45,7 @@ import StyleOutlinedIcon     from '@mui/icons-material/StyleOutlined'
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query'
 import KnovexMark from '@/components/brand/KnovexMark'
 import { BRAND } from '@/theme/tokens'
+import { Motion, MOTION, usePrefersReducedMotion } from '@/lib/motion'
 import { useSettingsStore, useThemeMode } from '@/store/settings.store'
 import { settingsApi } from '@/api/settings.api'
 import { learnApi } from '@/api/learn.api'
@@ -42,7 +54,7 @@ import { useAppVersion } from '@/lib/useAppVersion'
 
 export const RAIL_WIDTH = 64
 
-// ── Custom SVG icons (carried over from the previous rail) ──────────────────────
+// ── Custom SVG icons (cohesive 1.5-stroke set, carried over) ─────────────────
 function LibraryIcon({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none"
@@ -100,17 +112,65 @@ const RAIL_ITEMS: RailItem[] = [
 const THEME_CYCLE: Record<string, string> = { dark: 'medium', medium: 'light', light: 'dark' }
 const THEME_LABELS: Record<string, string> = { dark: 'Dark', medium: 'Mid', light: 'Light' }
 
+/** Shared layoutId — the copper edge-bar glides between whichever slot is active. */
+const ACTIVE_INDICATOR_ID = 'knx-rail-active-indicator'
+
+/**
+ * One rail row: a full-width relative slot so the active edge-indicator can
+ * pin to the rail's left edge while the 44px button stays centered.
+ */
+function RailSlot({ active, reduced, children }: {
+  active: boolean
+  reduced: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <Box sx={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
+      {active && (
+        <Motion.div
+          layoutId={ACTIVE_INDICATOR_ID}
+          transition={reduced ? { duration: 0 } : MOTION.spring}
+          style={{
+            position: 'absolute', left: 0, top: 9, width: 3, height: 26,
+            borderRadius: '0 4px 4px 0',
+            background: BRAND.gradient,
+            boxShadow: `0 0 10px ${alpha(BRAND.copper, 0.55)}`,
+          }}
+        />
+      )}
+      {children}
+    </Box>
+  )
+}
+
+/** Centered fading hairline used to group the rail's sections. */
+function RailDivider({ sx }: { sx?: object }) {
+  const theme = useTheme()
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        width: 28, height: '1px', flexShrink: 0,
+        background: `linear-gradient(90deg, transparent, ${theme.palette.divider}, transparent)`,
+        ...sx,
+      }}
+    />
+  )
+}
+
 export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const theme    = useTheme()
   const themeMode = useThemeMode()
+  const reduced  = usePrefersReducedMotion()
   const { settings, setSettings } = useSettingsStore()
   const qc = useQueryClient()
   const appVersion = useAppVersion()
 
   const displayName = settings?.display_name
   const isActive = (path: string) => location.pathname.startsWith(path)
+  const isLight  = theme.palette.mode === 'light'
 
   // Spaced-repetition due count → the "Review" badge (the return hook). Polled
   // so it stays current while the app is open; failures degrade to no badge.
@@ -132,33 +192,57 @@ export default function Sidebar() {
                   : themeMode === 'medium' ? ContrastOutlinedIcon
                   : LightModeOutlinedIcon
 
+  // Quick-state transition shared by every interactive element on the rail.
+  const quick = `${MOTION.duration.quick}s ${MOTION.ease.out}`
+
   const railBtn = (active: boolean) => ({
     width: 44, height: 44, borderRadius: 2.5,
     color: active ? 'primary.main' : 'text.secondary',
-    bgcolor: active ? alpha(theme.palette.primary.main, 0.14) : 'transparent',
-    '&:hover': { bgcolor: alpha(theme.palette.primary.main, active ? 0.16 : 0.08), color: active ? 'primary.main' : 'text.primary' },
-    transition: 'background 120ms ease, color 120ms ease',
+    bgcolor: active ? alpha(theme.palette.primary.main, isLight ? 0.12 : 0.14) : 'transparent',
+    boxShadow: active ? `inset 0 0 0 1px ${alpha(theme.palette.primary.main, isLight ? 0.28 : 0.22)}` : 'none',
+    transition: `background-color ${quick}, color ${quick}, box-shadow ${quick}`,
+    '& svg': { transition: `transform ${quick}` },
+    '&:hover': {
+      bgcolor: alpha(theme.palette.primary.main, active ? (isLight ? 0.16 : 0.18) : 0.09),
+      color: active ? 'primary.main' : 'text.primary',
+      '& svg': { transform: 'translateY(-1px)' },
+    },
+    '&.Mui-focusVisible': {
+      boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.5)}`,
+    },
+  })
+
+  // Gradient-ring trick: paint the surface inside padding-box and the copper
+  // gradient inside border-box, so a transparent border reads as a copper ring.
+  const gradientRing = (borderWidth: number) => ({
+    border: `${borderWidth}px solid transparent`,
+    background: `linear-gradient(${theme.palette.background.paper}, ${theme.palette.background.paper}) padding-box, ${BRAND.gradient} border-box`,
   })
 
   return (
     <Box
+      component="nav"
+      aria-label="Primary"
       sx={{
         width: RAIL_WIDTH, minWidth: RAIL_WIDTH, height: '100%', flexShrink: 0,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         py: 1.5, gap: 0.5,
-        bgcolor: 'background.default',
+        bgcolor: 'background.paper',
+        borderRight: `1px solid ${theme.palette.divider}`,
+        // Faint copper wash from the top — ties the rail to the brand without shouting.
+        backgroundImage: `linear-gradient(180deg, ${alpha(BRAND.copper, isLight ? 0.05 : 0.06)}, transparent 34%)`,
       }}
     >
-      {/* Brand mark */}
+      {/* Brand mark — gradient-ring tile */}
       <Tooltip title="Knovex" placement="right" arrow>
         <Box
           onClick={() => navigate('/kb')}
           sx={{
-            width: 38, height: 38, borderRadius: 2.5, mb: 1.5, cursor: 'pointer',
-            bgcolor: 'background.paper', border: `1px solid ${theme.palette.divider}`,
+            width: 38, height: 38, borderRadius: 2.5, cursor: 'pointer',
+            ...gradientRing(1),
             display: 'grid', placeItems: 'center',
             boxShadow: `0 4px 16px -6px ${alpha(BRAND.copper, 0.4)}`,
-            transition: 'transform 150ms ease, box-shadow 150ms ease',
+            transition: `transform ${quick}, box-shadow ${quick}`,
             '&:hover': { transform: 'translateY(-1px)', boxShadow: `0 8px 22px -6px ${alpha(BRAND.copper, 0.6)}` },
           }}
         >
@@ -166,7 +250,9 @@ export default function Sidebar() {
         </Box>
       </Tooltip>
 
-      {/* Primary nav */}
+      <RailDivider sx={{ my: 1 }} />
+
+      {/* Primary nav — the copper edge-bar glides to the active item */}
       {RAIL_ITEMS.map((it) => {
         const isReview = it.path === '/review'
         const icon = isReview ? (
@@ -174,49 +260,66 @@ export default function Sidebar() {
             badgeContent={dueCount}
             max={99}
             overlap="circular"
-            sx={{ '& .MuiBadge-badge': { fontSize: 9, height: 16, minWidth: 16, fontWeight: 700, bgcolor: BRAND.copper, color: '#fff' } }}
+            sx={{ '& .MuiBadge-badge': { fontSize: 9, height: 16, minWidth: 16, fontWeight: 700, bgcolor: BRAND.copper, color: BRAND.onAccent } }}
           >
             {it.icon}
           </Badge>
         ) : it.icon
         const title = isReview && dueCount > 0 ? `${it.label} — ${dueCount} due` : it.label
         return (
-          <Tooltip key={it.path} title={title} placement="right" arrow>
-            <IconButton aria-label={it.label} onClick={() => navigate(it.path)} sx={railBtn(isActive(it.path))}>
-              {icon}
-            </IconButton>
-          </Tooltip>
+          <RailSlot key={it.path} active={isActive(it.path)} reduced={reduced}>
+            <Tooltip title={title} placement="right" arrow>
+              <IconButton aria-label={it.label} onClick={() => navigate(it.path)} sx={railBtn(isActive(it.path))}>
+                {icon}
+              </IconButton>
+            </Tooltip>
+          </RailSlot>
         )
       })}
 
       <Box sx={{ flex: 1 }} />
 
-      {/* Theme cycle */}
+      <RailDivider sx={{ mb: 0.75 }} />
+
+      {/* Theme cycle — icon rotates in on change */}
       <Tooltip title={`Theme: ${THEME_LABELS[themeMode]} → ${THEME_LABELS[THEME_CYCLE[themeMode] ?? 'dark']}`} placement="right" arrow>
         <IconButton aria-label="Cycle theme" onClick={cycleTheme} disabled={themeMutation.isPending}
-          sx={{ ...railBtn(false), '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.08), color: 'primary.main' } }}>
-          <ThemeIcon sx={{ fontSize: 18 }} />
+          sx={{ ...railBtn(false), '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.09), color: 'primary.main' } }}>
+          <Motion.div
+            key={themeMode}
+            initial={reduced ? false : { rotate: -60, opacity: 0, scale: 0.7 }}
+            animate={{ rotate: 0, opacity: 1, scale: 1 }}
+            transition={{ duration: MOTION.duration.quick }}
+            style={{ display: 'flex' }}
+          >
+            <ThemeIcon sx={{ fontSize: 18 }} />
+          </Motion.div>
         </IconButton>
       </Tooltip>
 
-      {/* Settings */}
-      <Tooltip title="Settings" placement="right" arrow>
-        <IconButton aria-label="Settings" onClick={() => navigate('/settings')} sx={railBtn(isActive('/settings'))}>
-          <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
-        </IconButton>
-      </Tooltip>
+      {/* Settings — participates in the same gliding indicator */}
+      <RailSlot active={isActive('/settings')} reduced={reduced}>
+        <Tooltip title="Settings" placement="right" arrow>
+          <IconButton aria-label="Settings" onClick={() => navigate('/settings')} sx={railBtn(isActive('/settings'))}>
+            <SettingsOutlinedIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </Tooltip>
+      </RailSlot>
 
-      {/* Avatar — initials from display_name, never a hardcoded name */}
+      {/* Avatar — copper gradient ring, initials from display_name (never hardcoded) */}
       <Tooltip title={resolveDisplayName(displayName)} placement="right" arrow>
         <Box
           onClick={() => navigate('/settings')}
           sx={{
-            width: 30, height: 30, borderRadius: 2.5, mt: 0.5, cursor: 'pointer',
-            bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-            border: `1px solid ${theme.palette.divider}`,
+            width: 32, height: 32, borderRadius: '50%', mt: 0.5, cursor: 'pointer',
+            ...gradientRing(1.5),
             display: 'grid', placeItems: 'center',
-            fontSize: 11, fontWeight: 700, color: 'text.secondary',
+            fontSize: 11, fontWeight: 700, lineHeight: 1,
+            color: isLight ? BRAND.copperDark : BRAND.copperLight,
             fontFamily: '"IBM Plex Mono", monospace',
+            boxShadow: `0 2px 10px -4px ${alpha(BRAND.copper, 0.45)}`,
+            transition: `transform ${quick}, box-shadow ${quick}`,
+            '&:hover': { transform: 'translateY(-1px)', boxShadow: `0 6px 16px -4px ${alpha(BRAND.copper, 0.6)}` },
           }}
         >
           {initialsOf(displayName)}
@@ -231,6 +334,7 @@ export default function Sidebar() {
             sx={{
               mt: 0.75, cursor: 'pointer', fontSize: 8.5, lineHeight: 1,
               fontFamily: '"IBM Plex Mono", monospace', color: 'text.disabled',
+              transition: `color ${quick}`,
               '&:hover': { color: 'text.secondary' },
             }}
           >
