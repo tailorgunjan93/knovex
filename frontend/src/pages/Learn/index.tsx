@@ -92,6 +92,9 @@ import CinematicPanel from './CinematicPanel'
 import { isSemanticAnimated } from '@/lib/sceneLayout'
 import { lessonOutline, lessonConcepts, type OutlineItem } from './lessonStructure'
 import { BRAND } from '@/theme/tokens'
+import { useSettingsStore } from '@/store/settings.store'
+import { llmConfigured } from '@/lib/llm'
+import ConnectAICard from '@/components/ConnectAICard'
 
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
 // Generic active/hover accent fill — brand copper (paired with primary.main borders).
@@ -1081,6 +1084,8 @@ export default function LearnPage() {
   const qc = useQueryClient()
   const theme = useTheme()
   const [searchParams, setSearchParams] = useSearchParams()
+  const { settings } = useSettingsStore()
+  const configured   = llmConfigured(settings)   // false → guide setup instead of erroring
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [topic, setTopic]         = useState(() => searchParams.get('topic') ?? '')
@@ -1210,6 +1215,7 @@ export default function LearnPage() {
   // place (Stage B.2) — without re-opening the setup screen.
   const handleGenerate = async (overrideFormat?: UIFormat, overrideTopic?: string) => {
     if (isStreaming) return
+    if (!configured) return   // no AI configured — the ConnectAICard guides setup
     const genUIFormat: UIFormat = overrideFormat ?? format
     if (overrideFormat && overrideFormat !== format) setFormat(overrideFormat)
 
@@ -1664,9 +1670,13 @@ export default function LearnPage() {
             </Box>
           )}
 
+          {/* First-run safety net: no AI configured → guide setup instead of
+              showing a topic box that would fail on generate. */}
+          {!configured && !(hasContent && !isStreaming) && <ConnectAICard />}
+
           {/* ── Source mode selector + input ──────────────────────────────────── */}
           {/* Hidden when content is showing — frees vertical space for the learning panel */}
-          {!(hasContent && !isStreaming) && <Box sx={{ mb: 1.25, display: 'flex', flexDirection: 'column-reverse', gap: 1.5 }}>
+          {configured && !(hasContent && !isStreaming) && <Box sx={{ mb: 1.25, display: 'flex', flexDirection: 'column-reverse', gap: 1.5 }}>
             {/* Source mode pills — rendered BELOW the input bar (column-reverse), lab order */}
             <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
               {SOURCE_MODES.map(sm => {
@@ -2028,7 +2038,7 @@ export default function LearnPage() {
           )}
 
           {/* ── EMPTY STATE ─────────────────────────────────────────────────── */}
-          {!isStreaming && !hasContent && !streamError && (
+          {!isStreaming && !hasContent && !streamError && configured && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5, maxWidth: 860, mx: 'auto', width: '100%' }}>
               {/* Format card grid (lab: FORMAT eyebrow + 3-col, left-aligned) */}
               <Box>

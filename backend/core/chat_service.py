@@ -18,6 +18,7 @@ SSE event protocol (each yielded string):
     data: {"type": "sources",     "sources": [...]}\\n\\n
     data: {"type": "web_sources", "sources": [...]}\\n\\n
     data: {"type": "done",        "message_id": "..."}\\n\\n
+    data: {"type": "suggestions", "items":   [...]}\\n\\n   (after done; best-effort)
     data: {"type": "error",       "error":    "..."}\\n\\n
 """
 
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -38,6 +40,17 @@ from backend.storage.repositories.chat_repository import IChatRepository
 from backend.storage.repositories.file_repository import IFileRepository
 
 logger = logging.getLogger("knovex.chat")
+
+
+def _loose_json(raw: str):
+    """Parse a JSON value from an LLM reply, tolerating ```json fences / prose."""
+    m = re.search(r"```(?:json)?\s*(.*?)```", raw, re.DOTALL)
+    s = (m.group(1) if m else raw).strip()
+    # Fall back to the first [...] / {...} block if there's surrounding prose.
+    if not s.startswith(("[", "{")):
+        b = re.search(r"(\[.*\]|\{.*\})", s, re.DOTALL)
+        s = b.group(1) if b else s
+    return json.loads(s)
 
 # ── Retrieval settings ────────────────────────────────────────────────────────
 
@@ -285,6 +298,67 @@ class ChatService:
         await self._chat_repo.save(session)
 
         yield f"data: {json.dumps({'type': 'done', 'message_id': assistant_msg.id})}\n\n"
+
+        # ── 8. Follow-up suggestions ("what next?") ────────────────────────
+        # Emitted AFTER done so the answer renders immediately and a failure
+        # here can never break it. Clickable chips re-ask in chat — turning a
+        # one-shot Q&A into a session (the highest-value next-action hook).
+        followups = await self._suggest_followups(
+            user_message=user_message, answer=full_reply, has_kb=bool(kb_sources),
+            provider=provider, model=model, credentials=credentials,
+        )
+        if followups:
+            yield f"data: {json.dumps({'type': 'suggestions', 'items': followups})}\n\n"
+
+    async def _suggest_followups(
+        self, *, user_message: str, answer: str, has_kb: bool,
+        provider: str, model: str, credentials: ProviderCredentials,
+    ) -> list[dict]:
+        """3 follow-up questions to keep the conversation going (Perplexity-style).
+
+        Each item: {"label": short chip text, "question": full question to ask,
+        "kind": "followup"}. Best-effort: any failure returns [] — the answer is
+        already delivered, so this must never raise upward.
+        """
+        if not answer.strip():
+            return []
+        kb_hint = (
+            " Make at least one connect to something else likely in the user's "
+            "knowledge base." if has_kb else ""
+        )
+        prompt = [
+            {"role": "system", "content": (
+                "You suggest follow-up questions that make a curious user want to keep "
+                "exploring. Return ONLY a JSON array of exactly 3 objects, no prose. Each: "
+                '{"label": "<=7 word chip text", "question": "the full question to ask next"}. '
+                "Make them specific to this exchange and genuinely interesting — one that goes "
+                "deeper, one that broadens out, one that's a surprising adjacent angle." + kb_hint
+            )},
+            {"role": "user", "content": (
+                f"User asked: {user_message[:500]}\n\nAssistant answered: {answer[:1500]}\n\n"
+                "Suggest 3 follow-up questions."
+            )},
+        ]
+        try:
+            raw = await self._llm_svc.complete(
+                messages=prompt, provider=provider, model=model,
+                credentials=credentials, max_tokens=300, temperature=0.8,
+            )
+            data = _loose_json(raw)
+        except Exception as exc:  # noqa: BLE001 — suggestions are best-effort
+            logger.warning("Chat follow-up suggestions failed: %s", exc)
+            return []
+
+        items = data if isinstance(data, list) else (data.get("items") or [])
+        out: list[dict] = []
+        for it in items[:3]:
+            if not isinstance(it, dict):
+                continue
+            label = str(it.get("label", "")).strip()
+            q = str(it.get("question", "")).strip()
+            if label and q:
+                out.append({"label": label[:60], "question": q[:300], "kind": "followup"})
+        return out
 
     async def _stream_research(
         self,

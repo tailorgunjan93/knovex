@@ -21,6 +21,15 @@ async function waitForApp(page: Page, ready: string) {
   await expect(page.locator(`[data-testid="${ready}"]`).first()).toBeVisible({ timeout: 60_000 })
 }
 
+// Configure a (fake) LLM so the first-run "Connect your AI" guard doesn't block
+// Chat/Learn. The backend runs KNOVEX_FAKE_LLM, so the key value is ignored — the
+// frontend just needs a non-empty key to treat the AI as configured.
+test.beforeEach(async ({ page }) => {
+  await page.request.put('http://localhost:8788/api/settings', {
+    data: { onboarded: true, llm: { provider: 'openai', api_key: 'e2e-test-key' } },
+  }).catch(() => {})
+})
+
 test.describe('Real-backend streaming gate', () => {
   test('Learn → Animated generates and renders (no network error)', async ({ page }) => {
     await page.goto('/#/learn')

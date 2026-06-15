@@ -49,12 +49,16 @@ export interface ChatMessage {
 
 // ─── SSE stream event types ───────────────────────────────────────────────────
 
+/** A clickable follow-up question chip suggested after an answer. */
+export interface FollowUp { label: string; question: string; kind?: string }
+
 export type SSEEvent =
   | { type: 'token'; content: string }
   | { type: 'sources'; sources: SourceCitation[] }
   | { type: 'web_sources'; sources: WebSource[] }
   | { type: 'status'; stage: string; detail?: string }       // /research progress
   | { type: 'subquestions'; items: string[] }                // /research plan
+  | { type: 'suggestions'; items: FollowUp[] }               // post-answer follow-up chips
   | { type: 'done'; message_id: string }
   | { type: 'error'; error: string }
 

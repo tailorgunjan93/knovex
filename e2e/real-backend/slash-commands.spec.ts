@@ -22,6 +22,14 @@ async function openChat(page: Page) {
   return composer
 }
 
+// Configure a (fake) LLM so the first-run "Connect your AI" guard doesn't block
+// chat (KNOVEX_FAKE_LLM ignores the key value; the frontend just needs one set).
+test.beforeEach(async ({ page }) => {
+  await page.request.put('http://localhost:8788/api/settings', {
+    data: { onboarded: true, llm: { provider: 'openai', api_key: 'e2e-test-key' } },
+  }).catch(() => {})
+})
+
 test.describe('Slash commands (real backend)', () => {
   test('typing "/" opens the command menu with every command', async ({ page }) => {
     const composer = await openChat(page)

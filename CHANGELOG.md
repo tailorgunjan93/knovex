@@ -11,6 +11,55 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.15.0] — 2026-06-14
+
+### Added
+
+- **First-run "Connect your AI" experience.** A fresh install ships with no LLM
+  key, so a brand-new user's first Chat or Learn attempt used to fail with a raw
+  auth error and they'd give up. Now onboarding has a "Connect your AI" step
+  (a free online key — Groq/Gemini, no card — or fully offline Ollama with no
+  key), and every AI surface (Chat, Learn) shows a friendly **"Connect your AI to
+  get started"** card instead of erroring when no provider is configured, with a
+  one-click deep-link to Settings → AI (`/settings?tab=llm`).
+- **Chat follow-up chips.** After each answer, Chat streams 3 clickable follow-up
+  questions — turning a one-shot Q&A into a session. Best-effort, emitted after
+  `done` so a failure can never block the answer.
+
+### Changed
+
+- **Sidebar redesigned** to match the amber/copper theme: its own surface, a
+  gliding copper active-indicator, refined hover/focus states, and a polished
+  bottom cluster — across light / medium / dark.
+- **Honest Knowledge Base stats.** Removed the fake "progress %" (it was a hash
+  of the KB id) from the KB cards; the library filter is now **All / Indexed /
+  Empty** (real) instead of the hashed "Mastered / Review".
+
+### Fixed
+
+- **Cinematic (Manim) renders showed non-English on-screen text as boxes.** A
+  lesson in a non-Latin language (e.g. Hindi "प्रकाश संश्लेषण") rendered every
+  glyph as a `.notdef` tofu box, while Latin ("CO2") was fine. Root cause: the
+  Cinematic pipeline asks the model to write the on-screen `Text(...)` in the
+  lesson's language, but Manim's **default font does no per-glyph fallback** to a
+  script-covering font — even when one (e.g. Nirmala UI) is installed. The render
+  sidecar now picks the first installed font that covers the lesson's script
+  (Devanagari / CJK / Arabic) and sets it as the `Text` default before running
+  the generated scene, so non-Latin lessons render real glyphs. Verified end-to-end
+  against the real Manim env (Hindi → correct Devanagari). (Known Issue #19.)
+- **Fabricated progress signals.** The Daily Spark "streak" was the day of the
+  week (it showed "Day 4" on a fresh install) — now the real streak, hidden at 0;
+  "Knovex Noticed" no longer claims the knowledge base is "growing" on an empty
+  install; and "Queue review" now links to `/review` (was `/learn`).
+
+### Tests
+
+- Chat follow-up suggestion parsing + "emits after done" stream test; Manim
+  sidecar script→font selection; deep E2E control coverage (chat / learn /
+  progress / review).
+
+---
+
 ## [0.14.0] — 2026-06-11
 
 ### Changed

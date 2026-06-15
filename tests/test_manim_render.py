@@ -75,7 +75,7 @@ class TestRender:
     async def test_success_first_try(self, tmp_path):
         calls = []
 
-        async def runner(py, code_file, out_dir):
+        async def runner(py, code_file, out_dir, language):
             calls.append(Path(code_file).read_text(encoding="utf-8"))
             return 0, _ok_stdout()
 
@@ -85,10 +85,26 @@ class TestRender:
         assert res.render_id and svc.get_video(res.render_id) == "C:/x/lesson.mp4"
         assert "class Lesson" in calls[0]
 
+    async def test_passes_language_to_runner(self, tmp_path):
+        """The lesson language reaches the sidecar runner so it can pick a
+        script-covering font (non-Latin text is tofu otherwise)."""
+        seen: list[str] = []
+
+        async def runner(py, code_file, out_dir, language):
+            seen.append(language)
+            return 0, _ok_stdout()
+
+        svc = _svc(tmp_path, llm=FakeLLM(["class Lesson(Scene): pass"]), runner=runner)
+        res = await svc.render(
+            topic="प्रकाश संश्लेषण", difficulty="beginner", provider="x",
+            model="m", credentials=_CREDS, language="हिन्दी",
+        )
+        assert res.ok and seen == ["हिन्दी"]
+
     async def test_repair_loop_recovers(self, tmp_path):
         n = 0
 
-        async def runner(py, code_file, out_dir):
+        async def runner(py, code_file, out_dir, language):
             nonlocal n
             n += 1
             return (1, _err_stdout()) if n < 3 else (0, _ok_stdout())
@@ -100,7 +116,7 @@ class TestRender:
         assert len(llm.calls) == 3   # regenerated each failure (with repair prompt)
 
     async def test_gives_up_after_max(self, tmp_path):
-        async def runner(py, code_file, out_dir):
+        async def runner(py, code_file, out_dir, language):
             return 1, _err_stdout("always broken")
 
         svc = _svc(tmp_path, llm=FakeLLM(["x"]), runner=runner, max_attempts=2)

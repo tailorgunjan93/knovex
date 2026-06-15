@@ -2,7 +2,12 @@
 # Python 3.11+
 
 # ─── Web framework ────────────────────────────────────────────────────────────
-fastapi>=0.115
+# Pinned: a newer FastAPI/Starlette changed how included routers appear in
+# `app.routes` (a `_IncludedRouter` wrapper without `.path`), which broke the
+# route-registration tests in CI. Pin to the known-good combo for reproducible
+# builds; bump deliberately (and re-verify test_imports) when upgrading.
+fastapi==0.136.3
+starlette==1.1.0
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12    # multipart form uploads
 

@@ -11,6 +11,14 @@ import { test, expect } from '@playwright/test'
 
 const ERROR_TOAST = /network error|connection was interrupted|can't reach knovex|failed to/i
 
+// Configure a (fake) LLM so the first-run "Connect your AI" guard doesn't block
+// chat (KNOVEX_FAKE_LLM ignores the key value; the frontend just needs one set).
+test.beforeEach(async ({ page }) => {
+  await page.request.put('http://localhost:8788/api/settings', {
+    data: { onboarded: true, llm: { provider: 'openai', api_key: 'e2e-test-key' } },
+  }).catch(() => {})
+})
+
 test.describe('Real-backend attach & upload', () => {
   test('Chat: attach a .txt and stream a reply (no error)', async ({ page }) => {
     await page.goto('/#/chat')

@@ -20,6 +20,7 @@ import SearchSettingsTab from './SearchSettings'
 import AppSettingsTab from './AppSettings'
 import EmbeddingSettingsTab from './EmbeddingSettings'
 import ScreenHeader from '@/components/Layout/ScreenHeader'
+import { useSearchParams } from 'react-router-dom'
 import { BRAND } from '@/theme/tokens'
 
 const TABS = [
@@ -30,10 +31,15 @@ const TABS = [
   { label: 'Embeddings', icon: <ScatterPlotIcon fontSize="small" />,   section: '04 · EMBEDDINGS' },
 ]
 
+// Deep-link support: /settings?tab=llm opens the AI tab directly (used by the
+// "Connect your AI" first-run card and onboarding).
+const TAB_BY_NAME: Record<string, number> = { profile: 0, llm: 1, ai: 1, search: 2, app: 3, embeddings: 4 }
+
 const MONO = '"IBM Plex Mono", "Geist Mono", monospace'
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState(0)
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState(() => TAB_BY_NAME[(searchParams.get('tab') ?? '').toLowerCase()] ?? 0)
   const theme = useTheme()
 
   const { data: settings, isLoading, error } = useQuery({
