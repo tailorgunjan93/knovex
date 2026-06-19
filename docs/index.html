@@ -56,18 +56,18 @@
   .eyebrow{display:inline-flex;align-items:center;gap:12px;font-weight:600;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--primary);margin-bottom:18px}
   .eyebrow::before{content:"";width:28px;height:1px;background:var(--primary);opacity:.6}
 
-  header{position:sticky;top:0;z-index:9;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+  header{position:sticky;top:0;z-index:9;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}header .wrap{padding-left:22px}
   .nav{display:flex;align-items:center;gap:14px;height:72px}
-  .brand{display:flex;align-items:center;gap:11px;flex-shrink:0}
-  .mark{width:36px;height:36px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);position:relative;flex:none}
+  .brand{display:flex;align-items:center;gap:13px;flex-shrink:0}
+  .mark{width:36px;height:36px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);position:relative;flex:none;align-self:center}
   .mark::before{content:"";position:absolute;left:7px;right:7px;top:6px;height:6px;border-radius:3px;background:var(--surface-3)}
   .mark i{position:absolute;left:50%;transform:translateX(-50%);border-radius:99px}
   .i1{bottom:7px;width:19px;height:4px;background:var(--text)}
   .i2{bottom:13px;width:13px;height:4px;background:var(--text-secondary)}
   .i3{bottom:19px;width:9px;height:4px;background:var(--primary)}
   .mark .ws{position:absolute;right:5px;top:5px;width:5px;height:5px;border-radius:50%;background:var(--primary)}
-  .brand b{font-family:var(--sans);font-weight:600;font-size:18px;white-space:nowrap}.brand b span{color:var(--primary)}
-  .brand .by{font-size:11px;color:var(--text-muted);margin-top:1px;white-space:nowrap}
+  .bstack{display:flex;flex-direction:column;line-height:1.05}.brand b{font-family:var(--sans);font-weight:600;font-size:18px;white-space:nowrap}.brand b span{color:var(--primary)}
+  .brand .by{font-size:12.5px;color:var(--text-muted);white-space:nowrap;margin-top:4px}
   .brand .by a:hover{color:var(--primary)}
   .links{margin-left:auto;display:flex;gap:4px;align-items:center}
   .links a{padding:8px 13px;border-radius:8px;color:var(--text-secondary);font-size:14.5px}
@@ -190,7 +190,7 @@
   .flinks{display:flex;gap:24px;flex-wrap:wrap}.flinks a{color:var(--text-secondary);font-size:14px}.flinks a:hover{color:var(--primary)}
   .uth{text-align:center;font-size:12.5px;color:var(--text-muted);margin-top:14px}
   .fbot{border-top:1px solid var(--border);padding-top:20px;margin-top:22px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--text-muted)}
-  @media(max-width:860px){.hero .wrap,.priv .wrap{grid-template-columns:1fr}.grid3,.aichoice{grid-template-columns:1fr 1fr}.stats .wrap{grid-template-columns:repeat(2,1fr)}.steps,.dl{grid-template-columns:1fr}.links a:not(.dlj){display:none}}
+  @media(max-width:860px){.hero .wrap,.priv .wrap{grid-template-columns:1fr}.grid3,.aichoice{grid-template-columns:1fr 1fr}.stats .wrap{grid-template-columns:repeat(2,1fr)}.steps,.dl{grid-template-columns:1fr}.links a:not(.dlj){display:none}.verpill{display:none}}
 </style>
 </head>
 <body>
@@ -199,7 +199,7 @@
   <div class="wrap nav">
     <a class="brand" href="https://keepvidya.com/products/knovex/">
       <div class="mark"><span class="ws"></span><i class="i3"></i><i class="i2"></i><i class="i1"></i></div>
-      <div><b>Knovex<span>.</span></b><div class="by">by <a href="https://keepvidya.com/">Keepvidya</a></div></div>
+      <div class="bstack"><b>Knovex<span>.</span></b><span class="by">by Keepvidya</span></div>
     </a>
     <div class="links">
       <a href="#features">Features</a><a href="#download">Download</a><a href="#setup">Setup</a>
