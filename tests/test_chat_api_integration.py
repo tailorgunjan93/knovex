@@ -31,7 +31,17 @@ from backend.core.dependencies import get_chat_service, get_settings_service
 from backend.core.search_service import SearchService
 from tests.test_chat import InMemoryChatRepository
 
+import pytest
+
 # pytest asyncio_mode=auto (pyproject.toml) runs bare `async def test_*` directly.
+
+
+@pytest.fixture(autouse=True)
+def _legacy_pipeline(monkeypatch):
+    """Covers the legacy deterministic HTTP/SSE path. The ReAct agent + router
+    paths (prod default) are covered in test_chat_agent_integration.py."""
+    from backend.core.config import settings
+    monkeypatch.setattr(settings, "agent_enabled", False)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

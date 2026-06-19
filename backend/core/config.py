@@ -85,6 +85,16 @@ class AppConfig(BaseSettings):
         return self.log_dir / "knovex.log"
 
     # -------------------------------------------------------------------------
+    # ReAct agent
+    # -------------------------------------------------------------------------
+    # When enabled, capable models drive a Thought→Action→Observation loop that
+    # decides for itself whether to search the KB / web; small or local models
+    # take a deterministic router + relevance gate. Disable to force the legacy
+    # always-retrieve pipeline.
+    agent_enabled: bool = True
+    agent_max_steps: int = 5
+
+    # -------------------------------------------------------------------------
     # Dev / test helpers
     # -------------------------------------------------------------------------
     debug: bool = False

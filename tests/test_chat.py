@@ -34,6 +34,17 @@ from backend.core.search_service import SearchService
 from backend.storage.repositories.base import EntityNotFoundError
 from backend.storage.repositories.chat_repository import IChatRepository
 
+
+@pytest.fixture(autouse=True)
+def _legacy_pipeline(monkeypatch):
+    """This suite covers the legacy deterministic chat pipeline. The ReAct agent
+    and deterministic-router paths (the prod default) are covered in
+    test_chat_agent_integration.py — disable the agent here so these tests keep
+    exercising the always-retrieve path they were written for."""
+    from backend.core.config import settings
+    monkeypatch.setattr(settings, "agent_enabled", False)
+
+
 # ---------------------------------------------------------------------------
 # In-memory repository — no SQLite, no I/O, fully synchronous-safe
 # ---------------------------------------------------------------------------
