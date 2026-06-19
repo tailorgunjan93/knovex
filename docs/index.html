@@ -58,7 +58,7 @@
 
   header{position:sticky;top:0;z-index:9;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
   .nav{display:flex;align-items:center;gap:14px;height:72px}
-  .brand{display:flex;align-items:center;gap:11px}
+  .brand{display:flex;align-items:center;gap:11px;flex-shrink:0}
   .mark{width:36px;height:36px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border);position:relative;flex:none}
   .mark::before{content:"";position:absolute;left:7px;right:7px;top:6px;height:6px;border-radius:3px;background:var(--surface-3)}
   .mark i{position:absolute;left:50%;transform:translateX(-50%);border-radius:99px}
@@ -66,8 +66,8 @@
   .i2{bottom:13px;width:13px;height:4px;background:var(--text-secondary)}
   .i3{bottom:19px;width:9px;height:4px;background:var(--primary)}
   .mark .ws{position:absolute;right:5px;top:5px;width:5px;height:5px;border-radius:50%;background:var(--primary)}
-  .brand b{font-family:var(--sans);font-weight:600;font-size:18px}.brand b span{color:var(--primary)}
-  .brand .by{font-size:11px;color:var(--text-muted);margin-top:1px}
+  .brand b{font-family:var(--sans);font-weight:600;font-size:18px;white-space:nowrap}.brand b span{color:var(--primary)}
+  .brand .by{font-size:11px;color:var(--text-muted);margin-top:1px;white-space:nowrap}
   .brand .by a:hover{color:var(--primary)}
   .links{margin-left:auto;display:flex;gap:4px;align-items:center}
   .links a{padding:8px 13px;border-radius:8px;color:var(--text-secondary);font-size:14.5px}
