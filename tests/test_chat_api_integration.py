@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
@@ -30,8 +31,6 @@ from backend.core.chat_service import ChatService
 from backend.core.dependencies import get_chat_service, get_settings_service
 from backend.core.search_service import SearchService
 from tests.test_chat import InMemoryChatRepository
-
-import pytest
 
 # pytest asyncio_mode=auto (pyproject.toml) runs bare `async def test_*` directly.
 
