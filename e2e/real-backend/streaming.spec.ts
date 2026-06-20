@@ -59,6 +59,10 @@ test.describe('Real-backend streaming gate', () => {
     await page.goto('/#/chat')
     const composer = page.locator('textarea').first()
     await expect(composer).toBeVisible({ timeout: 60_000 })
+    // Wait until settings have loaded (LLM "configured") before sending —
+    // otherwise the send guard silently drops the message. The empty-state
+    // heading only renders once configured (else the Connect-AI card shows).
+    await expect(page.getByText('Start a conversation')).toBeVisible({ timeout: 30_000 })
 
     await composer.fill('hi')
     await composer.press('Enter')

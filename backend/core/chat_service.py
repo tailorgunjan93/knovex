@@ -30,6 +30,11 @@ import re
 import uuid
 from collections.abc import AsyncGenerator
 
+from backend.core.agent import router as agent_router
+from backend.core.agent import supports_react
+from backend.core.agent.events import AgentStep, Observation, Sources, Token
+from backend.core.agent.react import ReActAgent
+from backend.core.agent.tools import FetchURLTool, SearchKBTool, WebSearchTool
 from backend.core.domain.chat import ChatMessage, ChatSession
 from backend.core.llm_service import LLMService
 from backend.core.providers.base import ProviderCredentials
@@ -59,6 +64,28 @@ _MAX_CONTEXT_CHARS      = 8_000   # max total chars from KB
 _MAX_HISTORY_MESSAGES   = 10      # recent messages included in prompt
 _MAX_HISTORY_CHARS      = 4_000   # cap on history chars
 _MAX_WEB_RESULTS        = 4       # web results included when enabled
+
+# Concise on-brand persona for the ReAct agent's final synthesis. Mirrors the
+# key voice + formatting rules of the legacy _build_messages system prompt
+# without duplicating its full emotional-awareness matrix (the agent path is
+# only used by capable models, which need less hand-holding).
+_AGENT_PERSONA = (
+    "You are Knovex — a warm, precise, genuinely helpful AI assistant. Read the "
+    "user's tone, acknowledge it briefly, then help. Choose the richest useful "
+    "Markdown: tables for comparisons, lists for steps, code fences (with a "
+    "language) for code — never output code merely to display data. Weave source "
+    "references naturally (\"According to <file>…\"). If the evidence doesn't "
+    "answer the question, say so plainly and offer what you do know. End with a "
+    "useful next step, never a cold stop."
+)
+
+# Friendly "thinking" labels shown while the agent runs a tool (reuses the
+# existing `status` SSE event the frontend renders for /research progress).
+_AGENT_STATUS = {
+    "search_kb": "Searching your knowledge base",
+    "web_search": "Searching the web",
+    "fetch_url": "Reading the page",
+}
 
 
 class ChatService:
@@ -190,19 +217,11 @@ class ChatService:
                 yield ev
             return
 
-        # ── 2. KB retrieval (FTS5) ─────────────────────────────────────────
-        kb_sources: list[dict] = []
-        kb_context = ""
         # Use kb_ids from request if provided; otherwise fall back to session.kb_id
         effective_kb_ids = (
             kb_ids if kb_ids
             else ([session.kb_id] if session.kb_id else [])
         )
-        if effective_kb_ids:
-            kb_context, kb_sources = await self._retrieve_kb_context(
-                kb_ids=effective_kb_ids,
-                query=user_message,
-            )
 
         # ── 2b. /summarize <url> — fetch the page into context ─────────────
         # The fetched text rides the same attached_context path that file
@@ -215,69 +234,121 @@ class ChatService:
                 labeled = f"[Linked page: {fetch_url}]\n{fetched}"
                 attached_context = f"{labeled}\n\n{attached_context}" if attached_context else labeled
 
-        # ── 3. Optional web search ─────────────────────────────────────────
-        web_sources: list[dict] = []
-        web_context = ""
-        if use_web_search:
-            # /news forces news intent: frame the SEARCH query (not the stored
-            # message) so the existing is_news_query routing hits the news
-            # endpoint even when the user's words aren't obviously news-y.
-            from backend.adapters.web_search import is_news_query
-            search_query = user_message
-            if force_news and not is_news_query(user_message):
-                search_query = f"{user_message} latest news"
-            web_resp = (
-                await self._search_svc.search_blended(
-                    query=search_query,
-                    engines=search_engines,
-                    num_results=_MAX_WEB_RESULTS,
-                )
-                if search_engines
-                else await self._search_svc.search(
-                    query=search_query,
-                    engine=search_engine,
-                    api_key=search_api_key,
-                    num_results=_MAX_WEB_RESULTS,
-                )
-            )
-            web_sources = [r.model_dump() for r in web_resp.results]
-            if web_sources:
-                web_context = "\n\n".join(
-                    f"[WEB] {r['title']}\n{r['url']}\n{r['snippet']}"
-                    for r in web_sources
-                )
+        # ── 3. Dispatch: ReAct agent / deterministic router / legacy ───────
+        # Root-cause fix for over-grounding: the old pipeline retrieved KB
+        # context and forced grounding on EVERY message, so "hi" confabulated
+        # from an irrelevant chunk. Now:
+        #   • capable models run a ReAct loop that decides whether to search;
+        #   • small/local models take a deterministic router (greeting → no
+        #     grounding) + relevance gate;
+        #   • explicit commands (/news, /summarize) and agent-off keep the
+        #     legacy deterministic pipeline.
+        from backend.core.config import settings as app_cfg
 
-        # ── 4. Emit source events before streaming tokens ─────────────────
-        if kb_sources:
-            yield f"data: {json.dumps({'type': 'sources', 'sources': kb_sources})}\n\n"
-        if web_sources:
-            yield f"data: {json.dumps({'type': 'web_sources', 'sources': web_sources})}\n\n"
-
-        # ── 5. Build prompt ────────────────────────────────────────────────
         history = await self._build_history(session_id)
-        messages = self._build_messages(
-            session=session,
-            history=history,
-            user_message=user_message,
-            kb_context=kb_context,
-            web_context=web_context,
-            kb_ids=effective_kb_ids,
-            attached_context=attached_context,
-        )
+        has_tools = bool(effective_kb_ids) or use_web_search
+        explicit = force_news or bool(fetch_url)
+        agent_on = getattr(app_cfg, "agent_enabled", True) and not explicit and has_tools
 
-        # ── 6. Stream LLM response ─────────────────────────────────────────
         full_reply = ""
+        kb_sources: list[dict] = []
+        web_sources: list[dict] = []
         try:
-            async for token in self._llm_svc.stream(
-                messages=messages,
-                provider=provider,
-                model=model,
-                credentials=credentials,
-                max_tokens=2048,
-                temperature=0.4,
-            ):
-                full_reply += token
-                yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+            if agent_on and supports_react(provider, model):
+                # ── ReAct loop: the model decides which tools to call ──────
+                tools = self._build_agent_tools(
+                    effective_kb_ids, use_web_search,
+                    search_engine, search_api_key, search_engines,
+                )
+                agent = ReActAgent(self._llm_svc, max_steps=getattr(app_cfg, "agent_max_steps", 5))
+                async for ev in agent.run(
+                    query=user_message, history=history, tools=tools,
+                    provider=provider, model=model, credentials=credentials,
+                    system_preamble=_AGENT_PERSONA,
+                ):
+                    if isinstance(ev, Token):
+                        full_reply += ev.text
+                        yield f"data: {json.dumps({'type': 'token', 'content': ev.text})}\n\n"
+                    elif isinstance(ev, Sources):
+                        kb_sources, web_sources = ev.sources, ev.web_sources
+                        if kb_sources:
+                            yield f"data: {json.dumps({'type': 'sources', 'sources': kb_sources})}\n\n"
+                        if web_sources:
+                            yield f"data: {json.dumps({'type': 'web_sources', 'sources': web_sources})}\n\n"
+                    elif isinstance(ev, AgentStep):
+                        # Surface tool calls as a transient "status" line (the
+                        # frontend already renders these for /research) — a live
+                        # "Searching…" trace, free engagement, no UI change.
+                        detail = _AGENT_STATUS.get(ev.action)
+                        if detail:
+                            yield f"data: {json.dumps({'type': 'status', 'detail': detail})}\n\n"
+                    elif isinstance(ev, Observation):
+                        pass  # observation feeds the loop, not the UI
+
+            elif agent_on:
+                # ── Deterministic fallback for small/local models ──────────
+                decision = agent_router.decide(
+                    user_message, has_kb=bool(effective_kb_ids), web_enabled=use_web_search,
+                )
+                kb_context = ""
+                if decision.use_kb:
+                    kb_context, kb_sources = await self._retrieve_kb_context(
+                        kb_ids=effective_kb_ids, query=user_message,
+                    )
+                    # Relevance gate: a chunk sharing nothing with the query is
+                    # off-topic — refuse to ground rather than confabulate.
+                    if kb_context and not agent_router.passes_relevance_gate(user_message, kb_context):
+                        kb_context, kb_sources = "", []
+                web_context = ""
+                if decision.use_web:
+                    web_context, web_sources = await self._do_web_search(
+                        user_message, force_news, search_engine, search_api_key, search_engines,
+                    )
+                if kb_sources:
+                    yield f"data: {json.dumps({'type': 'sources', 'sources': kb_sources})}\n\n"
+                if web_sources:
+                    yield f"data: {json.dumps({'type': 'web_sources', 'sources': web_sources})}\n\n"
+                # Only attach the grounding directive when we actually have context.
+                messages = self._build_messages(
+                    session=session, history=history, user_message=user_message,
+                    kb_context=kb_context, web_context=web_context,
+                    kb_ids=(effective_kb_ids if kb_context else None),
+                    attached_context=attached_context,
+                )
+                async for token in self._llm_svc.stream(
+                    messages=messages, provider=provider, model=model,
+                    credentials=credentials, max_tokens=2048, temperature=0.4,
+                ):
+                    full_reply += token
+                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+
+            else:
+                # ── Legacy deterministic pipeline (explicit cmd / agent off) ─
+                kb_context = ""
+                if effective_kb_ids:
+                    kb_context, kb_sources = await self._retrieve_kb_context(
+                        kb_ids=effective_kb_ids, query=user_message,
+                    )
+                web_context = ""
+                if use_web_search:
+                    web_context, web_sources = await self._do_web_search(
+                        user_message, force_news, search_engine, search_api_key, search_engines,
+                    )
+                if kb_sources:
+                    yield f"data: {json.dumps({'type': 'sources', 'sources': kb_sources})}\n\n"
+                if web_sources:
+                    yield f"data: {json.dumps({'type': 'web_sources', 'sources': web_sources})}\n\n"
+                messages = self._build_messages(
+                    session=session, history=history, user_message=user_message,
+                    kb_context=kb_context, web_context=web_context,
+                    kb_ids=effective_kb_ids, attached_context=attached_context,
+                )
+                async for token in self._llm_svc.stream(
+                    messages=messages, provider=provider, model=model,
+                    credentials=credentials, max_tokens=2048, temperature=0.4,
+                ):
+                    full_reply += token
+                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
         except Exception as exc:
             logger.exception("Chat stream failed for session %s: %s", session_id, exc)
             yield f"data: {json.dumps({'type': 'error', 'error': str(exc)})}\n\n"
@@ -397,6 +468,65 @@ class ChatService:
     # ==================================================================
     # Private helpers
     # ==================================================================
+
+    async def _do_web_search(
+        self, user_message: str, force_news: bool,
+        search_engine: str, search_api_key: str,
+        search_engines: list[tuple[str, str]] | None,
+    ) -> tuple[str, list[dict]]:
+        """Run a web search and return (web_context, web_sources)."""
+        from backend.adapters.web_search import is_news_query
+        search_query = user_message
+        if force_news and not is_news_query(user_message):
+            search_query = f"{user_message} latest news"
+        web_resp = (
+            await self._search_svc.search_blended(
+                query=search_query, engines=search_engines, num_results=_MAX_WEB_RESULTS,
+            )
+            if search_engines
+            else await self._search_svc.search(
+                query=search_query, engine=search_engine,
+                api_key=search_api_key, num_results=_MAX_WEB_RESULTS,
+            )
+        )
+        web_sources = [r.model_dump() for r in web_resp.results]
+        web_context = ""
+        if web_sources:
+            web_context = "\n\n".join(
+                f"[WEB] {r['title']}\n{r['url']}\n{r['snippet']}" for r in web_sources
+            )
+        return web_context, web_sources
+
+    def _build_agent_tools(
+        self, effective_kb_ids: list[str], use_web_search: bool,
+        search_engine: str, search_api_key: str,
+        search_engines: list[tuple[str, str]] | None,
+    ) -> dict:
+        """Construct the ReAct toolset for this request, binding live params."""
+        tools: dict = {}
+
+        if effective_kb_ids:
+            async def _retrieve(query: str, _ids=effective_kb_ids):
+                ctx, srcs = await self._retrieve_kb_context(kb_ids=_ids, query=query)
+                # Same relevance gate the fallback uses: don't feed the model an
+                # off-topic chunk it might over-ground in.
+                if ctx and not agent_router.passes_relevance_gate(query, ctx):
+                    return "", []
+                return ctx, srcs
+            tools["search_kb"] = SearchKBTool(_retrieve)
+
+        if use_web_search:
+            async def _search(query: str):
+                _, srcs = await self._do_web_search(
+                    query, False, search_engine, search_api_key, search_engines,
+                )
+                return srcs
+            tools["web_search"] = WebSearchTool(_search)
+
+            from backend.core import url_fetch
+            tools["fetch_url"] = FetchURLTool(lambda url: url_fetch.fetch_url_text(url))
+
+        return tools
 
     async def _retrieve_kb_context(
         self, kb_ids: list[str], query: str

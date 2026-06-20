@@ -19,6 +19,10 @@ async function openChat(page: Page) {
   await page.goto('/#/chat')
   const composer = page.locator('textarea').first()
   await expect(composer).toBeVisible({ timeout: 60_000 })
+  // Wait until settings have loaded (LLM "configured") before interacting —
+  // otherwise the send guard silently drops the first message. The empty-state
+  // heading only renders once configured (else the Connect-AI card shows).
+  await expect(page.getByText('Start a conversation')).toBeVisible({ timeout: 30_000 })
   return composer
 }
 
